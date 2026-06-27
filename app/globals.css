@@ -334,3 +334,77 @@ button.ghost {
   margin-bottom: 10px;
   font-weight: 600;
 }
+
+/* 払うものリスト */
+.tab {
+  font-size: 13px;
+  padding: 10px 6px;
+}
+.total-card {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+}
+.total-label {
+  font-size: 12px;
+  opacity: 0.85;
+}
+.total-amount {
+  font-size: 26px;
+  font-weight: 700;
+  margin-top: 2px;
+}
+.pay-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+}
+.pay-row.done {
+  opacity: 0.5;
+}
+.pay-payee {
+  font-weight: 700;
+  font-size: 15px;
+}
+.pay-desc {
+  font-size: 13px;
+  color: var(--ink);
+  margin-top: 2px;
+}
+.pay-acct {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 3px;
+}
+.pay-right {
+  text-align: right;
+  flex-shrink: 0;
+}
+.pay-amount {
+  font-size: 17px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.pay-btn {
+  background: var(--ok);
+  color: #fff;
+  font-size: 12px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  margin-top: 6px;
+}
+.pay-row.done .pay-amount {
+  text-decoration: line-through;
+}
+.warn-chip {
+  display: inline-block;
+  font-size: 10px;
+  background: #fde8e8;
+  color: #b22;
+  padding: 1px 7px;
+  border-radius: 999px;
+  margin-left: 8px;
+  vertical-align: middle;
+}

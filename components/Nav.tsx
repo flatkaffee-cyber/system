@@ -7,6 +7,7 @@ export default function Nav() {
   const path = usePathname();
   const tabs = [
     { href: "/", label: "🧾 領収書" },
+    { href: "/payables", label: "💰 払うもの" },
     { href: "/soudan", label: "💬 会計相談" },
   ];
   return (
