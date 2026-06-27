@@ -1,30 +1,33 @@
 // 「払うものリスト」のデータ型と取得ロジック。
-// 現状: freeeアプリ未登録のため、サーバーから直接freeeを叩けない。
-//   → いまは 2026-06-28 時点の freee 実データのスナップショットを返す。
-// 将来: FREEE_CLIENT_ID 等が設定されたら getPayables() を freee API 参照に差し替える。
-//   - 役員借入金(取引先別) … メンバーへ返す立替
-//   - 未払金(取引先別)     … 業者へ払う分
-//   - 未決済の取引          … まだ払っていない取引
+// freee接続済み（KVにトークンあり）→ freeeの役員借入金(取引先別)からライブ生成。
+// 未接続 → 2026-06-28 時点のスナップショットにフォールバック。
+
+import {
+  FREEE_COMPANY_ID,
+  freeeGet,
+  isConnected,
+} from "@/lib/freee";
 
 export type Payable = {
   id: string;
-  payee: string; // 誰に/どこに（取引先）。未設定なら "（取引先未設定）"
-  amount: number; // 残額（円）
-  description: string; // 何の分か
-  account: string; // freeeの勘定科目
-  /** freeeの取引先が設定されているか（人別集計できるか） */
+  payee: string; // 誰に/どこに。未設定なら "（取引先未設定）"
+  amount: number;
+  description: string;
+  account: string;
   hasPartner: boolean;
 };
 
 export type PayablesResult = {
   payables: Payable[];
   total: number;
-  /** データの鮮度。live=freee直結 / snapshot=手動スナップショット */
   source: "live" | "snapshot";
-  updatedAt: string; // YYYY-MM-DD
+  updatedAt: string;
 };
 
-// 2026-06-28 時点の freee 役員借入金スナップショット（残高 313,359）
+const YAKUIN_KARIIRE = 1035440156; // 役員借入金
+const FISCAL_YEAR = "2026";
+
+// 未接続時のスナップショット（2026-06-28 / 残高313,359）
 const SNAPSHOT: Payable[] = [
   {
     id: "sakamoto-espresso",
@@ -44,13 +47,87 @@ const SNAPSHOT: Payable[] = [
   },
 ];
 
+type TrialBs = {
+  trial_bs: {
+    balances: Array<{
+      account_item_id?: number;
+      closing_balance?: number;
+    }>;
+  };
+};
+
+type Partner = { id: number; name: string };
+
+function todayJst(): string {
+  // YYYY-MM-DD（JST）。Date.now()は使用可。
+  const d = new Date(Date.now() + 9 * 3600 * 1000);
+  return d.toISOString().slice(0, 10);
+}
+
+async function yakuinBalance(partnerId?: number): Promise<number> {
+  const q: Record<string, string> = {
+    company_id: FREEE_COMPANY_ID,
+    fiscal_year: FISCAL_YEAR,
+  };
+  if (partnerId) q.partner_id = String(partnerId);
+  const r = await freeeGet<TrialBs>("/api/1/reports/trial_bs", q);
+  const row = r.trial_bs.balances.find(
+    (b) => b.account_item_id === YAKUIN_KARIIRE,
+  );
+  return row?.closing_balance ?? 0;
+}
+
+async function livePayables(): Promise<PayablesResult> {
+  const total = await yakuinBalance();
+
+  const { partners } = await freeeGet<{ partners: Partner[] }>(
+    "/api/1/partners",
+    { company_id: FREEE_COMPANY_ID, limit: "100" },
+  );
+
+  const payables: Payable[] = [];
+  let assigned = 0;
+  for (const p of partners) {
+    const bal = await yakuinBalance(p.id);
+    if (bal > 0) {
+      assigned += bal;
+      payables.push({
+        id: `partner-${p.id}`,
+        payee: p.name,
+        amount: bal,
+        description: "立替（役員借入金）",
+        account: "役員借入金",
+        hasPartner: true,
+      });
+    }
+  }
+
+  const unassigned = total - assigned;
+  if (unassigned > 0) {
+    payables.push({
+      id: "unassigned",
+      payee: "（取引先未設定）",
+      amount: unassigned,
+      description: "取引先が設定されていない立替（設立費ほか）",
+      account: "役員借入金",
+      hasPartner: false,
+    });
+  }
+
+  return { payables, total, source: "live", updatedAt: todayJst() };
+}
+
 export async function getPayables(): Promise<PayablesResult> {
-  // TODO(freee連携): FREEE_CLIENT_ID/SECRET/REFRESH_TOKEN が揃ったら
-  //   freeeの試算表(役員借入金・未払金)や未決済取引から動的に組み立てる。
-  const payables = SNAPSHOT;
+  try {
+    if (await isConnected()) {
+      return await livePayables();
+    }
+  } catch {
+    // ライブ取得に失敗したらスナップショットにフォールバック
+  }
   return {
-    payables,
-    total: payables.reduce((s, p) => s + p.amount, 0),
+    payables: SNAPSHOT,
+    total: SNAPSHOT.reduce((s, p) => s + p.amount, 0),
     source: "snapshot",
     updatedAt: "2026-06-28",
   };

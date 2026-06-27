@@ -408,3 +408,28 @@ button.ghost {
   margin-left: 8px;
   vertical-align: middle;
 }
+.connect-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--accent-weak);
+  border-color: var(--accent);
+}
+.connect-btn {
+  background: var(--accent);
+  color: #fff;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.connected-note {
+  text-align: center;
+  font-size: 12px;
+  color: var(--ok);
+  margin-bottom: 12px;
+}

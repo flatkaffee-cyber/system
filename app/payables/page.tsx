@@ -40,6 +40,22 @@ export default function Payables() {
 
       {data && (
         <>
+          {data.source === "snapshot" ? (
+            <div className="card connect-card">
+              <div>
+                <strong>freee未接続</strong>
+                <p className="hint" style={{ margin: "4px 0 10px" }}>
+                  接続すると、このリストがfreeeの役員借入金から自動更新されます。
+                </p>
+              </div>
+              <a className="connect-btn" href="/api/freee/authorize">
+                freeeと接続する
+              </a>
+            </div>
+          ) : (
+            <div className="connected-note">✓ freee連携中（リアルタイム）</div>
+          )}
+
           <div className="card total-card">
             <div>
               <div className="total-label">未払い合計（残り）</div>
