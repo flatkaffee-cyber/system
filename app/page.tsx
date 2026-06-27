@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { CATEGORIES, type Receipt } from "@/lib/receipt";
+import Nav from "@/components/Nav";
 
 const MEMBERS = ["坂本", "町田", "櫻井", "國仲"] as const;
 
@@ -63,6 +64,7 @@ export default function Home() {
         <h1>☕ flat. 立替精算</h1>
         <p>領収書を撮ってアップ → AIが日付・金額・科目を自動判定します</p>
       </header>
+      <Nav />
 
       {status === "idle" && (
         <>

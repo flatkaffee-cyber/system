@@ -1,0 +1,25 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+
+export default function Nav() {
+  const path = usePathname();
+  const tabs = [
+    { href: "/", label: "🧾 領収書" },
+    { href: "/soudan", label: "💬 会計相談" },
+  ];
+  return (
+    <nav className="tabs">
+      {tabs.map((t) => (
+        <Link
+          key={t.href}
+          href={t.href}
+          className={`tab ${path === t.href ? "active" : ""}`}
+        >
+          {t.label}
+        </Link>
+      ))}
+    </nav>
+  );
+}
