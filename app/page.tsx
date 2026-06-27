@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { CATEGORIES, type Receipt } from "@/lib/receipt";
 import Nav from "@/components/Nav";
+import ReceiptChat from "@/components/ReceiptChat";
 
 const MEMBERS = ["坂本", "町田", "櫻井", "國仲"] as const;
 
@@ -183,6 +184,16 @@ export default function Home() {
               </option>
             ))}
           </select>
+
+          <ReceiptChat
+            date={form.date}
+            vendor={form.vendor}
+            total={form.total}
+            summary={form.summary}
+            category={form.category}
+            payer={form.payer}
+            onApplyCategory={(c) => setForm({ ...form, category: c })}
+          />
 
           <div style={{ marginTop: 18 }}>
             <button

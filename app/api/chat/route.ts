@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { CATEGORIES } from "@/lib/receipt";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -34,14 +35,26 @@ export async function POST(req: NextRequest) {
   }
 
   let messages: Msg[];
+  let receiptContext = "";
   try {
     const body = await req.json();
     messages = Array.isArray(body.messages) ? body.messages : [];
+    if (typeof body.receiptContext === "string") receiptContext = body.receiptContext;
   } catch {
     return new Response("不正なリクエストです。", { status: 400 });
   }
   if (messages.length === 0) {
     return new Response("メッセージがありません。", { status: 400 });
+  }
+
+  // 領収書の確認画面からの相談なら、その領収書の内容を文脈として渡す
+  let system = SYSTEM;
+  if (receiptContext) {
+    system +=
+      `\n\n# いまユーザーが確認中の領収書（この仕訳について相談に乗る）\n${receiptContext}\n` +
+      `回答の最後に必ず1行だけ「おすすめ科目：<科目名>」を付けること。` +
+      `科目名は次のいずれか1つだけから選ぶ：${CATEGORIES.join(" / ")}。` +
+      `立替えた人が分かっている場合は、貸方が役員借入金（その人）になる点も一言添える。`;
   }
 
   const client = new Anthropic();
@@ -53,7 +66,7 @@ export async function POST(req: NextRequest) {
         const ms = client.messages.stream({
           model: "claude-opus-4-8",
           max_tokens: 2048,
-          system: SYSTEM,
+          system,
           messages: messages.map((m) => ({ role: m.role, content: m.content })),
         });
         for await (const event of ms) {

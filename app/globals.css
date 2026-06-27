@@ -296,3 +296,41 @@ button.ghost {
   border-top-color: #fff;
   margin: 0;
 }
+
+/* 確認画面内のAI相談 */
+.rc {
+  margin-top: 16px;
+  border-top: 1px dashed var(--line);
+  padding-top: 14px;
+}
+.rc-toggle {
+  width: 100%;
+  background: var(--accent-weak);
+  color: var(--accent);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 11px;
+  font-size: 13.5px;
+  font-weight: 600;
+  text-align: left;
+}
+.rc-body {
+  margin-top: 10px;
+}
+.rc-msgs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 40vh;
+  overflow-y: auto;
+  margin-bottom: 10px;
+}
+.rc-apply {
+  width: 100%;
+  background: var(--ok);
+  color: #fff;
+  border-radius: 10px;
+  padding: 11px;
+  margin-bottom: 10px;
+  font-weight: 600;
+}
