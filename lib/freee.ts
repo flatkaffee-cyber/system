@@ -6,7 +6,23 @@ const AUTH_BASE = "https://accounts.secure.freee.co.jp/public_api";
 const API_BASE = "https://api.freee.co.jp";
 const TOKEN_KEY = "freee:tokens";
 
-export const FREEE_COMPANY_ID = process.env.FREEE_COMPANY_ID ?? "12575763";
+// 環境変数の BOM(U+FEFF)・ゼロ幅スペース(U+200B)・前後空白を除去
+// （CLI経由で値の先頭にBOMが混入することがあるため）
+function env(name: string): string {
+  const raw = process.env[name] ?? "";
+  return Array.from(raw)
+    .filter((c) => {
+      const code = c.charCodeAt(0);
+      return code !== 0xfeff && code !== 0x200b;
+    })
+    .join("")
+    .trim();
+}
+
+const CLIENT_ID = env("FREEE_CLIENT_ID");
+const CLIENT_SECRET = env("FREEE_CLIENT_SECRET");
+
+export const FREEE_COMPANY_ID = env("FREEE_COMPANY_ID") || "12575763";
 
 export class FreeeNotConnected extends Error {
   constructor(msg = "freee未接続です") {
@@ -64,7 +80,7 @@ export function redirectUri(origin: string): string {
 
 export function authorizeUrl(origin: string): string {
   const p = new URLSearchParams({
-    client_id: process.env.FREEE_CLIENT_ID ?? "",
+    client_id: CLIENT_ID,
     redirect_uri: redirectUri(origin),
     response_type: "code",
   });
@@ -92,8 +108,8 @@ async function tokenRequest(body: Record<string, string>): Promise<Tokens> {
 export async function exchangeCode(origin: string, code: string): Promise<void> {
   const t = await tokenRequest({
     grant_type: "authorization_code",
-    client_id: process.env.FREEE_CLIENT_ID ?? "",
-    client_secret: process.env.FREEE_CLIENT_SECRET ?? "",
+    client_id: CLIENT_ID,
+    client_secret: CLIENT_SECRET,
     code,
     redirect_uri: redirectUri(origin),
   });
@@ -107,8 +123,8 @@ async function getAccessToken(): Promise<string> {
   if (t.expires_at - 60 < Math.floor(Date.now() / 1000)) {
     const nt = await tokenRequest({
       grant_type: "refresh_token",
-      client_id: process.env.FREEE_CLIENT_ID ?? "",
-      client_secret: process.env.FREEE_CLIENT_SECRET ?? "",
+      client_id: CLIENT_ID,
+      client_secret: CLIENT_SECRET,
       refresh_token: t.refresh_token,
     });
     await saveTokens(nt);
