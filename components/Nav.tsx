@@ -9,6 +9,7 @@ export default function Nav() {
     { href: "/", label: "🧾 領収書" },
     { href: "/meisai", label: "🏦 明細" },
     { href: "/payables", label: "💰 払うもの" },
+    { href: "/zeirishi", label: "🧑‍💼 税理士" },
     { href: "/soudan", label: "💬 相談" },
   ];
   return (

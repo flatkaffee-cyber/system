@@ -205,8 +205,13 @@ button.ghost {
 /* タブナビ */
 .tabs {
   display: flex;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px;
   margin-bottom: 16px;
+}
+.tabs .tab {
+  flex: 1 1 28%;
+  min-width: 0;
 }
 .tab {
   flex: 1;
@@ -536,4 +541,49 @@ button.ghost {
   font-size: 12px;
   color: var(--muted);
   margin-top: 6px;
+}
+.tax-note {
+  font-size: 12px;
+  background: #fff4e0;
+  color: #a86b00;
+  border: 1px solid #f0dcb4;
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-top: 8px;
+}
+
+/* 税理士相談リスト */
+.review.done {
+  opacity: 0.6;
+}
+.review-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+.review-summary {
+  font-weight: 700;
+  font-size: 15px;
+}
+.review-sub {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.review-treat {
+  font-size: 13px;
+  margin-top: 8px;
+}
+.review-issue {
+  font-size: 13px;
+  color: #a86b00;
+  background: #fff4e0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-top: 6px;
+}
+.review.done .review-issue {
+  background: #eef0ee;
+  color: var(--muted);
 }

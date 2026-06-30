@@ -3,6 +3,7 @@
 
 const KB_KEY = "kb:entries";
 const DEC_KEY = "kb:decisions";
+const REVIEW_KEY = "kb:reviews";
 
 async function kv() {
   const url = process.env.KV_REST_API_URL ?? process.env.UPSTASH_REDIS_REST_URL;
@@ -71,4 +72,48 @@ export async function saveDecision(d: Decision): Promise<void> {
   const all = await getDecisions();
   all[String(d.txnId)] = d;
   await store.set(DEC_KEY, all);
+}
+
+// --- 税理士相談リスト（いったん処理しつつ、後で税理士と確認したい論点） ---
+export type Review = {
+  id: string; // 明細idなど
+  date: string; // 取引日
+  summary: string; // 取引内容（取引先・摘要）
+  amount: number;
+  treatment: string; // いま採用した処理（例: 支払手数料 203,500）
+  issue: string; // 論点（例: 開業費にまとめるか要検討）
+  status: "pending" | "done";
+  createdAt: string;
+};
+
+export async function getReviews(): Promise<Review[]> {
+  const store = await kv();
+  if (!store) return [];
+  return (await store.get<Review[]>(REVIEW_KEY)) ?? [];
+}
+
+export async function saveReview(r: Omit<Review, "status" | "createdAt">): Promise<void> {
+  const store = await kv();
+  if (!store) return;
+  const all = await getReviews();
+  const i = all.findIndex((x) => x.id === r.id);
+  const review: Review = {
+    ...r,
+    status: i >= 0 ? all[i].status : "pending",
+    createdAt: i >= 0 ? all[i].createdAt : new Date(Date.now()).toISOString(),
+  };
+  if (i >= 0) all[i] = review;
+  else all.push(review);
+  await store.set(REVIEW_KEY, all);
+}
+
+export async function setReviewStatus(id: string, status: "pending" | "done"): Promise<void> {
+  const store = await kv();
+  if (!store) return;
+  const all = await getReviews();
+  const i = all.findIndex((x) => x.id === id);
+  if (i >= 0) {
+    all[i].status = status;
+    await store.set(REVIEW_KEY, all);
+  }
 }

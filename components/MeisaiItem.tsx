@@ -11,6 +11,8 @@ type Advice = {
   lines: Line[];
   kb_keyword: string;
   kb_note: string;
+  tax_review: boolean;
+  tax_review_reason: string;
 };
 export type Txn = {
   id: number;
@@ -92,10 +94,15 @@ export default function MeisaiItem({ txn }: { txn: Txn }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           txnId: txn.id,
+          date: txn.date,
+          description: txn.description,
+          amount: txn.amount,
           partner: advice.partner,
           lines: advice.lines,
           kbKeyword: advice.kb_keyword,
           kbNote: advice.kb_note,
+          taxReview: advice.tax_review,
+          taxReviewReason: advice.tax_review_reason,
         }),
       });
       if (!res.ok) throw new Error((await res.json()).error ?? "保存失敗");
@@ -173,6 +180,12 @@ export default function MeisaiItem({ txn }: { txn: Txn }) {
               ))}
               {advice.kb_note && (
                 <div className="propose-note">📝 覚える: {advice.kb_note}</div>
+              )}
+              {advice.tax_review && advice.tax_review_reason && (
+                <div className="tax-note">
+                  🧑‍💼 税理士に相談リストへ保存されます<br />
+                  <span>論点: {advice.tax_review_reason}</span>
+                </div>
               )}
               <button className="pay-btn" onClick={decide} disabled={loading} style={{ width: "100%", marginTop: 8 }}>
                 この内容で決定（freee登録用に確定＆ノウハウ保存）
