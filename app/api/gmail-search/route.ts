@@ -74,6 +74,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ connected: true, queries, mails });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "エラー";
-    return NextResponse.json({ connected: true, error: msg, mails: [] });
+    return NextResponse.json({ connected: true, error: msg, queries, mails: [] });
   }
 }

@@ -151,7 +151,10 @@ export async function gmailSearch(query: string, max = 4): Promise<Mail[]> {
     )}&maxResults=${max}`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
-  if (!listRes.ok) throw new Error(`Gmail検索失敗(${listRes.status})`);
+  if (!listRes.ok) {
+    const t = await listRes.text();
+    throw new Error(`Gmail検索失敗(${listRes.status}): ${t.slice(0, 300)}`);
+  }
   const list = await listRes.json();
   const ids: string[] = (list.messages ?? []).map((m: { id: string }) => m.id);
   const mails: Mail[] = [];
