@@ -68,6 +68,7 @@ export async function POST(req: NextRequest) {
     txn?: { date: string; amount: number; side: string; description: string };
     messages?: { role: "user" | "assistant"; content: string }[];
     document?: string;
+    docContext?: string;
   };
   try {
     body = await req.json();
@@ -85,6 +86,9 @@ export async function POST(req: NextRequest) {
   } / 金額:${txn.amount}円 / 摘要:${txn.description}`;
   if (hint) {
     system += `\n# 過去のノウハウ（この取引先に一致）\nキーワード「${hint.keyword}」→ 科目候補「${hint.category}」。メモ:${hint.note}\nただし今回も同じ用途とは限らないので確認すること。`;
+  }
+  if (body.docContext) {
+    system += `\n# 保管庫で見つかった関連書類（この明細の金額に一致）\n${body.docContext}\nこの書類の支払いである可能性が高い。replyの冒頭で「これは『〇〇』の支払いですね」と確認し、書類の内訳に沿って lines を提案すること。`;
   }
 
   // 会話メッセージを組み立て（書類があれば最後のuserメッセージに添付）

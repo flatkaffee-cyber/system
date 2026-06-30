@@ -7,6 +7,7 @@ export default function Nav() {
   const path = usePathname();
   const tabs = [
     { href: "/", label: "🧾 領収書" },
+    { href: "/shorui", label: "📄 書類" },
     { href: "/meisai", label: "🏦 明細" },
     { href: "/payables", label: "💰 払うもの" },
     { href: "/zeirishi", label: "🧑‍💼 税理士" },

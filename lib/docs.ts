@@ -1,0 +1,79 @@
+// 書類保管庫（請求書・契約書・支払明細書など）。会計版NotebookLM的な蓄積。
+// AIで内容を抽出してインデックス(KV)に保管し、freeeの未処理明細と金額で照合する。
+
+const DOCS_INDEX = "docs:index";
+
+async function kv() {
+  const url = process.env.KV_REST_API_URL ?? process.env.UPSTASH_REDIS_REST_URL;
+  const token =
+    process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!url || !token) return null;
+  const { createClient } = await import("@vercel/kv");
+  return createClient({ url, token });
+}
+
+export type DocPayment = { payee: string; amount: number; note: string };
+export type DocLine = { category: string; amount: number; memo: string };
+
+export type DocEntry = {
+  id: string;
+  fileName: string;
+  type: string; // 請求書/契約書/領収書/支払明細書/その他
+  title: string;
+  date: string;
+  summary: string;
+  payments: DocPayment[]; // 照合用：支払先と金額
+  suggestedLines: DocLine[]; // 想定仕訳
+  taxReview: boolean;
+  taxReviewReason: string;
+  uploadedAt: string;
+};
+
+function norm(s: string): string {
+  return (s || "").replace(/[\s　]/g, "").toLowerCase();
+}
+
+export async function getDocsIndex(): Promise<DocEntry[]> {
+  const store = await kv();
+  if (!store) return [];
+  return (await store.get<DocEntry[]>(DOCS_INDEX)) ?? [];
+}
+
+export async function addDoc(
+  entry: Omit<DocEntry, "uploadedAt">,
+  file?: { base64: string; mediaType: string },
+): Promise<void> {
+  const store = await kv();
+  if (!store) throw new Error("KV未設定");
+  const index = await getDocsIndex();
+  index.unshift({ ...entry, uploadedAt: new Date(Date.now()).toISOString() });
+  await store.set(DOCS_INDEX, index);
+  // 原本(base64)は重いので別キーに（800KB未満のみ保存）
+  if (file && file.base64.length < 800_000) {
+    await store.set(`doc:file:${entry.id}`, file);
+  }
+}
+
+export async function getDocFile(
+  id: string,
+): Promise<{ base64: string; mediaType: string } | null> {
+  const store = await kv();
+  if (!store) return null;
+  return (await store.get<{ base64: string; mediaType: string }>(`doc:file:${id}`)) ?? null;
+}
+
+/** 未処理明細(金額・摘要)に一致しそうな書類を返す（金額一致＋取引先名のゆるい一致） */
+export async function matchDocs(
+  amount: number,
+  description: string,
+): Promise<DocEntry[]> {
+  const d = norm(description);
+  const docs = await getDocsIndex();
+  return docs.filter((doc) =>
+    doc.payments.some((p) => {
+      const amtHit = p.amount === amount;
+      const payeeHit = p.payee && (d.includes(norm(p.payee)) || norm(p.payee).includes(d));
+      return amtHit || payeeHit;
+    }),
+  );
+}

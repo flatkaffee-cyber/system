@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { FREEE_COMPANY_ID, freeeGet, isConnected } from "@/lib/freee";
 import { matchKb, getDecisions } from "@/lib/kb";
+import { matchDocs } from "@/lib/docs";
 
 export const runtime = "nodejs";
 
@@ -48,6 +49,10 @@ export async function GET() {
       for (const t of wallet_txns) {
         if (t.status !== 1) continue; // 未処理のみ
         const hint = await matchKb(t.description);
+        const docs = await matchDocs(t.amount, t.description);
+        const doc = docs[0];
+        // この明細の金額に対応する想定仕訳（書類のpaymentから）
+        const pay = doc?.payments.find((p) => p.amount === t.amount);
         out.push({
           id: t.id,
           date: t.date,
@@ -56,6 +61,18 @@ export async function GET() {
           description: t.description,
           walletName: w.name,
           hint: hint ? { category: hint.category, note: hint.note } : null,
+          doc: doc
+            ? {
+                id: doc.id,
+                title: doc.title,
+                type: doc.type,
+                summary: doc.summary,
+                payNote: pay?.note ?? "",
+                suggestedLines: doc.suggestedLines,
+                taxReview: doc.taxReview,
+                taxReviewReason: doc.taxReviewReason,
+              }
+            : null,
           decision: decisions[String(t.id)] ?? null,
         });
       }

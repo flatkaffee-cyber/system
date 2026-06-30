@@ -477,6 +477,71 @@ button.ghost {
   border-radius: 999px;
   margin-left: 8px;
 }
+.doc-chip {
+  display: inline-block;
+  font-size: 10px;
+  background: #e6eef6;
+  color: #2c5d8a;
+  padding: 1px 7px;
+  border-radius: 999px;
+  margin-left: 8px;
+}
+.doc-match {
+  background: #eef4fa;
+  border: 1px solid #cfe0ef;
+  border-radius: 10px;
+  padding: 12px;
+  margin: 12px 0;
+  font-size: 13px;
+}
+
+/* 書類保管庫 */
+.doc-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+.doc-type {
+  display: inline-block;
+  font-size: 10px;
+  background: var(--accent);
+  color: #fff;
+  padding: 2px 8px;
+  border-radius: 999px;
+  margin-right: 8px;
+}
+.doc-title {
+  font-weight: 700;
+  font-size: 15px;
+}
+.doc-date {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.doc-summary {
+  font-size: 13px;
+  color: var(--ink);
+  margin-top: 8px;
+  white-space: pre-wrap;
+}
+.doc-pays {
+  margin-top: 8px;
+  border-top: 1px dashed var(--line);
+  padding-top: 8px;
+}
+.doc-pay {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  padding: 2px 0;
+}
+.doc-tax {
+  font-size: 12px;
+  color: #a86b00;
+  margin-top: 8px;
+}
 .meisai-right {
   text-align: right;
   flex-shrink: 0;

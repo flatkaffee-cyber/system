@@ -14,6 +14,16 @@ type Advice = {
   tax_review: boolean;
   tax_review_reason: string;
 };
+type Doc = {
+  id: string;
+  title: string;
+  type: string;
+  summary: string;
+  payNote: string;
+  suggestedLines: Line[];
+  taxReview: boolean;
+  taxReviewReason: string;
+};
 export type Txn = {
   id: number;
   date: string;
@@ -22,6 +32,7 @@ export type Txn = {
   description: string;
   walletName: string;
   hint: { category: string; note: string } | null;
+  doc: Doc | null;
   decision: { lines: Line[]; partner: string } | null;
 };
 type Msg = { role: "user" | "assistant"; content: string };
@@ -38,6 +49,14 @@ export default function MeisaiItem({ txn }: { txn: Txn }) {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const sideOut = txn.side === "expense";
+
+  const docContext = txn.doc
+    ? `種類:${txn.doc.type} / 名前:${txn.doc.title}\n要点:${txn.doc.summary}\nこの金額(¥${txn.amount.toLocaleString()})の内容:${txn.doc.payNote}\n書類の想定仕訳:${txn.doc.suggestedLines
+        .map((l) => `${l.category} ¥${l.amount.toLocaleString()}(${l.memo})`)
+        .join(" / ")}${
+        txn.doc.taxReview ? `\n税理士論点:${txn.doc.taxReviewReason}` : ""
+      }`
+    : undefined;
 
   async function send(text: string, document?: string) {
     if (loading) return;
@@ -60,6 +79,7 @@ export default function MeisaiItem({ txn }: { txn: Txn }) {
           },
           messages: next,
           document,
+          docContext,
         }),
       });
       const json = await res.json();
@@ -121,7 +141,10 @@ export default function MeisaiItem({ txn }: { txn: Txn }) {
           <div className="meisai-desc">{txn.description}</div>
           <div className="meisai-sub">
             {txn.date}・{txn.walletName.split(" ")[0]}
-            {txn.hint && !decided && (
+            {txn.doc && !decided && (
+              <span className="doc-chip">📄 {txn.doc.title}</span>
+            )}
+            {txn.hint && !txn.doc && !decided && (
               <span className="hint-chip">候補: {txn.hint.category}</span>
             )}
           </div>
@@ -155,8 +178,21 @@ export default function MeisaiItem({ txn }: { txn: Txn }) {
 
       {open && !decided && (
         <div className="meisai-body">
+          {txn.doc && messages.length === 0 && (
+            <div className="doc-match">
+              📄 保管庫に関連書類が見つかりました：<strong>{txn.doc.title}</strong>
+              <button
+                className="pay-btn"
+                style={{ width: "100%", marginTop: 8 }}
+                onClick={() => send(`保管庫の「${txn.doc!.title}」に基づいて、この明細の仕訳を判定してください。`)}
+                disabled={loading}
+              >
+                この書類の支払いとして判定する
+              </button>
+            </div>
+          )}
           <div className="rc-msgs">
-            {messages.length === 0 && (
+            {messages.length === 0 && !txn.doc && (
               <p className="hint" style={{ marginTop: 0 }}>
                 「AIに相談」で科目を一緒に決めます。書類（契約書・請求書・明細書）があればアップすると正確になります。
               </p>
