@@ -108,14 +108,16 @@ export default function MeisaiItem({ txn }: { txn: Txn }) {
 
   async function searchEmail() {
     if (loading) return;
-    setMessages((m) => [...m, { role: "user", content: "Gmailから関連メールを探す" }]);
+    const kw = input.trim();
+    setMessages((m) => [...m, { role: "user", content: kw ? `「${kw}」でGmailを検索` : "Gmailから関連メールを探す" }]);
+    setInput("");
     setLoading(true);
     let ctx = "";
     try {
       const res = await fetch("/api/gmail-search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: txn.amount, description: txn.description }),
+        body: JSON.stringify({ amount: txn.amount, description: txn.description, keyword: kw || undefined }),
       });
       const j = await res.json();
       if (!j.connected) {
@@ -124,7 +126,8 @@ export default function MeisaiItem({ txn }: { txn: Txn }) {
         return;
       }
       if (!j.mails || j.mails.length === 0) {
-        setMessages((m) => [...m, { role: "assistant", content: `金額（¥${txn.amount.toLocaleString()}）に一致するメールは見つかりませんでした。キーワードで相談するか、書類をアップしてください。` }]);
+        const dbg = `検索した語: ${(j.queries ?? []).join(" / ") || "（なし）"}${j.error ? `\n⚠️エラー: ${j.error}` : ""}`;
+        setMessages((m) => [...m, { role: "assistant", content: `メールが見つかりませんでした。\n${dbg}\n→ 上の入力に「花火」など具体的な語を入れて、もう一度「✉️Gmailから探す」を押すとその語で再検索します。` }]);
         setLoading(false);
         return;
       }
