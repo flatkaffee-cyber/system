@@ -49,12 +49,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "不正なリクエスト" }, { status: 400 });
   }
   const amount = body.amount ?? 0;
+  const description = body.description ?? "";
   const keyword = (body.keyword ?? "").trim();
 
   // 検索クエリ群を用意：①ユーザー指定 or AI生成キーワード ②金額(カンマ無し)
   let queries: string[] = [];
   if (keyword) queries.push(keyword);
-  else queries = await genQueries(amount, description ?? "");
+  else queries = await genQueries(amount, description);
   if (amount) queries.push(`${amount}`); // 例: 50000
 
   try {
