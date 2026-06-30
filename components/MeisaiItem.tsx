@@ -58,7 +58,7 @@ export default function MeisaiItem({ txn }: { txn: Txn }) {
       }`
     : undefined;
 
-  async function send(text: string, document?: string) {
+  async function send(text: string, document?: string, emailCtx?: string) {
     if (loading) return;
     const userText = text || (document ? "この書類を読んで科目を判定して" : "");
     if (!userText && !document) return;
@@ -80,6 +80,7 @@ export default function MeisaiItem({ txn }: { txn: Txn }) {
           messages: next,
           document,
           docContext,
+          emailContext: emailCtx,
         }),
       });
       const json = await res.json();
@@ -103,6 +104,43 @@ export default function MeisaiItem({ txn }: { txn: Txn }) {
       r.readAsDataURL(file);
     });
     send(input, dataUrl);
+  }
+
+  async function searchEmail() {
+    if (loading) return;
+    setMessages((m) => [...m, { role: "user", content: "Gmailから関連メールを探す" }]);
+    setLoading(true);
+    let ctx = "";
+    try {
+      const res = await fetch("/api/gmail-search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: txn.amount, description: txn.description }),
+      });
+      const j = await res.json();
+      if (!j.connected) {
+        setMessages((m) => [...m, { role: "assistant", content: "Gmailが未接続です。上の「✉️ Gmailと接続」から接続してください。" }]);
+        setLoading(false);
+        return;
+      }
+      if (!j.mails || j.mails.length === 0) {
+        setMessages((m) => [...m, { role: "assistant", content: `金額（¥${txn.amount.toLocaleString()}）に一致するメールは見つかりませんでした。キーワードで相談するか、書類をアップしてください。` }]);
+        setLoading(false);
+        return;
+      }
+      ctx = j.mails
+        .map(
+          (mm: { subject: string; from: string; date: string; body: string; snippet: string }, i: number) =>
+            `【メール${i + 1}】件名:${mm.subject}\n差出人:${mm.from}\n日付:${mm.date}\n本文:${(mm.body || mm.snippet).slice(0, 800)}`,
+        )
+        .join("\n\n");
+    } catch {
+      setMessages((m) => [...m, { role: "assistant", content: "メール検索でエラーが出ました。" }]);
+      setLoading(false);
+      return;
+    }
+    setLoading(false);
+    await send("Gmailで見つかった関連メールに基づいて、この明細の仕訳を判定してください。", undefined, ctx);
   }
 
   async function decide() {
@@ -258,6 +296,9 @@ export default function MeisaiItem({ txn }: { txn: Txn }) {
           />
           <button className="rc-toggle" style={{ marginTop: 6 }} onClick={() => fileRef.current?.click()}>
             📎 書類をアップ（契約書・請求書・明細書／PDF・画像）
+          </button>
+          <button className="rc-toggle" style={{ marginTop: 6 }} onClick={searchEmail} disabled={loading}>
+            ✉️ Gmailから関連メールを探す（この金額で検索）
           </button>
         </div>
       )}

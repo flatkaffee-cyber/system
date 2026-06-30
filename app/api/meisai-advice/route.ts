@@ -69,6 +69,7 @@ export async function POST(req: NextRequest) {
     messages?: { role: "user" | "assistant"; content: string }[];
     document?: string;
     docContext?: string;
+    emailContext?: string;
   };
   try {
     body = await req.json();
@@ -89,6 +90,9 @@ export async function POST(req: NextRequest) {
   }
   if (body.docContext) {
     system += `\n# 保管庫で見つかった関連書類（この明細の金額に一致）\n${body.docContext}\nこの書類の支払いである可能性が高い。replyの冒頭で「これは『〇〇』の支払いですね」と確認し、書類の内訳に沿って lines を提案すること。`;
+  }
+  if (body.emailContext) {
+    system += `\n# Gmailで見つかった関連メール（この明細の金額に一致）\n${body.emailContext}\nこのメールの取引の支払いである可能性がある。メール内容から取引先・用途を読み取り、科目を提案。確証が薄ければ確認質問を。`;
   }
 
   // 会話メッセージを組み立て（書類があれば最後のuserメッセージに添付）

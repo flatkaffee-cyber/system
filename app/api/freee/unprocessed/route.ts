@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { FREEE_COMPANY_ID, freeeGet, isConnected } from "@/lib/freee";
 import { matchKb, getDecisions } from "@/lib/kb";
 import { matchDocs } from "@/lib/docs";
+import { isGoogleConnected } from "@/lib/google";
 
 export const runtime = "nodejs";
 
@@ -79,7 +80,8 @@ export async function GET() {
     }
 
     out.sort((a: any, b: any) => (a.date < b.date ? 1 : -1));
-    return NextResponse.json({ connected: true, txns: out });
+    const gmail = await isGoogleConnected();
+    return NextResponse.json({ connected: true, gmail, txns: out });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "エラー";
     return NextResponse.json({ connected: true, error: msg, txns: [] });

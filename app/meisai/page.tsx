@@ -6,6 +6,7 @@ import MeisaiItem, { type Txn } from "@/components/MeisaiItem";
 
 export default function Meisai() {
   const [connected, setConnected] = useState<boolean | null>(null);
+  const [gmail, setGmail] = useState(false);
   const [txns, setTxns] = useState<Txn[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -14,6 +15,7 @@ export default function Meisai() {
       .then((r) => r.json())
       .then((j) => {
         setConnected(j.connected);
+        setGmail(!!j.gmail);
         setTxns(j.txns ?? []);
         if (j.error) setError(j.error);
       })
@@ -57,10 +59,22 @@ export default function Meisai() {
         </div>
       )}
 
+      {connected && !gmail && (
+        <div className="card connect-card">
+          <div>
+            <strong>✉️ Gmail未接続</strong>
+            <p className="hint" style={{ margin: "4px 0 10px" }}>
+              接続すると、書類が無い明細もメールから根拠を探せます。
+            </p>
+          </div>
+          <a className="connect-btn" href="/api/google/authorize">Gmailと接続</a>
+        </div>
+      )}
+
       {connected && txns.length > 0 && (
         <>
           <div className="connected-note">
-            未処理 {undecided} 件 ／ freee連携中
+            未処理 {undecided} 件 ／ freee連携中{gmail ? "・Gmail連携中" : ""}
           </div>
           {txns.map((t) => (
             <MeisaiItem key={t.id} txn={t} />

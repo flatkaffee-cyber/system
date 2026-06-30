@@ -1,0 +1,177 @@
+// Google OAuth + Gmail検索（読み取り専用）。トークンは Vercel KV(Redis)。
+// 未処理明細に紐づく書類が無いとき、Gmailをメール本文から探して証拠にする。
+
+const TOKEN_KEY = "google:tokens";
+const SCOPE = "https://www.googleapis.com/auth/gmail.readonly openid email profile";
+
+function env(name: string): string {
+  const raw = process.env[name] ?? "";
+  return Array.from(raw)
+    .filter((c) => c.charCodeAt(0) !== 0xfeff && c.charCodeAt(0) !== 0x200b)
+    .join("")
+    .trim();
+}
+const CLIENT_ID = env("GOOGLE_CLIENT_ID");
+const CLIENT_SECRET = env("GOOGLE_CLIENT_SECRET");
+
+async function kv() {
+  const url = process.env.KV_REST_API_URL ?? process.env.UPSTASH_REDIS_REST_URL;
+  const token =
+    process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!url || !token) return null;
+  const { createClient } = await import("@vercel/kv");
+  return createClient({ url, token });
+}
+
+type Tokens = { access_token: string; refresh_token: string; expires_at: number };
+
+async function loadTokens(): Promise<Tokens | null> {
+  const store = await kv();
+  if (!store) return null;
+  return (await store.get<Tokens>(TOKEN_KEY)) ?? null;
+}
+async function saveTokens(t: Tokens) {
+  const store = await kv();
+  if (store) await store.set(TOKEN_KEY, t);
+}
+
+export async function isGoogleReady(): Promise<boolean> {
+  return !!CLIENT_ID && !!(await kv());
+}
+export async function isGoogleConnected(): Promise<boolean> {
+  try {
+    return (await loadTokens()) !== null;
+  } catch {
+    return false;
+  }
+}
+
+export function googleRedirectUri(origin: string) {
+  return `${origin}/api/google/callback`;
+}
+export function googleAuthorizeUrl(origin: string) {
+  const p = new URLSearchParams({
+    client_id: CLIENT_ID,
+    redirect_uri: googleRedirectUri(origin),
+    response_type: "code",
+    scope: SCOPE,
+    access_type: "offline",
+    prompt: "consent",
+  });
+  return `https://accounts.google.com/o/oauth2/v2/auth?${p.toString()}`;
+}
+
+async function tokenReq(body: Record<string, string>): Promise<Tokens & { id_token?: string }> {
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams(body).toString(),
+  });
+  if (!res.ok) throw new Error(`Googleトークン取得失敗(${res.status}): ${await res.text()}`);
+  const j = await res.json();
+  return {
+    access_token: j.access_token,
+    refresh_token: j.refresh_token,
+    expires_at: Math.floor(Date.now() / 1000) + (j.expires_in ?? 3600),
+    id_token: j.id_token,
+  };
+}
+
+export async function googleExchange(origin: string, code: string) {
+  const prev = await loadTokens();
+  const t = await tokenReq({
+    grant_type: "authorization_code",
+    code,
+    client_id: CLIENT_ID,
+    client_secret: CLIENT_SECRET,
+    redirect_uri: googleRedirectUri(origin),
+  });
+  // Googleはrefresh_tokenを初回のみ返すことがある。無ければ前回分を保持。
+  if (!t.refresh_token && prev?.refresh_token) t.refresh_token = prev.refresh_token;
+  await saveTokens(t);
+}
+
+async function getAccessToken(): Promise<string> {
+  const t = await loadTokens();
+  if (!t) throw new Error("Google未接続");
+  if (t.expires_at - 60 < Math.floor(Date.now() / 1000)) {
+    const nt = await tokenReq({
+      grant_type: "refresh_token",
+      refresh_token: t.refresh_token,
+      client_id: CLIENT_ID,
+      client_secret: CLIENT_SECRET,
+    });
+    if (!nt.refresh_token) nt.refresh_token = t.refresh_token; // Googleは更新時にrefresh返さない
+    await saveTokens(nt);
+    return nt.access_token;
+  }
+  return t.access_token;
+}
+
+export type Mail = {
+  id: string;
+  subject: string;
+  from: string;
+  date: string;
+  snippet: string;
+  body: string;
+};
+
+function decodeB64Url(data: string): string {
+  try {
+    const b = data.replace(/-/g, "+").replace(/_/g, "/");
+    return Buffer.from(b, "base64").toString("utf-8");
+  } catch {
+    return "";
+  }
+}
+
+// payloadから text/plain 本文を再帰的に抽出
+function extractBody(payload: any): string {
+  if (!payload) return "";
+  if (payload.mimeType === "text/plain" && payload.body?.data) {
+    return decodeB64Url(payload.body.data);
+  }
+  if (payload.parts) {
+    for (const p of payload.parts) {
+      const t = extractBody(p);
+      if (t) return t;
+    }
+  }
+  if (payload.body?.data) return decodeB64Url(payload.body.data);
+  return "";
+}
+
+/** Gmailを検索して上位メールを返す（本文は抜粋） */
+export async function gmailSearch(query: string, max = 4): Promise<Mail[]> {
+  const token = await getAccessToken();
+  const listRes = await fetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(
+      query,
+    )}&maxResults=${max}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!listRes.ok) throw new Error(`Gmail検索失敗(${listRes.status})`);
+  const list = await listRes.json();
+  const ids: string[] = (list.messages ?? []).map((m: { id: string }) => m.id);
+  const mails: Mail[] = [];
+  for (const id of ids) {
+    const r = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!r.ok) continue;
+    const m = await r.json();
+    const headers: { name: string; value: string }[] = m.payload?.headers ?? [];
+    const h = (n: string) => headers.find((x) => x.name.toLowerCase() === n)?.value ?? "";
+    mails.push({
+      id,
+      subject: h("subject"),
+      from: h("from"),
+      date: h("date"),
+      snippet: m.snippet ?? "",
+      body: extractBody(m.payload).slice(0, 1500),
+    });
+  }
+  return mails;
+}
