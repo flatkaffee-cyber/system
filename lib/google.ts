@@ -142,6 +142,16 @@ function extractBody(payload: any): string {
   return "";
 }
 
+/** 接続中アカウントのメールアドレス等（診断用） */
+export async function gmailProfile(): Promise<{ emailAddress: string; messagesTotal: number }> {
+  const token = await getAccessToken();
+  const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`profile ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  return await res.json();
+}
+
 /** Gmailを検索して上位メールを返す（本文は抜粋） */
 export async function gmailSearch(query: string, max = 4): Promise<Mail[]> {
   const token = await getAccessToken();
