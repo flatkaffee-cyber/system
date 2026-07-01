@@ -211,8 +211,17 @@ export default function MeisaiItem({ txn }: { txn: Txn }) {
               </li>
             ))}
           </ul>
+          <a
+            className="connect-btn"
+            href="https://secure.freee.co.jp/wallet_txns/stream?registration_status=unreconciled"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ display: "block", textAlign: "center", marginTop: 6 }}
+          >
+            → freeeで登録する（自動で経理を開く）
+          </a>
           <p className="hint">
-            ※ freeeの「自動で経理」でこの明細をこの内容で登録してください（銀行明細の登録はfreee側）。
+            ※ freeeの「自動で経理」でこの明細に上の科目を入れて「登録」。銀行明細の登録はfreee側で行います（APIだと二重計上になるため）。
           </p>
         </div>
       )}
