@@ -27,7 +27,9 @@ const DocSchema = z.object({
   suggestedLines: z
     .array(
       z.object({
-        category: z.enum(ACCOUNTS),
+        category: z
+          .string()
+          .describe(`科目。原則この中から1つ: ${ACCOUNTS.join(" / ")}`),
         amount: z.number(),
         memo: z.string(),
       }),

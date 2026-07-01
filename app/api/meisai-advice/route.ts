@@ -18,7 +18,9 @@ const AdviceSchema = z.object({
   lines: z
     .array(
       z.object({
-        category: z.enum(ACCOUNTS),
+        category: z
+          .string()
+          .describe(`科目。原則この中から1つ選ぶ: ${ACCOUNTS.join(" / ")}`),
         amount: z.number().describe("金額（円）。複数科目に分かれる場合は分割。"),
         memo: z.string().describe("この行が何かの一言（例: 7月分賃料）。"),
       }),
