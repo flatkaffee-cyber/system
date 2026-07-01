@@ -28,7 +28,9 @@ const AdviceSchema = z.object({
           ),
         item: z
           .string()
-          .describe("品目。原価(仕入高)のときだけ区分名(コーヒー豆・茶葉 等)。それ以外は空。"),
+          .describe(
+            "品目。仕入高(原価)のときだけ、freeeの品目名から選ぶ: コーヒー豆・茶葉 / フード材料費 / 牛乳・シロップ等 / 包装資材・消耗品 / その他原価。経費・資産・負債の行は空。",
+          ),
         amount: z.number().describe("金額（円）。複数科目に分かれる場合は分割。"),
         memo: z.string().describe("備考（この行の内容。例: 7月分賃料）。"),
       }),

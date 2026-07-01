@@ -30,6 +30,12 @@ const DocSchema = z.object({
         category: z
           .string()
           .describe(`科目。原則この中から1つ: ${ACCOUNTS.join(" / ")}`),
+        taxType: z
+          .string()
+          .describe("税区分。費用/仕入=課対仕入10%、保証金/敷金/前払費用/借入金=対象外、収入=課税売上10%。"),
+        item: z
+          .string()
+          .describe("品目。仕入高(原価)のみ: コーヒー豆・茶葉/フード材料費/牛乳・シロップ等/包装資材・消耗品/その他原価。他は空。"),
         amount: z.number(),
         memo: z.string(),
       }),
