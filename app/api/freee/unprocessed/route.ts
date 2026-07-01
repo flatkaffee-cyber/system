@@ -79,7 +79,11 @@ export async function GET() {
       }
     }
 
-    out.sort((a: any, b: any) => (a.date < b.date ? 1 : -1));
+    // freeeの「自動で経理（新しい順）」と一致：日付降順→同日はID降順
+    out.sort((a: any, b: any) => {
+      if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+      return b.id - a.id;
+    });
     const gmail = await isGoogleConnected();
     return NextResponse.json({ connected: true, gmail, txns: out });
   } catch (e) {
