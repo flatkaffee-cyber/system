@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import CopyField from "@/components/CopyField";
 
 type Line = { category: string; amount: number; memo?: string };
 type Advice = {
@@ -202,26 +203,38 @@ export default function MeisaiItem({ txn }: { txn: Txn }) {
 
       {decided && (
         <div className="decided-box">
-          <strong>freeeにこう登録：</strong>（取引先: {decided.partner || "—"}）
-          <ul>
+          <div className="freee-panel">
+            <div className="freee-panel-title">
+              📋 freee入力用（各項目の「コピー」→ freeeの「明細の詳細」に貼り付け）
+            </div>
+            <CopyField label="発生日" value={txn.date} />
+            <CopyField label="取引先" value={decided.partner} />
             {decided.lines.map((l, i) => (
-              <li key={i}>
-                {l.category} ¥{l.amount.toLocaleString()}
-                {l.memo ? `（${l.memo}）` : ""}
-              </li>
+              <div key={i} className="freee-line-block">
+                <div className="freee-line-no">
+                  行{i + 1}
+                  {decided.lines.length > 1 ? "（freeeで「＋行を追加」）" : ""}
+                </div>
+                <CopyField label="勘定科目" value={l.category} />
+                <CopyField label="金額" value={String(l.amount)} />
+                {l.memo ? <CopyField label="備考" value={l.memo} /> : null}
+              </div>
             ))}
-          </ul>
+            <div className="freee-note">
+              ※ 税区分は勘定科目を選ぶとfreeeが自動でセットします（入力不要）。
+            </div>
+          </div>
           <a
             className="connect-btn"
             href="https://secure.freee.co.jp/wallet_txns/stream?registration_status=unreconciled"
             target="_blank"
             rel="noopener noreferrer"
-            style={{ display: "block", textAlign: "center", marginTop: 6 }}
+            style={{ display: "block", textAlign: "center", marginTop: 8 }}
           >
             → freeeで登録する（自動で経理を開く）
           </a>
           <p className="hint">
-            ※ freeeの「自動で経理」でこの明細に上の科目を入れて「登録」。銀行明細の登録はfreee側で行います（APIだと二重計上になるため）。
+            上の値をコピーして freee に貼り付け →「登録」。銀行明細の登録は freee 側で行います（APIだと二重計上になるため）。
           </p>
         </div>
       )}
