@@ -20,9 +20,17 @@ const AdviceSchema = z.object({
       z.object({
         category: z
           .string()
-          .describe(`科目。原則この中から1つ選ぶ: ${ACCOUNTS.join(" / ")}`),
+          .describe(`勘定科目。原則この中から1つ: ${ACCOUNTS.join(" / ")}`),
+        taxType: z
+          .string()
+          .describe(
+            "税区分。費用科目や仕入高・固定資産取得=『課対仕入10%』、差入保証金/敷金/長期前払費用/役員借入金など資産負債=『対象外』、雑収入など収入=『課税売上10%』。",
+          ),
+        item: z
+          .string()
+          .describe("品目。原価(仕入高)のときだけ区分名(コーヒー豆・茶葉 等)。それ以外は空。"),
         amount: z.number().describe("金額（円）。複数科目に分かれる場合は分割。"),
-        memo: z.string().describe("この行が何かの一言（例: 7月分賃料）。"),
+        memo: z.string().describe("備考（この行の内容。例: 7月分賃料）。"),
       }),
     )
     .describe("科目ごとの内訳。readyがtrueのとき埋める。"),

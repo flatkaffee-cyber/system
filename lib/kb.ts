@@ -24,7 +24,13 @@ export type KbEntry = {
 export type Decision = {
   txnId: number;
   partner: string;
-  lines: { category: string; amount: number }[];
+  lines: {
+    category: string;
+    amount: number;
+    taxType?: string;
+    item?: string;
+    memo?: string;
+  }[];
   note: string;
   decidedAt: string;
 };

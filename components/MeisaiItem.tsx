@@ -3,7 +3,13 @@
 import { useRef, useState } from "react";
 import CopyField from "@/components/CopyField";
 
-type Line = { category: string; amount: number; memo?: string };
+type Line = {
+  category: string;
+  taxType?: string;
+  item?: string;
+  amount: number;
+  memo?: string;
+};
 type Advice = {
   reply: string;
   needs_document: boolean;
@@ -216,12 +222,14 @@ export default function MeisaiItem({ txn }: { txn: Txn }) {
                   {decided.lines.length > 1 ? "（freeeで「＋行を追加」）" : ""}
                 </div>
                 <CopyField label="勘定科目" value={l.category} />
+                <CopyField label="税区分" value={l.taxType || "課対仕入10%"} />
                 <CopyField label="金額" value={String(l.amount)} />
+                {l.item ? <CopyField label="品目" value={l.item} /> : null}
                 {l.memo ? <CopyField label="備考" value={l.memo} /> : null}
               </div>
             ))}
             <div className="freee-note">
-              ※ 税区分は勘定科目を選ぶとfreeeが自動でセットします（入力不要）。
+              ※ 勘定科目を選ぶと税区分はfreeeが自動で入りますが、違っていたら上の値に合わせてください。品目が無い行は空欄でOK。
             </div>
           </div>
           <a

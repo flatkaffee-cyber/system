@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
     description?: string;
     amount?: number;
     partner?: string;
-    lines?: { category: string; amount: number; memo?: string }[];
+    lines?: { category: string; amount: number; taxType?: string; item?: string; memo?: string }[];
     kbKeyword?: string;
     kbNote?: string;
     taxReview?: boolean;
