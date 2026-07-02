@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { CATEGORIES, type Receipt } from "@/lib/receipt";
 import Nav from "@/components/Nav";
 import ReceiptChat from "@/components/ReceiptChat";
+import CopyField from "@/components/CopyField";
 
 const MEMBERS = ["坂本", "町田", "櫻井", "國仲"] as const;
 
@@ -13,7 +14,7 @@ export default function Home() {
   const [status, setStatus] = useState<Status>("idle");
   const [image, setImage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState<Receipt & { payer: string }>({
+  const [form, setForm] = useState<Receipt & { payer: string; memo: string }>({
     date: "",
     vendor: "",
     total: 0,
@@ -21,6 +22,7 @@ export default function Home() {
     summary: "",
     confidence: "medium",
     payer: MEMBERS[0],
+    memo: "",
   });
   const [over, setOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -185,6 +187,14 @@ export default function Home() {
             ))}
           </select>
 
+          <label>メモ（なぜ払ったか・freeeの備考になります）</label>
+          <textarea
+            rows={2}
+            value={form.memo}
+            placeholder="例：オープン準備の打合せ交通費／来客用のコーヒー豆 など"
+            onChange={(e) => setForm({ ...form, memo: e.target.value })}
+          />
+
           <ReceiptChat
             date={form.date}
             vendor={form.vendor}
@@ -212,15 +222,21 @@ export default function Home() {
 
       {status === "saved" && (
         <div className="card">
-          <div className="saved">
-            ✅ 読み取り＆確認 OK<br />
-            {form.date}／{form.vendor}／¥{form.total.toLocaleString()}／{form.category}
-            （立替: {form.payer}）
+          <div className="saved">✅ 読み取り＆確認 OK（立替）</div>
+          <div className="freee-panel" style={{ marginTop: 12 }}>
+            <div className="freee-panel-title">
+              📋 freee登録用（立替＝借)科目／貸)役員借入金）
+            </div>
+            <CopyField label="発生日" value={form.date} />
+            <CopyField label="取引先" value={form.payer} hint="立替えた人" />
+            <CopyField label="勘定科目" value={form.category} />
+            <CopyField label="金額" value={String(form.total)} />
+            {form.memo ? <CopyField label="備考" value={form.memo} /> : null}
+            <div className="freee-note">
+              貸方は「役員借入金（取引先＝{form.payer}）」。取引先を付けると「払うもの」タブに反映されます。
+            </div>
           </div>
-          <p className="hint" style={{ textAlign: "center" }}>
-            ※ Phase 2 で「役員借入金」として freee に登録されます。
-          </p>
-          <button className="primary" onClick={reset} style={{ marginTop: 8 }}>
+          <button className="primary" onClick={reset} style={{ marginTop: 12 }}>
             次の領収書を登録
           </button>
         </div>
