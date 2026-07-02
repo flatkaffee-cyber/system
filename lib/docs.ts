@@ -48,9 +48,13 @@ export async function addDoc(
   const index = await getDocsIndex();
   index.unshift({ ...entry, uploadedAt: new Date(Date.now()).toISOString() });
   await store.set(DOCS_INDEX, index);
-  // 原本(base64)は重いので別キーに（800KB未満のみ保存）
-  if (file && file.base64.length < 800_000) {
-    await store.set(`doc:file:${entry.id}`, file);
+  // 原本(base64)は別キーに保存。大きすぎてKVに入らなければデータのみ保存(NAS導入時に整理)。
+  if (file && file.base64.length < 6_000_000) {
+    try {
+      await store.set(`doc:file:${entry.id}`, file);
+    } catch {
+      // 原本保存失敗はスルー（抽出データは保存済み）
+    }
   }
 }
 

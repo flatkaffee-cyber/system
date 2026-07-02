@@ -25,7 +25,32 @@ export default function Home() {
     memo: "",
   });
   const [over, setOver] = useState(false);
+  const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  async function save() {
+    setSaving(true);
+    try {
+      await fetch("/api/receipts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: form.date,
+          vendor: form.vendor,
+          total: form.total,
+          category: form.category,
+          summary: form.summary,
+          payer: form.payer,
+          memo: form.memo,
+          image, // 原本画像も保存（消えないように）
+        }),
+      });
+    } catch {
+      // 保存に失敗しても確認内容は表示する
+    }
+    setSaving(false);
+    setStatus("saved");
+  }
 
   async function handleFile(file: File) {
     setError(null);
@@ -208,10 +233,10 @@ export default function Home() {
           <div style={{ marginTop: 18 }}>
             <button
               className="primary"
-              onClick={() => setStatus("saved")}
-              disabled={!form.date || !form.total}
+              onClick={save}
+              disabled={!form.date || !form.total || saving}
             >
-              この内容で登録（Phase 2 で freee へ）
+              {saving ? <span className="spinner" /> : "この内容で登録（保存＋freee貼付用を表示）"}
             </button>
             <button className="ghost" onClick={reset}>
               ← やり直す

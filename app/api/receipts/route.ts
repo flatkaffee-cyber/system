@@ -1,0 +1,48 @@
+import { NextRequest, NextResponse } from "next/server";
+import { saveReceipt, getReceipts } from "@/lib/receipts";
+
+export const runtime = "nodejs";
+export const maxDuration = 30;
+
+export async function GET() {
+  const receipts = await getReceipts();
+  return NextResponse.json({ receipts });
+}
+
+export async function POST(req: NextRequest) {
+  let body: {
+    date?: string;
+    vendor?: string;
+    total?: number;
+    category?: string;
+    summary?: string;
+    payer?: string;
+    memo?: string;
+    image?: string;
+  };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "不正なリクエスト" }, { status: 400 });
+  }
+  const id = `r_${Date.now()}`;
+  try {
+    await saveReceipt(
+      {
+        id,
+        date: body.date ?? "",
+        vendor: body.vendor ?? "",
+        total: body.total ?? 0,
+        category: body.category ?? "不明",
+        summary: body.summary ?? "",
+        payer: body.payer ?? "",
+        memo: body.memo ?? "",
+      },
+      body.image,
+    );
+    return NextResponse.json({ ok: true, id });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "保存に失敗";
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}
