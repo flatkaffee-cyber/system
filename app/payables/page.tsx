@@ -8,6 +8,23 @@ export default function Payables() {
   const [data, setData] = useState<PayablesResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [paid, setPaid] = useState<Record<string, boolean>>({});
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
+
+  async function syncSheet() {
+    setSyncing(true);
+    setSyncMsg(null);
+    try {
+      const res = await fetch("/api/sync-sheet", { method: "POST" });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error ?? "同期に失敗");
+      setSyncMsg(`✓ 売上計画シートに実績 ${j.count} 件を反映しました`);
+    } catch (e) {
+      setSyncMsg(e instanceof Error ? e.message : "同期に失敗しました");
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   useEffect(() => {
     fetch("/api/payables")
@@ -61,6 +78,17 @@ export default function Payables() {
               <div className="total-label">未払い合計（残り）</div>
               <div className="total-amount">¥{remaining.toLocaleString()}</div>
             </div>
+          </div>
+
+          <div className="card">
+            <strong>📊 売上計画シートに実績を反映</strong>
+            <p className="hint" style={{ margin: "4px 0 8px" }}>
+              freeeの仕訳を会計マスターの「freee実績」タブに書き込み → 予実・月次・売上計画が自動更新されます。
+            </p>
+            <button className="primary" onClick={syncSheet} disabled={syncing}>
+              {syncing ? <span className="spinner" /> : "実績を反映する"}
+            </button>
+            {syncMsg && <p className="hint" style={{ marginTop: 8 }}>{syncMsg}</p>}
           </div>
 
           {data.payables.map((p) => {

@@ -2,7 +2,8 @@
 // 未処理明細に紐づく書類が無いとき、Gmailをメール本文から探して証拠にする。
 
 const TOKEN_KEY = "google:tokens";
-const SCOPE = "https://www.googleapis.com/auth/gmail.readonly openid email profile";
+const SCOPE =
+  "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/spreadsheets openid email profile";
 
 function env(name: string): string {
   const raw = process.env[name] ?? "";
@@ -187,4 +188,33 @@ export async function gmailSearch(query: string, max = 4): Promise<Mail[]> {
     });
   }
   return mails;
+}
+
+// --- Google Sheets 書き込み（会計マスターの freee実績タブ用） ---
+const SHEETS_API = "https://sheets.googleapis.com/v4/spreadsheets";
+
+export async function sheetsClear(spreadsheetId: string, range: string): Promise<void> {
+  const token = await getAccessToken();
+  const res = await fetch(
+    `${SHEETS_API}/${spreadsheetId}/values/${encodeURIComponent(range)}:clear`,
+    { method: "POST", headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!res.ok) throw new Error(`Sheetsクリア失敗(${res.status}): ${(await res.text()).slice(0, 300)}`);
+}
+
+export async function sheetsUpdate(
+  spreadsheetId: string,
+  range: string,
+  values: (string | number)[][],
+): Promise<void> {
+  const token = await getAccessToken();
+  const res = await fetch(
+    `${SHEETS_API}/${spreadsheetId}/values/${encodeURIComponent(range)}?valueInputOption=RAW`,
+    {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ values }),
+    },
+  );
+  if (!res.ok) throw new Error(`Sheets書き込み失敗(${res.status}): ${(await res.text()).slice(0, 300)}`);
 }
