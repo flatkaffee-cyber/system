@@ -152,3 +152,24 @@ export async function freeeGet<T = unknown>(
   }
   return (await res.json()) as T;
 }
+
+export async function freeePost<T = unknown>(
+  path: string,
+  body: unknown,
+): Promise<T> {
+  const token = await getAccessToken();
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "X-Api-Version": "2020-06-15",
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new Error(`freee API POST ${path} 失敗(${res.status}): ${await res.text()}`);
+  }
+  return (await res.json()) as T;
+}

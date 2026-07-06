@@ -126,6 +126,13 @@ export default function Home() {
             }}
           />
           {error && <p className="err">{error}</p>}
+          <a
+            href="/receipts"
+            className="rc-toggle"
+            style={{ display: "block", textAlign: "center", marginTop: 12, textDecoration: "none" }}
+          >
+            📥 保存済み領収書を見る・freeeに登録する →
+          </a>
         </>
       )}
 

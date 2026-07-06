@@ -22,6 +22,7 @@ export type SavedReceipt = {
   payer: string;
   memo: string;
   savedAt: string;
+  registered?: { journalId: number; at: string }; // freee登録済み
 };
 
 export async function getReceipts(): Promise<SavedReceipt[]> {
@@ -53,4 +54,20 @@ export async function getReceiptImage(id: string): Promise<string | null> {
   const store = await kv();
   if (!store) return null;
   return (await store.get<string>(`receipt:file:${id}`)) ?? null;
+}
+
+export async function getReceipt(id: string): Promise<SavedReceipt | null> {
+  const all = await getReceipts();
+  return all.find((r) => r.id === id) ?? null;
+}
+
+export async function markRegistered(id: string, journalId: number): Promise<void> {
+  const store = await kv();
+  if (!store) return;
+  const all = await getReceipts();
+  const i = all.findIndex((r) => r.id === id);
+  if (i >= 0) {
+    all[i].registered = { journalId, at: new Date(Date.now()).toISOString() };
+    await store.set(IDX, all);
+  }
 }
