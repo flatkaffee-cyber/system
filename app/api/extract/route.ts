@@ -6,9 +6,11 @@ import { ReceiptSchema } from "@/lib/receipt";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-// data URL (data:image/png;base64,xxxx) を media_type と base64 に分解
+// data URL (data:image/png;base64,xxxx / data:application/pdf;base64,xxxx) を分解
 function parseDataUrl(dataUrl: string): { mediaType: string; data: string } | null {
-  const m = /^data:(image\/(?:png|jpeg|jpg|webp|gif));base64,(.+)$/.exec(dataUrl);
+  const m = /^data:(image\/(?:png|jpeg|jpg|webp|gif)|application\/pdf);base64,(.+)$/.exec(
+    dataUrl,
+  );
   if (!m) return null;
   const mediaType = m[1] === "image/jpg" ? "image/jpeg" : m[1];
   return { mediaType, data: m[2] };
@@ -32,10 +34,25 @@ export async function POST(req: NextRequest) {
   const parsed = body.image ? parseDataUrl(body.image) : null;
   if (!parsed) {
     return NextResponse.json(
-      { error: "画像がありません（png/jpeg/webp のみ対応）。" },
+      { error: "ファイルがありません（png/jpeg/webp/PDF に対応）。" },
       { status: 400 },
     );
   }
+
+  const isPdf = parsed.mediaType === "application/pdf";
+  const fileBlock = isPdf
+    ? {
+        type: "document" as const,
+        source: { type: "base64" as const, media_type: "application/pdf" as const, data: parsed.data },
+      }
+    : {
+        type: "image" as const,
+        source: {
+          type: "base64" as const,
+          media_type: parsed.mediaType as "image/png" | "image/jpeg" | "image/webp" | "image/gif",
+          data: parsed.data,
+        },
+      };
 
   try {
     const client = new Anthropic();
@@ -47,28 +64,17 @@ export async function POST(req: NextRequest) {
         {
           role: "user",
           content: [
-            {
-              type: "image",
-              source: {
-                type: "base64",
-                media_type: parsed.mediaType as
-                  | "image/png"
-                  | "image/jpeg"
-                  | "image/webp"
-                  | "image/gif",
-                data: parsed.data,
-              },
-            },
+            fileBlock,
             {
               type: "text",
               text:
-                "これは日本のカフェ（合同会社flat.）の経費の領収書・レシートです。" +
-                "日付・店名・税込合計金額を読み取り、最も近い会計科目を1つ選んでください。" +
+                "これは日本のカフェ（合同会社flat.）の経費の領収書・レシート（またはメール/注文確認PDF）です。" +
+                "日付・店名(支払先)・税込合計金額を読み取り、最も近い会計科目を1つ選んでください。" +
                 "金額は税込の合計を円で。複数候補があるときは最も確からしいものを選びます。",
             },
           ],
         },
-      ],
+      ] as unknown as Anthropic.Beta.BetaMessageParam[],
     });
 
     if (response.stop_reason === "refusal") {

@@ -86,6 +86,8 @@ export default function Home() {
     setError(null);
   }
 
+  const isPdf = image?.startsWith("data:application/pdf") ?? false;
+
   return (
     <div className="wrap">
       <header>
@@ -112,13 +114,12 @@ export default function Home() {
             }}
           >
             <strong>領収書をアップロード</strong>
-            <small>タップして選択 / ドラッグ＆ドロップ（png・jpeg・webp）</small>
+            <small>タップして選択 / ドラッグ＆ドロップ（png・jpeg・webp・PDF）</small>
           </div>
           <input
             ref={inputRef}
             type="file"
-            accept="image/png,image/jpeg,image/webp"
-            capture="environment"
+            accept="image/png,image/jpeg,image/webp,application/pdf"
             style={{ display: "none" }}
             onChange={(e) => {
               const f = e.target.files?.[0];
@@ -138,7 +139,12 @@ export default function Home() {
 
       {status === "extracting" && (
         <div className="card" style={{ textAlign: "center" }}>
-          {image && <img src={image} alt="領収書" className="preview" />}
+          {image &&
+            (isPdf ? (
+              <div className="preview pdf-preview">📄 PDF を読み取ります</div>
+            ) : (
+              <img src={image} alt="領収書" className="preview" />
+            ))}
           <p style={{ marginTop: 16, color: "var(--muted)" }}>
             <span
               className="spinner"
@@ -151,7 +157,12 @@ export default function Home() {
 
       {status === "review" && (
         <div className="card">
-          {image && <img src={image} alt="領収書" className="preview" />}
+          {image &&
+            (isPdf ? (
+              <div className="preview pdf-preview">📄 PDF を読み取ります</div>
+            ) : (
+              <img src={image} alt="領収書" className="preview" />
+            ))}
           <p style={{ marginTop: 12, marginBottom: 0, fontSize: 13 }}>
             AIの読み取り結果
             <span className={`badge ${form.confidence}`}>
