@@ -26,6 +26,9 @@ export default function Home() {
   });
   const [over, setOver] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [dup, setDup] = useState<
+    { vendor: string; date: string; total: number; registered: boolean } | null
+  >(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function save() {
@@ -73,6 +76,24 @@ export default function Home() {
       if (!res.ok) throw new Error(json.error ?? "抽出に失敗しました。");
       const r = json.receipt as Receipt;
       setForm((f) => ({ ...f, ...r }));
+      // 重複チェック：同じ日付・金額の領収書が既に保存済みなら警告
+      setDup(null);
+      try {
+        const saved = await fetch("/api/receipts").then((x) => x.json());
+        const hit = (saved.receipts ?? []).find(
+          (x: { date: string; total: number }) => x.date === r.date && x.total === r.total,
+        );
+        if (hit) {
+          setDup({
+            vendor: hit.vendor,
+            date: hit.date,
+            total: hit.total,
+            registered: !!hit.registered,
+          });
+        }
+      } catch {
+        // 重複チェック失敗は無視（登録は継続可）
+      }
       setStatus("review");
     } catch (e) {
       setError(e instanceof Error ? e.message : "抽出に失敗しました。");
@@ -84,6 +105,7 @@ export default function Home() {
     setStatus("idle");
     setImage(null);
     setError(null);
+    setDup(null);
   }
 
   const isPdf = image?.startsWith("data:application/pdf") ?? false;
@@ -170,6 +192,17 @@ export default function Home() {
             </span>
           </p>
           <p className="hint">内容を確認・修正してから登録してください。</p>
+
+          {dup && (
+            <div className="dup-warn">
+              ⚠️ <strong>同じ日付・金額の領収書が既にあります</strong>
+              <div>
+                （{dup.date}／{dup.vendor || "店名なし"}／¥{dup.total.toLocaleString()}／
+                {dup.registered ? "freee登録済" : "保存済・未登録"}）
+              </div>
+              <div style={{ marginTop: 4 }}>二重計上に注意。別物なら日付・金額を確認してから登録してください。</div>
+            </div>
+          )}
 
           <label>日付</label>
           <input

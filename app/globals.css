@@ -93,6 +93,16 @@ header p {
   justify-content: center;
   font-size: 14px;
 }
+.dup-warn {
+  background: #fdecea;
+  border: 1px solid #f5b7b1;
+  color: #a83228;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin: 10px 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
 
 label {
   display: block;
