@@ -24,13 +24,32 @@ type Data = { connected: boolean; rate?: number; members?: M[]; items?: Item[]; 
 
 export default function Labor() {
   const [data, setData] = useState<Data | null>(null);
+  const [fixing, setFixing] = useState(false);
+  const [fixMsg, setFixMsg] = useState<string | null>(null);
 
-  useEffect(() => {
+  function load() {
     fetch("/api/labor-allowance")
       .then((r) => r.json())
       .then(setData)
       .catch(() => setData({ connected: false }));
-  }, []);
+  }
+  useEffect(load, []);
+
+  async function recompute() {
+    setFixing(true);
+    setFixMsg(null);
+    try {
+      const res = await fetch("/api/fix-timesheet", { method: "POST" });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error ?? "再計算に失敗");
+      setFixMsg(`✓ 勤怠シートの労働時間を再計算しました（${j.filled}行）`);
+      load();
+    } catch (e) {
+      setFixMsg(e instanceof Error ? e.message : "再計算に失敗しました");
+    } finally {
+      setFixing(false);
+    }
+  }
 
   return (
     <div className="wrap">
@@ -60,6 +79,15 @@ export default function Labor() {
       )}
 
       {data?.error && <p className="err">{data.error}</p>}
+
+      {data?.connected && (
+        <div className="card">
+          <button className="primary" onClick={recompute} disabled={fixing}>
+            {fixing ? <span className="spinner" /> : "🔧 勤怠の労働時間を再計算（退勤押し忘れの空欄を埋める）"}
+          </button>
+          {fixMsg && <p className="hint" style={{ marginTop: 8 }}>{fixMsg}</p>}
+        </div>
+      )}
 
       {data?.members?.map((m) => {
         const pct = m.earned > 0 ? Math.min(100, Math.round((m.used / m.earned) * 100)) : 0;

@@ -15,9 +15,9 @@ const NAME_MAP: [string, Member][] = [
   ["杏", "國仲"],
   ["Anne", "國仲"],
   ["櫻井", "櫻井"],
-  ["Sho", "櫻井"], // 仮
+  ["kankichi", "櫻井"], // 櫻井＝kankichi
   ["町田", "町田"],
-  ["kankichi", "町田"], // 仮
+  ["Sho", "町田"], // 町田＝Sho
 ];
 
 export function mapName(raw: string): Member | null {
@@ -61,4 +61,22 @@ export function computeHours(rows: (string | number)[][]): Record<string, Member
   // 端数整理
   for (const k of Object.keys(out)) out[k].hours = Math.round(out[k].hours * 10) / 10;
   return out;
+}
+
+// 1行の労働時間（出勤/退勤/休憩から）。計算できなければ ""。
+export function rowHours(r: (string | number)[]): number | "" {
+  const inMin = toMinutes(r[2]);
+  const outMin = toMinutes(r[3]);
+  if (inMin === null || outMin === null) return "";
+  let diff = outMin - inMin;
+  if (diff < 0) diff += 24 * 60;
+  const brk = Number(r[4]) || 0;
+  const work = (diff - brk) / 60;
+  if (!isFinite(work) || work <= 0) return "";
+  return Math.round(work * 10) / 10;
+}
+
+// 勤怠シートのF列（労働時間）を再計算した配列を返す
+export function computeFColumn(rows: (string | number)[][]): (number | "")[] {
+  return rows.map((r) => rowHours(r));
 }
