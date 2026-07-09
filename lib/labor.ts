@@ -76,7 +76,14 @@ export function rowHours(r: (string | number)[]): number | "" {
   return Math.round(work * 10) / 10;
 }
 
-// 勤怠シートのF列（労働時間）を再計算した配列を返す
+// 勤怠シートのF列（労働時間）を返す。既存の値（手修正含む）は保持し、空欄だけ計算で埋める。
 export function computeFColumn(rows: (string | number)[][]): (number | "")[] {
-  return rows.map((r) => rowHours(r));
+  return rows.map((r) => {
+    const existing = r[5];
+    const n = Number(existing);
+    if (existing !== undefined && existing !== "" && isFinite(n) && n > 0) {
+      return n; // 既存値は尊重（手で直した実働時間を上書きしない）
+    }
+    return rowHours(r);
+  });
 }
