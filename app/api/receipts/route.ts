@@ -19,6 +19,8 @@ export async function POST(req: NextRequest) {
     payer?: string;
     memo?: string;
     image?: string;
+    expenseKind?: "company" | "labor";
+    laborMember?: string;
   };
   try {
     body = await req.json();
@@ -37,6 +39,8 @@ export async function POST(req: NextRequest) {
         summary: body.summary ?? "",
         payer: body.payer ?? "",
         memo: body.memo ?? "",
+        expenseKind: body.expenseKind ?? "company",
+        laborMember: body.laborMember,
       },
       body.image,
     );

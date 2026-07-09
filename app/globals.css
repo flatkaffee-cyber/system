@@ -104,6 +104,80 @@ header p {
   line-height: 1.5;
 }
 
+/* 経費区分トグル */
+.kind-toggle {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+.kind-btn {
+  flex: 1;
+  padding: 10px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+.kind-btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+/* 労働枠 */
+.labor-card {
+  padding: 14px;
+}
+.labor-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.labor-head strong {
+  font-size: 16px;
+}
+.labor-hours {
+  font-size: 12px;
+  color: var(--muted);
+}
+.labor-bar {
+  height: 8px;
+  background: #eee7dd;
+  border-radius: 999px;
+  margin: 10px 0 8px;
+  overflow: hidden;
+}
+.labor-bar-fill {
+  height: 100%;
+  background: var(--accent);
+}
+.labor-nums {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--muted);
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.labor-remain {
+  color: #2e7d4f;
+  font-weight: 700;
+}
+.labor-over {
+  color: #c0392b;
+  font-weight: 700;
+}
+.labor-item {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  padding: 6px 0;
+  border-top: 1px solid var(--line);
+  margin-top: 6px;
+}
+
 label {
   display: block;
   font-size: 12px;

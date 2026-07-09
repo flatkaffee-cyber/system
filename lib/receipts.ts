@@ -23,6 +23,8 @@ export type SavedReceipt = {
   memo: string;
   savedAt: string;
   registered?: { journalId: number; at: string }; // freee登録済み
+  expenseKind?: "company" | "labor"; // 会社経費 / 労働枠経費
+  laborMember?: string; // 労働枠のとき、誰の枠から引くか
 };
 
 export async function getReceipts(): Promise<SavedReceipt[]> {

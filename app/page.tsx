@@ -14,7 +14,9 @@ export default function Home() {
   const [status, setStatus] = useState<Status>("idle");
   const [image, setImage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState<Receipt & { payer: string; memo: string }>({
+  const [form, setForm] = useState<
+    Receipt & { payer: string; memo: string; expenseKind: "company" | "labor"; laborMember: string }
+  >({
     date: "",
     vendor: "",
     total: 0,
@@ -23,6 +25,8 @@ export default function Home() {
     confidence: "medium",
     payer: MEMBERS[0],
     memo: "",
+    expenseKind: "company",
+    laborMember: MEMBERS[0],
   });
   const [over, setOver] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -45,6 +49,8 @@ export default function Home() {
           summary: form.summary,
           payer: form.payer,
           memo: form.memo,
+          expenseKind: form.expenseKind,
+          laborMember: form.expenseKind === "labor" ? form.laborMember : undefined,
           image, // 原本画像も保存（消えないように）
         }),
       });
@@ -270,6 +276,42 @@ export default function Home() {
             placeholder="例：オープン準備の打合せ交通費／来客用のコーヒー豆 など"
             onChange={(e) => setForm({ ...form, memo: e.target.value })}
           />
+
+          <label>この経費の区分</label>
+          <div className="kind-toggle">
+            <button
+              type="button"
+              className={`kind-btn ${form.expenseKind === "company" ? "active" : ""}`}
+              onClick={() => setForm({ ...form, expenseKind: "company" })}
+            >
+              会社経費（必須）
+            </button>
+            <button
+              type="button"
+              className={`kind-btn ${form.expenseKind === "labor" ? "active" : ""}`}
+              onClick={() => setForm({ ...form, expenseKind: "labor" })}
+            >
+              労働枠から使う
+            </button>
+          </div>
+          {form.expenseKind === "labor" && (
+            <>
+              <label>誰の労働枠から引く？</label>
+              <select
+                value={form.laborMember}
+                onChange={(e) => setForm({ ...form, laborMember: e.target.value })}
+              >
+                {MEMBERS.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+              <p className="hint">
+                ※ この ¥{form.total.toLocaleString()} が {form.laborMember} の労働枠から差し引かれます（🕒労働枠タブで確認）。
+              </p>
+            </>
+          )}
 
           <ReceiptChat
             date={form.date}
