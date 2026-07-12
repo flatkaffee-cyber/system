@@ -33,6 +33,10 @@ export type Decision = {
   }[];
   note: string;
   decidedAt: string;
+  date?: string;
+  description?: string;
+  amount?: number;
+  tags?: string[]; // 用途タグ
 };
 
 function norm(s: string): string {

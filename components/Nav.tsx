@@ -11,6 +11,7 @@ export default function Nav() {
     { href: "/meisai", label: "🏦 明細" },
     { href: "/payables", label: "💰 払うもの" },
     { href: "/labor", label: "🕒 労働枠" },
+    { href: "/report", label: "📊 用途別" },
     { href: "/zeirishi", label: "🧑‍💼 税理士" },
     { href: "/soudan", label: "💬 相談" },
   ];

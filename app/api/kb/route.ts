@@ -15,6 +15,7 @@ export async function POST(req: NextRequest) {
     kbNote?: string;
     taxReview?: boolean;
     taxReviewReason?: string;
+    tags?: string[];
   };
   try {
     body = await req.json();
@@ -32,6 +33,7 @@ export async function POST(req: NextRequest) {
     kbNote = "",
     taxReview = false,
     taxReviewReason = "",
+    tags,
   } = body;
   if (!txnId || lines.length === 0) {
     return NextResponse.json({ error: "決定内容が不足しています" }, { status: 400 });
@@ -48,6 +50,10 @@ export async function POST(req: NextRequest) {
     lines,
     note: kbNote,
     decidedAt: new Date(Date.now()).toISOString(),
+    date,
+    description,
+    amount,
+    tags: tags?.filter((t) => t && t.trim()).map((t) => t.trim()),
   });
 
   // 税理士に相談すべき論点があれば、相談リストに保管

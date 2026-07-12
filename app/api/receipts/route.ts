@@ -21,6 +21,7 @@ export async function POST(req: NextRequest) {
     image?: string;
     expenseKind?: "company" | "labor";
     laborMember?: string;
+    tags?: string[];
   };
   try {
     body = await req.json();
@@ -41,6 +42,7 @@ export async function POST(req: NextRequest) {
         memo: body.memo ?? "",
         expenseKind: body.expenseKind ?? "company",
         laborMember: body.laborMember,
+        tags: body.tags?.filter((t) => t && t.trim()).map((t) => t.trim()),
       },
       body.image,
     );

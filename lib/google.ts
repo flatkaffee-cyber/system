@@ -216,6 +216,27 @@ export async function sheetsClear(spreadsheetId: string, range: string): Promise
   if (!res.ok) throw new Error(`Sheetsクリア失敗(${res.status}): ${(await res.text()).slice(0, 300)}`);
 }
 
+// タブが無ければ作成する
+export async function sheetsEnsureTab(spreadsheetId: string, title: string): Promise<void> {
+  const token = await getAccessToken();
+  const res = await fetch(
+    `${SHEETS_API}/${spreadsheetId}?fields=sheets.properties.title`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!res.ok) throw new Error(`Sheetsメタ取得失敗(${res.status})`);
+  const j = await res.json();
+  const titles: string[] = (j.sheets ?? []).map(
+    (s: { properties: { title: string } }) => s.properties.title,
+  );
+  if (titles.includes(title)) return;
+  const up = await fetch(`${SHEETS_API}/${spreadsheetId}:batchUpdate`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ requests: [{ addSheet: { properties: { title } } }] }),
+  });
+  if (!up.ok) throw new Error(`タブ作成失敗(${up.status}): ${(await up.text()).slice(0, 200)}`);
+}
+
 export async function sheetsUpdate(
   spreadsheetId: string,
   range: string,

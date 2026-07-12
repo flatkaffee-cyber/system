@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { FREEE_COMPANY_ID, freeeGet, isConnected } from "@/lib/freee";
-import { isGoogleConnected, sheetsClear, sheetsUpdate } from "@/lib/google";
+import { isGoogleConnected, sheetsClear, sheetsUpdate, sheetsEnsureTab } from "@/lib/google";
+import { getReceipts } from "@/lib/receipts";
+import { getDecisions } from "@/lib/kb";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -80,7 +82,31 @@ export async function POST() {
       await sheetsUpdate(SHEET_ID, `${TAB}!A2`, rows);
     }
 
-    return NextResponse.json({ ok: true, count: rows.length });
+    // --- 用途タグ タブ（目的別集計用）---
+    const TAG_TAB = "用途タグ";
+    const tagRows: (string | number)[][] = [];
+    const receipts = await getReceipts();
+    for (const r of receipts) {
+      for (const t of r.tags ?? []) {
+        if (t) tagRows.push([r.date, t, r.total, r.vendor || r.summary || "", "領収書"]);
+      }
+    }
+    const decisions = await getDecisions();
+    for (const d of Object.values(decisions)) {
+      const amt = d.amount ?? d.lines.reduce((s, l) => s + (l.amount || 0), 0);
+      for (const t of d.tags ?? []) {
+        if (t) tagRows.push([d.date ?? "", t, amt, d.partner || d.description || "", "明細"]);
+      }
+    }
+    tagRows.sort((a, b) => (String(a[1]) < String(b[1]) ? -1 : 1)); // タグ順
+    await sheetsEnsureTab(SHEET_ID, TAG_TAB);
+    await sheetsUpdate(SHEET_ID, `${TAG_TAB}!A1`, [["日付", "用途タグ", "金額", "内容", "種別"]]);
+    await sheetsClear(SHEET_ID, `${TAG_TAB}!A2:E2000`);
+    if (tagRows.length > 0) {
+      await sheetsUpdate(SHEET_ID, `${TAG_TAB}!A2`, tagRows);
+    }
+
+    return NextResponse.json({ ok: true, count: rows.length, tagRows: tagRows.length });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "同期に失敗";
     return NextResponse.json({ error: msg }, { status: 500 });

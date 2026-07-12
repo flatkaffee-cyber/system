@@ -104,6 +104,104 @@ header p {
   line-height: 1.5;
 }
 
+/* 用途タグ入力 */
+.tag-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--accent-weak);
+  color: var(--accent);
+  border-radius: 999px;
+  padding: 3px 6px 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.tag-chip button {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.tag-input-row {
+  display: flex;
+  gap: 6px;
+}
+.tag-input-row input {
+  flex: 1;
+}
+.tag-add {
+  flex-shrink: 0;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 8px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.tag-suggest-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.tag-suggest-chip {
+  background: #f0eee9;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 11px;
+}
+
+/* 用途別レポート */
+.report-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+}
+.report-tag {
+  font-weight: 700;
+  font-size: 15px;
+}
+.report-count {
+  font-size: 12px;
+  color: var(--muted);
+  margin-left: 8px;
+}
+.report-total {
+  font-weight: 700;
+  font-size: 16px;
+}
+.report-items {
+  margin-top: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 6px;
+}
+.report-item {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  padding: 4px 0;
+}
+.report-src {
+  font-size: 10px;
+  color: var(--muted);
+  margin-left: 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+
 /* 経費区分トグル */
 .kind-toggle {
   display: flex;

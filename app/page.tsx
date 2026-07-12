@@ -5,6 +5,7 @@ import { CATEGORIES, type Receipt } from "@/lib/receipt";
 import Nav from "@/components/Nav";
 import ReceiptChat from "@/components/ReceiptChat";
 import CopyField from "@/components/CopyField";
+import TagInput from "@/components/TagInput";
 
 const MEMBERS = ["坂本", "町田", "櫻井", "國仲"] as const;
 
@@ -15,7 +16,13 @@ export default function Home() {
   const [image, setImage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<
-    Receipt & { payer: string; memo: string; expenseKind: "company" | "labor"; laborMember: string }
+    Receipt & {
+      payer: string;
+      memo: string;
+      expenseKind: "company" | "labor";
+      laborMember: string;
+      tags: string[];
+    }
   >({
     date: "",
     vendor: "",
@@ -27,6 +34,7 @@ export default function Home() {
     memo: "",
     expenseKind: "company",
     laborMember: MEMBERS[0],
+    tags: [],
   });
   const [over, setOver] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -51,6 +59,7 @@ export default function Home() {
           memo: form.memo,
           expenseKind: form.expenseKind,
           laborMember: form.expenseKind === "labor" ? form.laborMember : undefined,
+          tags: form.tags,
           image, // 原本画像も保存（消えないように）
         }),
       });
@@ -276,6 +285,9 @@ export default function Home() {
             placeholder="例：オープン準備の打合せ交通費／来客用のコーヒー豆 など"
             onChange={(e) => setForm({ ...form, memo: e.target.value })}
           />
+
+          <label>用途タグ（あとで目的別に集計。例: 家具費、エスプレッソマシーン）</label>
+          <TagInput tags={form.tags} onChange={(t) => setForm({ ...form, tags: t })} />
 
           <label>この経費の区分</label>
           <div className="kind-toggle">

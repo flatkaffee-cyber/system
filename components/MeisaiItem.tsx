@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import CopyField from "@/components/CopyField";
+import TagInput from "@/components/TagInput";
 
 type Line = {
   category: string;
@@ -53,6 +54,7 @@ export default function MeisaiItem({ txn }: { txn: Txn }) {
   const [decided, setDecided] = useState<{ lines: Line[]; partner: string } | null>(
     txn.decision,
   );
+  const [tags, setTags] = useState<string[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const sideOut = txn.side === "expense";
@@ -171,6 +173,7 @@ export default function MeisaiItem({ txn }: { txn: Txn }) {
           kbNote: advice.kb_note,
           taxReview: advice.tax_review,
           taxReviewReason: advice.tax_review_reason,
+          tags,
         }),
       });
       if (!res.ok) throw new Error((await res.json()).error ?? "保存失敗");
@@ -294,6 +297,10 @@ export default function MeisaiItem({ txn }: { txn: Txn }) {
                   <span>論点: {advice.tax_review_reason}</span>
                 </div>
               )}
+              <div style={{ marginTop: 8 }}>
+                <div className="propose-title" style={{ marginBottom: 4 }}>用途タグ（目的別集計用）</div>
+                <TagInput tags={tags} onChange={setTags} />
+              </div>
               <button className="pay-btn" onClick={decide} disabled={loading} style={{ width: "100%", marginTop: 8 }}>
                 この内容で決定（freee登録用に確定＆ノウハウ保存）
               </button>
