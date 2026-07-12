@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { FREEE_COMPANY_ID, freeeGet, isConnected } from "@/lib/freee";
 import { isGoogleConnected, sheetsClear, sheetsUpdate, sheetsEnsureTab } from "@/lib/google";
-import { getReceipts } from "@/lib/receipts";
+import { getReceipts, receiptLines } from "@/lib/receipts";
 import { getDecisions } from "@/lib/kb";
 
 export const runtime = "nodejs";
@@ -87,8 +87,17 @@ export async function POST() {
     const tagRows: (string | number)[][] = [];
     const receipts = await getReceipts();
     for (const r of receipts) {
-      for (const t of r.tags ?? []) {
-        if (t) tagRows.push([r.date, t, r.total, r.vendor || r.summary || "", "領収書"]);
+      for (const l of receiptLines(r)) {
+        for (const t of l.tags ?? []) {
+          if (t)
+            tagRows.push([
+              r.date,
+              t,
+              l.amount,
+              `${r.vendor || ""}${l.name ? "／" + l.name : ""}`,
+              "領収書",
+            ]);
+        }
       }
     }
     const decisions = await getDecisions();

@@ -3,38 +3,40 @@
 import { useRef, useState } from "react";
 import { CATEGORIES, type Receipt } from "@/lib/receipt";
 import Nav from "@/components/Nav";
-import ReceiptChat from "@/components/ReceiptChat";
 import CopyField from "@/components/CopyField";
 import TagInput from "@/components/TagInput";
 
 const MEMBERS = ["坂本", "町田", "櫻井", "國仲"] as const;
 
+type Line = { name: string; amount: number; category: string; tags: string[] };
 type Status = "idle" | "extracting" | "review" | "saved";
+
+type Form = {
+  date: string;
+  vendor: string;
+  confidence: "high" | "medium" | "low";
+  payer: string;
+  memo: string;
+  expenseKind: "company" | "labor";
+  laborMember: string;
+  lines: Line[];
+};
+
+const emptyLine = (): Line => ({ name: "", amount: 0, category: "不明", tags: [] });
 
 export default function Home() {
   const [status, setStatus] = useState<Status>("idle");
   const [image, setImage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState<
-    Receipt & {
-      payer: string;
-      memo: string;
-      expenseKind: "company" | "labor";
-      laborMember: string;
-      tags: string[];
-    }
-  >({
+  const [form, setForm] = useState<Form>({
     date: "",
     vendor: "",
-    total: 0,
-    category: "不明",
-    summary: "",
     confidence: "medium",
     payer: MEMBERS[0],
     memo: "",
     expenseKind: "company",
     laborMember: MEMBERS[0],
-    tags: [],
+    lines: [emptyLine()],
   });
   const [over, setOver] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -42,6 +44,18 @@ export default function Home() {
     { vendor: string; date: string; total: number; registered: boolean } | null
   >(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const total = form.lines.reduce((s, l) => s + (Number(l.amount) || 0), 0);
+
+  function setLine(i: number, patch: Partial<Line>) {
+    setForm((f) => ({ ...f, lines: f.lines.map((l, idx) => (idx === i ? { ...l, ...patch } : l)) }));
+  }
+  function addLine() {
+    setForm((f) => ({ ...f, lines: [...f.lines, emptyLine()] }));
+  }
+  function removeLine(i: number) {
+    setForm((f) => ({ ...f, lines: f.lines.length > 1 ? f.lines.filter((_, idx) => idx !== i) : f.lines }));
+  }
 
   async function save() {
     setSaving(true);
@@ -52,15 +66,13 @@ export default function Home() {
         body: JSON.stringify({
           date: form.date,
           vendor: form.vendor,
-          total: form.total,
-          category: form.category,
-          summary: form.summary,
+          total,
           payer: form.payer,
           memo: form.memo,
           expenseKind: form.expenseKind,
           laborMember: form.expenseKind === "labor" ? form.laborMember : undefined,
-          tags: form.tags,
-          image, // 原本画像も保存（消えないように）
+          lines: form.lines,
+          image,
         }),
       });
     } catch {
@@ -90,24 +102,23 @@ export default function Home() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "抽出に失敗しました。");
       const r = json.receipt as Receipt;
-      setForm((f) => ({ ...f, ...r }));
-      // 重複チェック：同じ日付・金額の領収書が既に保存済みなら警告
+      const lines: Line[] =
+        r.lines && r.lines.length > 0
+          ? r.lines.map((l) => ({ name: l.name, amount: l.amount, category: l.category, tags: l.tags ?? [] }))
+          : [emptyLine()];
+      setForm((f) => ({ ...f, date: r.date, vendor: r.vendor, confidence: r.confidence, lines }));
+
+      // 重複チェック：同じ日付・合計金額の領収書が既に保存済みなら警告
       setDup(null);
+      const t = lines.reduce((s, l) => s + (l.amount || 0), 0);
       try {
         const saved = await fetch("/api/receipts").then((x) => x.json());
         const hit = (saved.receipts ?? []).find(
-          (x: { date: string; total: number }) => x.date === r.date && x.total === r.total,
+          (x: { date: string; total: number }) => x.date === r.date && x.total === t,
         );
-        if (hit) {
-          setDup({
-            vendor: hit.vendor,
-            date: hit.date,
-            total: hit.total,
-            registered: !!hit.registered,
-          });
-        }
+        if (hit) setDup({ vendor: hit.vendor, date: hit.date, total: hit.total, registered: !!hit.registered });
       } catch {
-        // 重複チェック失敗は無視（登録は継続可）
+        /* 重複チェック失敗は無視 */
       }
       setStatus("review");
     } catch (e) {
@@ -121,15 +132,17 @@ export default function Home() {
     setImage(null);
     setError(null);
     setDup(null);
+    setForm((f) => ({ ...f, lines: [emptyLine()], memo: "", expenseKind: "company" }));
   }
 
   const isPdf = image?.startsWith("data:application/pdf") ?? false;
+  const multi = form.lines.length > 1;
 
   return (
     <div className="wrap">
       <header>
         <h1>☕ flat. 立替精算</h1>
-        <p>領収書を撮ってアップ → AIが日付・金額・科目を自動判定します</p>
+        <p>領収書を撮ってアップ → AIが日付・金額・科目・用途を自動判定（用途が違えば自動で分割）</p>
       </header>
       <Nav />
 
@@ -183,10 +196,7 @@ export default function Home() {
               <img src={image} alt="領収書" className="preview" />
             ))}
           <p style={{ marginTop: 16, color: "var(--muted)" }}>
-            <span
-              className="spinner"
-              style={{ borderColor: "#e4e1da", borderTopColor: "var(--accent)" }}
-            />
+            <span className="spinner" style={{ borderColor: "#e4e1da", borderTopColor: "var(--accent)" }} />
             AIが読み取り中…
           </p>
         </div>
@@ -202,9 +212,8 @@ export default function Home() {
             ))}
           <p style={{ marginTop: 12, marginBottom: 0, fontSize: 13 }}>
             AIの読み取り結果
-            <span className={`badge ${form.confidence}`}>
-              自信度 {form.confidence}
-            </span>
+            <span className={`badge ${form.confidence}`}>自信度 {form.confidence}</span>
+            {multi && <span className="hint-chip">用途が違うので{form.lines.length}行に分割</span>}
           </p>
           <p className="hint">内容を確認・修正してから登録してください。</p>
 
@@ -215,46 +224,58 @@ export default function Home() {
                 （{dup.date}／{dup.vendor || "店名なし"}／¥{dup.total.toLocaleString()}／
                 {dup.registered ? "freee登録済" : "保存済・未登録"}）
               </div>
-              <div style={{ marginTop: 4 }}>二重計上に注意。別物なら日付・金額を確認してから登録してください。</div>
+              <div style={{ marginTop: 4 }}>二重計上に注意。別物なら確認してから登録してください。</div>
             </div>
           )}
 
           <label>日付</label>
-          <input
-            type="date"
-            value={form.date}
-            onChange={(e) => setForm({ ...form, date: e.target.value })}
-          />
+          <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
 
           <label>店名・支払先</label>
-          <input
-            value={form.vendor}
-            onChange={(e) => setForm({ ...form, vendor: e.target.value })}
-          />
+          <input value={form.vendor} onChange={(e) => setForm({ ...form, vendor: e.target.value })} />
 
-          <label>内容</label>
-          <input
-            value={form.summary}
-            onChange={(e) => setForm({ ...form, summary: e.target.value })}
-          />
-
-          <div className="row">
-            <div>
-              <label>金額（税込・円）</label>
-              <input
-                type="number"
-                value={form.total}
-                onChange={(e) =>
-                  setForm({ ...form, total: Number(e.target.value) })
-                }
-              />
+          <label>内訳（用途・科目が違うものは行を分ける）</label>
+          {form.lines.map((l, i) => (
+            <div key={i} className="rline">
+              <div className="rline-top">
+                <input
+                  className="rline-name"
+                  value={l.name}
+                  placeholder="品目（例: 木材）"
+                  onChange={(e) => setLine(i, { name: e.target.value })}
+                />
+                <input
+                  className="rline-amt"
+                  type="number"
+                  value={l.amount || ""}
+                  placeholder="金額"
+                  onChange={(e) => setLine(i, { amount: Number(e.target.value) })}
+                />
+                {form.lines.length > 1 && (
+                  <button type="button" className="rline-del" onClick={() => removeLine(i)}>
+                    ×
+                  </button>
+                )}
+              </div>
+              <select value={l.category} onChange={(e) => setLine(i, { category: e.target.value })}>
+                {CATEGORIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+              <TagInput tags={l.tags} onChange={(t) => setLine(i, { tags: t })} />
             </div>
+          ))}
+          <button type="button" className="rc-toggle" onClick={addLine} style={{ marginTop: 4 }}>
+            ＋ 行を追加（別の用途）
+          </button>
+          <div className="rline-total">合計 ¥{total.toLocaleString()}</div>
+
+          <div className="row" style={{ marginTop: 8 }}>
             <div>
               <label>立替えた人</label>
-              <select
-                value={form.payer}
-                onChange={(e) => setForm({ ...form, payer: e.target.value })}
-              >
+              <select value={form.payer} onChange={(e) => setForm({ ...form, payer: e.target.value })}>
                 {MEMBERS.map((m) => (
                   <option key={m} value={m}>
                     {m}
@@ -264,30 +285,13 @@ export default function Home() {
             </div>
           </div>
 
-          <label>科目（freee連携時に使用）</label>
-          <select
-            value={form.category}
-            onChange={(e) =>
-              setForm({ ...form, category: e.target.value as Receipt["category"] })
-            }
-          >
-            {CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-
           <label>メモ（なぜ払ったか・freeeの備考になります）</label>
           <textarea
             rows={2}
             value={form.memo}
-            placeholder="例：オープン準備の打合せ交通費／来客用のコーヒー豆 など"
+            placeholder="例：オープン準備 など"
             onChange={(e) => setForm({ ...form, memo: e.target.value })}
           />
-
-          <label>用途タグ（あとで目的別に集計。例: 家具費、エスプレッソマシーン）</label>
-          <TagInput tags={form.tags} onChange={(t) => setForm({ ...form, tags: t })} />
 
           <label>この経費の区分</label>
           <div className="kind-toggle">
@@ -309,10 +313,7 @@ export default function Home() {
           {form.expenseKind === "labor" && (
             <>
               <label>誰の労働枠から引く？</label>
-              <select
-                value={form.laborMember}
-                onChange={(e) => setForm({ ...form, laborMember: e.target.value })}
-              >
+              <select value={form.laborMember} onChange={(e) => setForm({ ...form, laborMember: e.target.value })}>
                 {MEMBERS.map((m) => (
                   <option key={m} value={m}>
                     {m}
@@ -320,27 +321,13 @@ export default function Home() {
                 ))}
               </select>
               <p className="hint">
-                ※ この ¥{form.total.toLocaleString()} が {form.laborMember} の労働枠から差し引かれます（🕒労働枠タブで確認）。
+                ※ この ¥{total.toLocaleString()} が {form.laborMember} の労働枠から差し引かれます。
               </p>
             </>
           )}
 
-          <ReceiptChat
-            date={form.date}
-            vendor={form.vendor}
-            total={form.total}
-            summary={form.summary}
-            category={form.category}
-            payer={form.payer}
-            onApplyCategory={(c) => setForm({ ...form, category: c })}
-          />
-
           <div style={{ marginTop: 18 }}>
-            <button
-              className="primary"
-              onClick={save}
-              disabled={!form.date || !form.total || saving}
-            >
+            <button className="primary" onClick={save} disabled={!form.date || total <= 0 || saving}>
               {saving ? <span className="spinner" /> : "この内容で登録（保存＋freee貼付用を表示）"}
             </button>
             <button className="ghost" onClick={reset}>
@@ -354,16 +341,22 @@ export default function Home() {
         <div className="card">
           <div className="saved">✅ 読み取り＆確認 OK（立替）</div>
           <div className="freee-panel" style={{ marginTop: 12 }}>
-            <div className="freee-panel-title">
-              📋 freee登録用（立替＝借)科目／貸)役員借入金）
-            </div>
+            <div className="freee-panel-title">📋 freee登録用（立替＝借)科目／貸)役員借入金）</div>
             <CopyField label="発生日" value={form.date} />
             <CopyField label="取引先" value={form.payer} hint="立替えた人" />
-            <CopyField label="勘定科目" value={form.category} />
-            <CopyField label="金額" value={String(form.total)} />
-            {form.memo ? <CopyField label="備考" value={form.memo} /> : null}
+            {form.lines.map((l, i) => (
+              <div key={i} className="freee-line-block">
+                <div className="freee-line-no">
+                  借方 {i + 1}
+                  {multi ? "（freeeで「＋行を追加」）" : ""}
+                </div>
+                <CopyField label="勘定科目" value={l.category} />
+                <CopyField label="金額" value={String(l.amount)} />
+                {l.name ? <CopyField label="備考" value={l.name} /> : null}
+              </div>
+            ))}
             <div className="freee-note">
-              貸方は「役員借入金（取引先＝{form.payer}）」。取引先を付けると「払うもの」タブに反映されます。
+              貸方は「役員借入金 ¥{total.toLocaleString()}（取引先＝{form.payer}）」。／ 📥保存済みタブの「freeeに登録」ボタンなら自動で書き込めます。
             </div>
           </div>
           <button className="primary" onClick={reset} style={{ marginTop: 12 }}>

@@ -12,6 +12,8 @@ async function kv() {
   return createClient({ url, token });
 }
 
+export type RLine = { name: string; amount: number; category: string; tags: string[] };
+
 export type SavedReceipt = {
   id: string;
   date: string;
@@ -25,8 +27,22 @@ export type SavedReceipt = {
   registered?: { journalId: number; at: string }; // freee登録済み
   expenseKind?: "company" | "labor"; // 会社経費 / 労働枠経費
   laborMember?: string; // 労働枠のとき、誰の枠から引くか
-  tags?: string[]; // 用途タグ（例: 家具費, エスプレッソマシーン）
+  tags?: string[]; // 用途タグ（旧・レシート全体。互換用）
+  lines?: RLine[]; // 内訳（用途/科目ごとに分割）。あればこちらを正とする
 };
+
+// 内訳を正規化：linesがあればそれ、無ければ旧単一項目を1行に。
+export function receiptLines(r: SavedReceipt): RLine[] {
+  if (r.lines && r.lines.length > 0) return r.lines;
+  return [
+    {
+      name: r.summary || r.vendor || "",
+      amount: r.total,
+      category: r.category || "不明",
+      tags: r.tags ?? [],
+    },
+  ];
+}
 
 export async function getReceipts(): Promise<SavedReceipt[]> {
   const store = await kv();

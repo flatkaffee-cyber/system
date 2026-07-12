@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { FREEE_COMPANY_ID, freeeGet, freeePost, isConnected } from "@/lib/freee";
-import { getReceipt, markRegistered } from "@/lib/receipts";
+import { getReceipt, markRegistered, receiptLines } from "@/lib/receipts";
 import { mapCategory, YAKUIN_KARIIRE_ID, YAKUIN_KARIIRE_TAX } from "@/lib/freeeMap";
 
 export const runtime = "nodejs";
@@ -49,28 +49,35 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "日付・金額が不足しています" }, { status: 400 });
   }
 
-  const debit = mapCategory(r.category);
   const partnerId = await resolvePartnerId(r.payer);
   const desc = (r.memo || r.summary || r.vendor || "").slice(0, 100);
 
-  // 振替伝票: 借)科目 / 貸)役員借入金（取引先＝立替えた人）
+  // 内訳（用途/科目ごと）→ 借方を複数行に。合計＝貸)役員借入金1行。
+  const lines = receiptLines(r);
+  const debitDetails = lines.map((l) => {
+    const m = mapCategory(l.category);
+    return {
+      entry_side: "debit",
+      account_item_id: m.accountItemId,
+      tax_code: m.taxCode,
+      amount: l.amount,
+      ...(m.itemId ? { item_id: m.itemId } : {}),
+      description: (l.name || desc).slice(0, 100),
+    };
+  });
+  const total = lines.reduce((s, l) => s + l.amount, 0);
+
+  // 振替伝票: 借)科目（内訳分だけ複数行） / 貸)役員借入金（取引先＝立替えた人）
   const journal = {
     company_id: COMPANY,
     issue_date: r.date,
     details: [
-      {
-        entry_side: "debit",
-        account_item_id: debit.accountItemId,
-        tax_code: debit.taxCode,
-        amount: r.total,
-        ...(debit.itemId ? { item_id: debit.itemId } : {}),
-        description: desc,
-      },
+      ...debitDetails,
       {
         entry_side: "credit",
         account_item_id: YAKUIN_KARIIRE_ID,
         tax_code: YAKUIN_KARIIRE_TAX,
-        amount: r.total,
+        amount: total,
         ...(partnerId ? { partner_id: partnerId } : {}),
         description: desc,
       },

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getReceipts } from "@/lib/receipts";
+import { getReceipts, receiptLines } from "@/lib/receipts";
 import { getDecisions } from "@/lib/kb";
 
 export const runtime = "nodejs";
@@ -20,7 +20,14 @@ export async function GET() {
 
   const receipts = await getReceipts();
   for (const r of receipts) {
-    add(r.tags, { date: r.date, name: r.vendor || r.summary || "領収書", amount: r.total, source: "領収書" });
+    for (const l of receiptLines(r)) {
+      add(l.tags, {
+        date: r.date,
+        name: `${r.vendor || ""}${l.name ? `／${l.name}` : ""}` || "領収書",
+        amount: l.amount,
+        source: "領収書",
+      });
+    }
   }
   const decisions = await getDecisions();
   for (const d of Object.values(decisions)) {

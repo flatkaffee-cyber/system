@@ -202,6 +202,41 @@ header p {
   padding: 0 4px;
 }
 
+/* レシート内訳エディタ */
+.rline {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+  margin-bottom: 8px;
+  background: #faf9f6;
+}
+.rline-top {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.rline-name {
+  flex: 1;
+}
+.rline-amt {
+  width: 90px;
+}
+.rline-del {
+  flex-shrink: 0;
+  width: 34px;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 8px;
+  color: #c0392b;
+  font-size: 16px;
+}
+.rline-total {
+  text-align: right;
+  font-weight: 700;
+  font-size: 15px;
+  margin-top: 4px;
+}
+
 /* 経費区分トグル */
 .kind-toggle {
   display: flex;
