@@ -2,6 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { ReceiptSchema } from "@/lib/receipt";
+import { getReceipts } from "@/lib/receipts";
+import { getDecisions } from "@/lib/kb";
+
+async function existingTags(): Promise<string[]> {
+  const set = new Set<string>();
+  try {
+    for (const r of await getReceipts()) for (const t of r.tags ?? []) if (t) set.add(t);
+    for (const d of Object.values(await getDecisions())) for (const t of d.tags ?? []) if (t) set.add(t);
+  } catch {
+    /* KV未設定でも継続 */
+  }
+  return [...set];
+}
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -70,7 +83,10 @@ export async function POST(req: NextRequest) {
               text:
                 "これは日本のカフェ（合同会社flat.）の経費の領収書・レシート（またはメール/注文確認PDF）です。" +
                 "日付・店名(支払先)・税込合計金額を読み取り、最も近い会計科目を1つ選んでください。" +
-                "金額は税込の合計を円で。複数候補があるときは最も確からしいものを選びます。",
+                "金額は税込の合計を円で。複数候補があるときは最も確からしいものを選びます。" +
+                "\n用途タグ(tags)も付けてください。既存タグ=[" +
+                (await existingTags()).join(", ") +
+                "]。この中に合うものがあれば必ずそれを使う(表記統一)。無ければ簡潔な新タグ。",
             },
           ],
         },

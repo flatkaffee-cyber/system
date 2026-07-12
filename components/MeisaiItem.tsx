@@ -21,6 +21,7 @@ type Advice = {
   kb_note: string;
   tax_review: boolean;
   tax_review_reason: string;
+  tags: string[];
 };
 type Doc = {
   id: string;
@@ -96,6 +97,7 @@ export default function MeisaiItem({ txn }: { txn: Txn }) {
       if (!res.ok) throw new Error(json.error ?? "判定に失敗");
       const a = json.advice as Advice;
       setAdvice(a);
+      setTags((cur) => (cur.length ? cur : a.tags ?? [])); // AI提案タグを反映（未設定時のみ）
       setMessages((m) => [...m, { role: "assistant", content: a.reply }]);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "エラー";

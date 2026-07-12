@@ -51,6 +51,11 @@ export const ReceiptSchema = z.object({
   confidence: z
     .enum(["high", "medium", "low"])
     .describe("抽出全体の自信度。画像が不鮮明なら low。"),
+  tags: z
+    .array(z.string())
+    .describe(
+      "用途タグ（何のための支出か。例: 家具費, コーヒー器具, 開業準備, 販促）。既存タグに合うものがあれば必ずそれを使う（表記統一）。無ければ簡潔な新タグ。判断できなければ空配列。",
+    ),
 });
 
 export type Receipt = z.infer<typeof ReceiptSchema>;

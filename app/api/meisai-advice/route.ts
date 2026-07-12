@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
-import { matchKb } from "@/lib/kb";
+import { matchKb, getDecisions } from "@/lib/kb";
+import { getReceipts } from "@/lib/receipts";
 import { ACCOUNTS } from "@/lib/accounts";
 
 export const runtime = "nodejs";
@@ -50,6 +51,11 @@ const AdviceSchema = z.object({
   tax_review_reason: z
     .string()
     .describe("税理士に相談すべき論点の内容（tax_reviewがtrueのとき。なければ空）。"),
+  tags: z
+    .array(z.string())
+    .describe(
+      "用途タグ（何のための支出か。例: 家具費, 開業準備, 販促）。既存タグに合うものがあれば必ず使う（表記統一）。無ければ簡潔な新タグ。不明なら空配列。",
+    ),
 });
 
 const SYSTEM = `あなたは合同会社flat.（彦根のカフェ、2026年8月開業予定）の会計サポート。freeeの「未処理の銀行明細」を、会話で会計処理（科目決定）する手伝いをする。
@@ -105,6 +111,16 @@ export async function POST(req: NextRequest) {
   }
   if (body.emailContext) {
     system += `\n# Gmailで見つかった関連メール（この明細の金額に一致）\n${body.emailContext}\nこのメールの取引の支払いである可能性がある。メール内容から取引先・用途を読み取り、科目を提案。確証が薄ければ確認質問を。`;
+  }
+  try {
+    const tset = new Set<string>();
+    for (const r of await getReceipts()) for (const t of r.tags ?? []) if (t) tset.add(t);
+    for (const d of Object.values(await getDecisions())) for (const t of d.tags ?? []) if (t) tset.add(t);
+    if (tset.size > 0) {
+      system += `\n# 既存の用途タグ\n[${[...tset].join(", ")}] ← 合うものがあれば必ずこれを使う（表記統一）。無ければ簡潔な新タグ。`;
+    }
+  } catch {
+    /* KV未設定でも継続 */
   }
 
   // 会話メッセージを組み立て（書類があれば最後のuserメッセージに添付）
