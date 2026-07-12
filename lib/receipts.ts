@@ -64,6 +64,18 @@ export async function getReceipt(id: string): Promise<SavedReceipt | null> {
   return all.find((r) => r.id === id) ?? null;
 }
 
+export async function deleteReceipt(id: string): Promise<void> {
+  const store = await kv();
+  if (!store) return;
+  const all = await getReceipts();
+  await store.set(IDX, all.filter((r) => r.id !== id));
+  try {
+    await store.del(`receipt:file:${id}`);
+  } catch {
+    // 画像削除失敗はスルー
+  }
+}
+
 export async function markRegistered(id: string, journalId: number): Promise<void> {
   const store = await kv();
   if (!store) return;

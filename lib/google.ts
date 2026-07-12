@@ -241,10 +241,12 @@ export async function sheetsUpdate(
   spreadsheetId: string,
   range: string,
   values: (string | number)[][],
+  asFormula = false,
 ): Promise<void> {
   const token = await getAccessToken();
+  const opt = asFormula ? "USER_ENTERED" : "RAW";
   const res = await fetch(
-    `${SHEETS_API}/${spreadsheetId}/values/${encodeURIComponent(range)}?valueInputOption=RAW`,
+    `${SHEETS_API}/${spreadsheetId}/values/${encodeURIComponent(range)}?valueInputOption=${opt}`,
     {
       method: "PUT",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },

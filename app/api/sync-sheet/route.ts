@@ -106,7 +106,23 @@ export async function POST() {
       await sheetsUpdate(SHEET_ID, `${TAG_TAB}!A2`, tagRows);
     }
 
-    return NextResponse.json({ ok: true, count: rows.length, tagRows: tagRows.length });
+    // 集計（タグ別合計）を G:H に SUMIF で自動生成
+    const totals: Record<string, number> = {};
+    for (const r of tagRows) totals[String(r[1])] = (totals[String(r[1])] ?? 0) + Number(r[2]);
+    const uniqueTags = Object.keys(totals).sort((a, b) => totals[b] - totals[a]);
+    await sheetsClear(SHEET_ID, `${TAG_TAB}!G1:H1000`);
+    await sheetsUpdate(SHEET_ID, `${TAG_TAB}!G1`, [["用途タグ", "合計(自動)"]]);
+    if (uniqueTags.length > 0) {
+      const aggRows = uniqueTags.map((t, i) => [t, `=SUMIF($B:$B,G${i + 2},$C:$C)`]);
+      await sheetsUpdate(SHEET_ID, `${TAG_TAB}!G2`, aggRows, true); // 数式モード
+    }
+
+    return NextResponse.json({
+      ok: true,
+      count: rows.length,
+      tagRows: tagRows.length,
+      tags: uniqueTags.length,
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "同期に失敗";
     return NextResponse.json({ error: msg }, { status: 500 });

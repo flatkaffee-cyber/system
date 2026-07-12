@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { saveReceipt, getReceipts } from "@/lib/receipts";
+import { saveReceipt, getReceipts, deleteReceipt } from "@/lib/receipts";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -7,6 +7,13 @@ export const maxDuration = 30;
 export async function GET() {
   const receipts = await getReceipts();
   return NextResponse.json({ receipts });
+}
+
+export async function DELETE(req: NextRequest) {
+  const id = new URL(req.url).searchParams.get("id");
+  if (!id) return NextResponse.json({ error: "idが必要です" }, { status: 400 });
+  await deleteReceipt(id);
+  return NextResponse.json({ ok: true });
 }
 
 export async function POST(req: NextRequest) {
