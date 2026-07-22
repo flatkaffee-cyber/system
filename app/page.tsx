@@ -48,8 +48,73 @@ export default function Home() {
     { vendor: string; date: string; total: number; registered: boolean } | null
   >(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // この領収書についてのAI相談（確認画面内）
+  type Msg = { role: "user" | "assistant"; content: string };
+  const [consultOpen, setConsultOpen] = useState(false);
+  const [consult, setConsult] = useState<Msg[]>([]);
+  const [consultInput, setConsultInput] = useState("");
+  const [consulting, setConsulting] = useState(false);
 
   const total = form.lines.reduce((s, l) => s + (Number(l.amount) || 0), 0);
+
+  // いま確認中の領収書を、AIに渡す文脈テキストにする
+  function receiptContext(): string {
+    const linesText = form.lines
+      .map((l) => `- ${l.name || "（品目なし）"} ¥${(Number(l.amount) || 0).toLocaleString()}（${l.category}）${l.tags.length ? ` [用途: ${l.tags.join(", ")}]` : ""}`)
+      .join("\n");
+    const kind =
+      form.expenseKind === "labor" ? `労働枠から使う（${form.laborMember}の枠）` : "会社経費";
+    return [
+      `日付：${form.date || "未入力"}`,
+      `店名・支払先：${form.vendor || "未入力"}`,
+      `内訳：\n${linesText}`,
+      `合計：¥${total.toLocaleString()}`,
+      `立替えた人：${form.payer}`,
+      `区分：${kind}`,
+      form.memo ? `メモ：${form.memo}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  async function askAi(text: string) {
+    const q = text.trim();
+    if (!q || consulting) return;
+    const next: Msg[] = [...consult, { role: "user", content: q }];
+    setConsult([...next, { role: "assistant", content: "" }]);
+    setConsultInput("");
+    setConsulting(true);
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: next, receiptContext: receiptContext() }),
+      });
+      if (!res.ok || !res.body) throw new Error(await res.text());
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let acc = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        acc += decoder.decode(value, { stream: true });
+        setConsult((m) => {
+          const copy = [...m];
+          copy[copy.length - 1] = { role: "assistant", content: acc };
+          return copy;
+        });
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "エラー";
+      setConsult((m) => {
+        const copy = [...m];
+        copy[copy.length - 1] = { role: "assistant", content: `すみません、エラーが出ました（${msg}）。` };
+        return copy;
+      });
+    } finally {
+      setConsulting(false);
+    }
+  }
 
   function setLine(i: number, patch: Partial<Line>) {
     setForm((f) => ({ ...f, lines: f.lines.map((l, idx) => (idx === i ? { ...l, ...patch } : l)) }));
@@ -148,6 +213,9 @@ export default function Home() {
     setError(null);
     setDup(null);
     setDupBlock(null);
+    setConsultOpen(false);
+    setConsult([]);
+    setConsultInput("");
     setForm((f) => ({ ...f, lines: [emptyLine()], memo: "", expenseKind: "company" }));
   }
 
@@ -340,6 +408,66 @@ export default function Home() {
                 ※ この ¥{total.toLocaleString()} が {form.laborMember} の労働枠から差し引かれます。
               </p>
             </>
+          )}
+
+          <button
+            type="button"
+            className="rc-toggle"
+            onClick={() => setConsultOpen((v) => !v)}
+            style={{ marginTop: 14 }}
+          >
+            🤖 {consultOpen ? "AI相談を閉じる" : "この領収書についてAIに相談する（科目・立替の扱いなど）"}
+          </button>
+
+          {consultOpen && (
+            <div className="card" style={{ marginTop: 8, background: "var(--bg, #faf9f7)" }}>
+              {consult.length === 0 && (
+                <div>
+                  <p className="hint" style={{ marginTop: 0 }}>
+                    いま入力中の内容を踏まえて答えます。例えば👇
+                  </p>
+                  {[
+                    "この科目で合ってる？",
+                    "これは経費？それとも固定資産？",
+                    "立替だとfreeeにどう登録する？",
+                    "用途が違う品目、分けるべき？",
+                  ].map((s) => (
+                    <button key={s} type="button" className="suggestion" onClick={() => askAi(s)}>
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {consult.map((m, i) => (
+                <div key={i} className={`bubble ${m.role}`}>
+                  {m.content || (consulting && i === consult.length - 1 ? "…" : "")}
+                </div>
+              ))}
+              <form
+                className="composer"
+                style={{ marginTop: 8 }}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  askAi(consultInput);
+                }}
+              >
+                <textarea
+                  value={consultInput}
+                  placeholder="この領収書について質問する"
+                  rows={2}
+                  onChange={(e) => setConsultInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                      e.preventDefault();
+                      askAi(consultInput);
+                    }
+                  }}
+                />
+                <button className="primary" type="submit" disabled={consulting || !consultInput.trim()}>
+                  {consulting ? <span className="spinner" /> : "送信"}
+                </button>
+              </form>
+            </div>
           )}
 
           {dupBlock && (
