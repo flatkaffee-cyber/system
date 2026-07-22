@@ -20,6 +20,8 @@ export default function Receipts() {
   const [receipts, setReceipts] = useState<Receipt[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  // 原本画像：id -> dataURL（"none"=保存なし, "loading"=取得中）
+  const [images, setImages] = useState<Record<string, string>>({});
 
   function load() {
     fetch("/api/receipts")
@@ -54,6 +56,29 @@ export default function Receipts() {
       setMsg(e instanceof Error ? e.message : "登録に失敗しました");
     } finally {
       setBusy(null);
+    }
+  }
+
+  async function toggleImage(id: string) {
+    // すでに開いている / 取得済みなら閉じる（stateから消す）
+    setImages((m) => {
+      if (m[id]) {
+        const { [id]: _drop, ...rest } = m;
+        return rest;
+      }
+      return { ...m, [id]: "loading" };
+    });
+    if (images[id]) return; // 閉じただけ
+    try {
+      const res = await fetch(`/api/receipts/image?id=${encodeURIComponent(id)}`);
+      if (res.ok) {
+        const j = await res.json();
+        setImages((m) => ({ ...m, [id]: j.image ?? "none" }));
+      } else {
+        setImages((m) => ({ ...m, [id]: "none" }));
+      }
+    } catch {
+      setImages((m) => ({ ...m, [id]: "none" }));
     }
   }
 
@@ -119,6 +144,32 @@ export default function Receipts() {
               </button>
             )}
           </div>
+          <button
+            className="rc-toggle"
+            style={{ marginTop: 8 }}
+            onClick={() => toggleImage(r.id)}
+          >
+            {images[r.id] ? "🖼 原本を閉じる" : "🖼 原本を見る"}
+          </button>
+          {images[r.id] === "loading" && (
+            <div style={{ textAlign: "center", color: "var(--muted)", marginTop: 8 }}>
+              <span className="spinner" style={{ borderColor: "#e4e1da", borderTopColor: "var(--accent)" }} />
+            </div>
+          )}
+          {images[r.id] === "none" && (
+            <p className="hint" style={{ marginTop: 8 }}>
+              この領収書は原本画像が保存されていません（サイズ超過や旧データの可能性）。
+            </p>
+          )}
+          {images[r.id] && images[r.id] !== "loading" && images[r.id] !== "none" && (
+            images[r.id].startsWith("data:application/pdf") ? (
+              <a href={images[r.id]} target="_blank" rel="noreferrer" className="hint" style={{ display: "block", marginTop: 8 }}>
+                📄 PDFを別タブで開く
+              </a>
+            ) : (
+              <img src={images[r.id]} alt="領収書原本" className="preview" style={{ marginTop: 8 }} />
+            )
+          )}
         </div>
       ))}
 

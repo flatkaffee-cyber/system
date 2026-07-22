@@ -43,6 +43,10 @@ export default function Home() {
   const [dup, setDup] = useState<
     { vendor: string; date: string; total: number; registered: boolean } | null
   >(null);
+  // サーバーが重複でブロックしたとき（承知で登録するか確認する）
+  const [dupBlock, setDupBlock] = useState<
+    { vendor: string; date: string; total: number; registered: boolean } | null
+  >(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const total = form.lines.reduce((s, l) => s + (Number(l.amount) || 0), 0);
@@ -57,10 +61,11 @@ export default function Home() {
     setForm((f) => ({ ...f, lines: f.lines.length > 1 ? f.lines.filter((_, idx) => idx !== i) : f.lines }));
   }
 
-  async function save() {
+  async function save(force = false) {
     setSaving(true);
+    setDupBlock(null);
     try {
-      await fetch("/api/receipts", {
+      const res = await fetch("/api/receipts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -73,8 +78,18 @@ export default function Home() {
           laborMember: form.expenseKind === "labor" ? form.laborMember : undefined,
           lines: form.lines,
           image,
+          force,
         }),
       });
+      // サーバーが重複でブロック（409）。承知で登録するか確認してもらう。
+      if (res.status === 409) {
+        const j = await res.json().catch(() => ({}));
+        if (j.duplicate) {
+          setDupBlock(j.duplicate);
+          setSaving(false);
+          return;
+        }
+      }
     } catch {
       // 保存に失敗しても確認内容は表示する
     }
@@ -132,6 +147,7 @@ export default function Home() {
     setImage(null);
     setError(null);
     setDup(null);
+    setDupBlock(null);
     setForm((f) => ({ ...f, lines: [emptyLine()], memo: "", expenseKind: "company" }));
   }
 
@@ -326,8 +342,26 @@ export default function Home() {
             </>
           )}
 
+          {dupBlock && (
+            <div className="dup-warn" style={{ borderColor: "#c0392b", background: "#fdecea" }}>
+              🚫 <strong>二重登録の可能性があるため止めました</strong>
+              <div>
+                （{dupBlock.date}／{dupBlock.vendor || "店名なし"}／¥{dupBlock.total.toLocaleString()}／
+                {dupBlock.registered ? "freee登録済" : "保存済・未登録"}）
+              </div>
+              <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button className="ghost" onClick={reset} disabled={saving}>
+                  やめる（登録しない）
+                </button>
+                <button className="pay-btn" onClick={() => save(true)} disabled={saving}>
+                  {saving ? <span className="spinner" /> : "別物なので承知で登録する"}
+                </button>
+              </div>
+            </div>
+          )}
+
           <div style={{ marginTop: 18 }}>
-            <button className="primary" onClick={save} disabled={!form.date || total <= 0 || saving}>
+            <button className="primary" onClick={() => save()} disabled={!form.date || total <= 0 || saving}>
               {saving ? <span className="spinner" /> : "この内容で登録（保存＋freee貼付用を表示）"}
             </button>
             <button className="ghost" onClick={reset}>

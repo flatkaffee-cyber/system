@@ -50,6 +50,17 @@ export async function getReceipts(): Promise<SavedReceipt[]> {
   return (await store.get<SavedReceipt[]>(IDX)) ?? [];
 }
 
+// 重複検知：同じ日付・合計金額の保存済み領収書を探す（1件返す）。
+// 店名は判定に使わない（AI読み取りでブレやすいため）。dateもtotalも無いときは判定しない。
+export async function findDuplicate(
+  date: string,
+  total: number,
+): Promise<SavedReceipt | null> {
+  if (!date || !total) return null;
+  const all = await getReceipts();
+  return all.find((r) => r.date === date && r.total === total) ?? null;
+}
+
 export async function saveReceipt(
   r: Omit<SavedReceipt, "savedAt">,
   imageDataUrl?: string,

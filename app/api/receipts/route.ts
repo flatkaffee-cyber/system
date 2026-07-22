@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { saveReceipt, getReceipts, deleteReceipt, type RLine } from "@/lib/receipts";
+import { saveReceipt, getReceipts, deleteReceipt, findDuplicate, type RLine } from "@/lib/receipts";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -30,6 +30,7 @@ export async function POST(req: NextRequest) {
     laborMember?: string;
     tags?: string[];
     lines?: RLine[];
+    force?: boolean; // 重複でも承知で登録する
   };
   try {
     body = await req.json();
@@ -48,6 +49,27 @@ export async function POST(req: NextRequest) {
   // 互換：旧単一フィールドは内訳から導出
   const total = body.total ?? lines.reduce((s, l) => s + l.amount, 0);
   const compatTags = [...new Set(lines.flatMap((l) => l.tags))];
+
+  // サーバー側の重複ガード：同じ日付・金額が既にあれば force なしでは止める（二重計上防止）。
+  if (!body.force) {
+    const hit = await findDuplicate(body.date ?? "", total);
+    if (hit) {
+      return NextResponse.json(
+        {
+          error: "同じ日付・金額の領収書が既に保存されています",
+          duplicate: {
+            id: hit.id,
+            date: hit.date,
+            vendor: hit.vendor,
+            total: hit.total,
+            registered: !!hit.registered,
+          },
+        },
+        { status: 409 },
+      );
+    }
+  }
+
   try {
     await saveReceipt(
       {
