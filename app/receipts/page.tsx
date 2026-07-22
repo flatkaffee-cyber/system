@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import Nav from "@/components/Nav";
 
+type RLine = { name: string; amount: number; category: string; tags?: string[] };
+
 type Receipt = {
   id: string;
   date: string;
@@ -14,6 +16,8 @@ type Receipt = {
   memo: string;
   savedAt: string;
   registered?: { journalId: number; at: string };
+  lines?: RLine[];
+  tags?: string[];
 };
 
 export default function Receipts() {
@@ -121,6 +125,18 @@ export default function Receipts() {
               <div className="meisai-sub">
                 {r.date}・{r.category}・立替: {r.payer}
               </div>
+              {r.lines && r.lines.length > 0
+                ? r.lines.map((l, i) => (
+                    <div key={i} className="meisai-sub">
+                      🛒 {l.name || "（品目なし）"}
+                      {r.lines!.length > 1 && ` ¥${l.amount.toLocaleString()}`}
+                      <span style={{ color: "var(--muted)" }}>（{l.category}）</span>
+                      {l.tags && l.tags.length > 0 && (
+                        <span style={{ color: "var(--muted)" }}> [{l.tags.join("・")}]</span>
+                      )}
+                    </div>
+                  ))
+                : r.summary && <div className="meisai-sub">🛒 {r.summary}</div>}
               {r.memo && <div className="meisai-sub">📝 {r.memo}</div>}
             </div>
             <div className="meisai-right">
