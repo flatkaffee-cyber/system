@@ -26,6 +26,10 @@ export default function Receipts() {
   const [msg, setMsg] = useState<string | null>(null);
   // 原本画像：id -> dataURL（"none"=保存なし, "loading"=取得中）
   const [images, setImages] = useState<Record<string, string>>({});
+  // AI品目推測：id -> 推測結果（未確定）。"loading"=推測中
+  const [guesses, setGuesses] = useState<
+    Record<string, "loading" | { lines: RLine[]; confidence: string; source: string }>
+  >({});
 
   function load() {
     fetch("/api/receipts")
@@ -61,6 +65,63 @@ export default function Receipts() {
     } finally {
       setBusy(null);
     }
+  }
+
+  // AIに品目を推測させる（原本画像があればVision、無ければ店名/金額から推測）
+  async function guessItems(id: string) {
+    setGuesses((g) => ({ ...g, [id]: "loading" }));
+    setMsg(null);
+    try {
+      const res = await fetch("/api/receipts/guess-items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error ?? "推測に失敗");
+      setGuesses((g) => ({ ...g, [id]: { lines: j.lines ?? [], confidence: j.confidence, source: j.source } }));
+    } catch (e) {
+      setGuesses((g) => {
+        const { [id]: _drop, ...rest } = g;
+        return rest;
+      });
+      setMsg(e instanceof Error ? e.message : "推測に失敗しました");
+    }
+  }
+
+  // 推測を承認してKVに確定保存
+  async function confirmItems(id: string) {
+    const g = guesses[id];
+    if (!g || g === "loading") return;
+    setBusy(id);
+    setMsg(null);
+    try {
+      const res = await fetch("/api/receipts", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, lines: g.lines }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error ?? "確定に失敗");
+      // カードに反映（品目表示が出るようになる）
+      setReceipts((rs) => (rs ? rs.map((r) => (r.id === id ? { ...r, lines: g.lines } : r)) : rs));
+      setGuesses((gg) => {
+        const { [id]: _drop, ...rest } = gg;
+        return rest;
+      });
+      setMsg("品目を確定しました ✓");
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "確定に失敗しました");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function dismissGuess(id: string) {
+    setGuesses((g) => {
+      const { [id]: _drop, ...rest } = g;
+      return rest;
+    });
   }
 
   async function toggleImage(id: string) {
@@ -117,7 +178,10 @@ export default function Receipts() {
         </div>
       )}
 
-      {receipts?.map((r) => (
+      {receipts?.map((r) => {
+        const g = guesses[r.id];
+        const noItems = !(r.lines && r.lines.length > 0) && !r.summary;
+        return (
         <div key={r.id} className={`card meisai ${r.registered ? "done" : ""}`}>
           <div className="meisai-head" style={{ cursor: "default" }}>
             <div>
@@ -143,6 +207,48 @@ export default function Receipts() {
               <div className="meisai-amt out">¥{r.total.toLocaleString()}</div>
             </div>
           </div>
+
+          {noItems && (
+            <div style={{ marginTop: 8 }}>
+              {!g && (
+                <button className="rc-toggle" style={{ width: "100%" }} onClick={() => guessItems(r.id)}>
+                  🔮 品目が未入力 — AIで推測する
+                </button>
+              )}
+              {g === "loading" && (
+                <div style={{ textAlign: "center", color: "var(--muted)" }}>
+                  <span className="spinner" style={{ borderColor: "#e4e1da", borderTopColor: "var(--accent)" }} />{" "}
+                  AIが品目を推測中…
+                </div>
+              )}
+              {g && g !== "loading" && (
+                <div className="dup-warn" style={{ borderColor: "#b7791f", background: "#fffbea" }}>
+                  🔮 <strong>AIの推測</strong>（
+                  {g.source === "image" ? "原本画像から" : "店名・金額から推測"}・自信度 {g.confidence}）
+                  <div style={{ marginTop: 4 }}>
+                    {g.lines.map((l, i) => (
+                      <div key={i} className="meisai-sub" style={{ color: "#5b4a1a" }}>
+                        🛒 {l.name || "（品目なし）"} ¥{(Number(l.amount) || 0).toLocaleString()}（{l.category}）
+                        {l.tags && l.tags.length > 0 && ` [${l.tags.join("・")}]`}
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ marginTop: 4, fontSize: 12 }}>
+                    確定すると品目として保存されます。内容が違うときは破棄して、🧾タブで登録し直してください。
+                  </div>
+                  <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button className="ghost" onClick={() => dismissGuess(r.id)} disabled={busy === r.id}>
+                      破棄
+                    </button>
+                    <button className="pay-btn" onClick={() => confirmItems(r.id)} disabled={busy === r.id}>
+                      {busy === r.id ? <span className="spinner" /> : "この内容で確定（保存）"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           <div style={{ marginTop: 10 }}>
             {r.registered ? (
               <div className="decided-box" style={{ margin: 0 }}>
@@ -187,7 +293,8 @@ export default function Receipts() {
             )
           )}
         </div>
-      ))}
+        );
+      })}
 
       <p className="hint" style={{ textAlign: "center", marginTop: 14 }}>
         ※ 立替の登録は 借)科目／貸)役員借入金（取引先＝立替えた人）。銀行明細と違い二重計上になりません。返金したら「払うもの」タブで消し込み。

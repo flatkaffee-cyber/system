@@ -103,6 +103,35 @@ export async function deleteReceipt(id: string): Promise<void> {
   }
 }
 
+// 既存領収書の内訳（品目）を後から確定保存する。AI推測をユーザーが承認したとき使う。
+// summary / category / tags は lines から導出して整合を取る（POST /api/receipts と同じ流儀）。
+export async function updateReceiptItems(id: string, lines: RLine[]): Promise<boolean> {
+  const store = await kv();
+  if (!store) throw new Error("KV未設定");
+  const all = await getReceipts();
+  const i = all.findIndex((r) => r.id === id);
+  if (i < 0) return false;
+  const clean = lines
+    .filter((l) => l && (l.name || l.amount))
+    .map((l) => ({
+      name: l.name ?? "",
+      amount: Number(l.amount) || 0,
+      category: l.category || "不明",
+      tags: (l.tags ?? []).filter((t) => t && t.trim()).map((t) => t.trim()),
+    }));
+  if (clean.length === 0) return false;
+  const compatTags = [...new Set(clean.flatMap((l) => l.tags))];
+  all[i] = {
+    ...all[i],
+    lines: clean,
+    summary: clean.map((l) => l.name).filter(Boolean).join("、") || all[i].summary,
+    category: clean[0]?.category ?? all[i].category,
+    tags: compatTags.length ? compatTags : all[i].tags,
+  };
+  await store.set(IDX, all);
+  return true;
+}
+
 export async function markRegistered(id: string, journalId: number): Promise<void> {
   const store = await kv();
   if (!store) return;

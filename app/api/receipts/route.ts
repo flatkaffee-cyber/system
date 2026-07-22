@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { saveReceipt, getReceipts, deleteReceipt, findDuplicate, type RLine } from "@/lib/receipts";
+import { saveReceipt, getReceipts, deleteReceipt, findDuplicate, updateReceiptItems, type RLine } from "@/lib/receipts";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -14,6 +14,27 @@ export async function DELETE(req: NextRequest) {
   if (!id) return NextResponse.json({ error: "idが必要です" }, { status: 400 });
   await deleteReceipt(id);
   return NextResponse.json({ ok: true });
+}
+
+// 既存領収書の品目（内訳）を確定保存する。AI推測の承認などで使う。
+export async function PATCH(req: NextRequest) {
+  let body: { id?: string; lines?: RLine[] };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "不正なリクエスト" }, { status: 400 });
+  }
+  if (!body.id || !Array.isArray(body.lines)) {
+    return NextResponse.json({ error: "id と lines が必要です" }, { status: 400 });
+  }
+  try {
+    const ok = await updateReceiptItems(body.id, body.lines);
+    if (!ok) return NextResponse.json({ error: "更新対象がありません" }, { status: 404 });
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "更新に失敗";
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }
 
 export async function POST(req: NextRequest) {
