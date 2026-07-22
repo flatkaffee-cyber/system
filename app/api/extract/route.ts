@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
-import { ReceiptSchema } from "@/lib/receipt";
+import { ReceiptSchema, applyAssetThreshold } from "@/lib/receipt";
 import { getReceipts } from "@/lib/receipts";
-import { getDecisions } from "@/lib/kb";
+import { getDecisions, rulesPromptBlock } from "@/lib/kb";
 
 async function existingTags(): Promise<string[]> {
   const set = new Set<string>();
@@ -87,7 +87,8 @@ export async function POST(req: NextRequest) {
                 "用途も科目も同じなら1行にまとめてOK。各行に 品目名・税込金額・科目・用途タグ を付け、金額の合計をtotalに一致させる。" +
                 "\n用途タグは既存タグ=[" +
                 (await existingTags()).join(", ") +
-                "]に合うものがあれば必ずそれを使う(表記統一)。無ければ簡潔な新タグ。",
+                "]に合うものがあれば必ずそれを使う(表記統一)。無ければ簡潔な新タグ。" +
+                (await rulesPromptBlock()),
             },
           ],
         },
@@ -108,6 +109,9 @@ export async function POST(req: NextRequest) {
         { status: 422 },
       );
     }
+
+    // 30万円未満の固定資産は消耗品費に確定補正（AIが誤っても直す）
+    receipt.lines = applyAssetThreshold(receipt.lines);
 
     return NextResponse.json({ receipt });
   } catch (err) {

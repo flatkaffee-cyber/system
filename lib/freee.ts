@@ -173,3 +173,20 @@ export async function freeePost<T = unknown>(
   }
   return (await res.json()) as T;
 }
+
+export async function freeeDelete(path: string, query: Record<string, string> = {}): Promise<void> {
+  const token = await getAccessToken();
+  const qs = new URLSearchParams(query).toString();
+  const res = await fetch(`${API_BASE}${path}${qs ? `?${qs}` : ""}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "X-Api-Version": "2020-06-15",
+      Accept: "application/json",
+    },
+  });
+  // 204/200 は成功。既に無い(404)も成功扱い。
+  if (!res.ok && res.status !== 404) {
+    throw new Error(`freee API DELETE ${path} 失敗(${res.status}): ${await res.text()}`);
+  }
+}

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { saveReceipt, getReceipts, deleteReceipt, findDuplicate, updateReceiptItems, type RLine } from "@/lib/receipts";
+import { applyAssetThreshold } from "@/lib/receipt";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -59,14 +60,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "不正なリクエスト" }, { status: 400 });
   }
   const id = `r_${Date.now()}`;
-  const lines = (body.lines ?? [])
-    .filter((l) => l && l.amount)
-    .map((l) => ({
-      name: l.name ?? "",
-      amount: Number(l.amount) || 0,
-      category: l.category || "不明",
-      tags: (l.tags ?? []).filter((t) => t && t.trim()).map((t) => t.trim()),
-    }));
+  const lines = applyAssetThreshold(
+    (body.lines ?? [])
+      .filter((l) => l && l.amount)
+      .map((l) => ({
+        name: l.name ?? "",
+        amount: Number(l.amount) || 0,
+        category: l.category || "不明",
+        tags: (l.tags ?? []).filter((t) => t && t.trim()).map((t) => t.trim()),
+      })),
+  );
   // 互換：旧単一フィールドは内訳から導出
   const total = body.total ?? lines.reduce((s, l) => s + l.amount, 0);
   const compatTags = [...new Set(lines.flatMap((l) => l.tags))];

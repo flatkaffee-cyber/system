@@ -31,6 +31,20 @@ export const CATEGORIES = [
 
 export type Category = (typeof CATEGORIES)[number];
 
+// 固定資産の判定しきい値。1点30万円未満は固定資産にせず消耗品費にする
+// （青色申告・少額減価償却資産の特例。全額その期の経費）。
+export const ASSET_THRESHOLD = 300000;
+
+// 30万円未満なのに「設備（固定資産）」になっている行を「消耗品費」に強制補正する。
+// AIが誤って固定資産にしても、ここで確定的に直す。
+export function applyAssetThreshold<T extends { category: string; amount: number }>(lines: T[]): T[] {
+  return lines.map((l) =>
+    l.category === "設備（固定資産）" && (Number(l.amount) || 0) < ASSET_THRESHOLD
+      ? { ...l, category: "消耗品費" }
+      : l,
+  );
+}
+
 /** レシートの1行（内訳）。用途/科目が違う品目は行を分ける。 */
 export const ReceiptLineSchema = z.object({
   name: z.string().describe("品目・内容（例: 木材、コーヒー豆2kg）。"),
@@ -38,7 +52,9 @@ export const ReceiptLineSchema = z.object({
   category: z
     .enum(CATEGORIES)
     .describe(
-      "科目。コーヒー豆/牛乳/フード材料は原価。家賃・水道光熱費・通信費などは経費。10万円以上の機械・什器は「設備（固定資産）」。判断できなければ「不明」。",
+      "科目。コーヒー豆/牛乳/フード材料は原価。家賃・水道光熱費・通信費などは経費。" +
+        "**1点30万円未満の備品・什器・機械は「消耗品費」**（青色・少額減価償却資産の特例で全額経費）。" +
+        "「設備（固定資産）」にするのは1点30万円以上のときだけ。判断できなければ「不明」。",
     ),
   tags: z
     .array(z.string())

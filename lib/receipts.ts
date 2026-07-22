@@ -1,6 +1,8 @@
 // 領収書（立替）の保存。原本画像＋抽出データをKVに貯める。
 // 整理（月フォルダ等）はNAS導入時にまとめて行う前提。今は「消えないように保存」だけが目的。
 
+import { applyAssetThreshold } from "@/lib/receipt";
+
 const IDX = "receipts:index";
 
 async function kv() {
@@ -111,14 +113,16 @@ export async function updateReceiptItems(id: string, lines: RLine[]): Promise<bo
   const all = await getReceipts();
   const i = all.findIndex((r) => r.id === id);
   if (i < 0) return false;
-  const clean = lines
-    .filter((l) => l && (l.name || l.amount))
-    .map((l) => ({
-      name: l.name ?? "",
-      amount: Number(l.amount) || 0,
-      category: l.category || "不明",
-      tags: (l.tags ?? []).filter((t) => t && t.trim()).map((t) => t.trim()),
-    }));
+  const clean = applyAssetThreshold(
+    lines
+      .filter((l) => l && (l.name || l.amount))
+      .map((l) => ({
+        name: l.name ?? "",
+        amount: Number(l.amount) || 0,
+        category: l.category || "不明",
+        tags: (l.tags ?? []).filter((t) => t && t.trim()).map((t) => t.trim()),
+      })),
+  );
   if (clean.length === 0) return false;
   const compatTags = [...new Set(clean.flatMap((l) => l.tags))];
   all[i] = {
@@ -139,6 +143,18 @@ export async function markRegistered(id: string, journalId: number): Promise<voi
   const i = all.findIndex((r) => r.id === id);
   if (i >= 0) {
     all[i].registered = { journalId, at: new Date(Date.now()).toISOString() };
+    await store.set(IDX, all);
+  }
+}
+
+// freee登録を取り消したとき、登録済みフラグを外す（再記帳できるようにする）
+export async function clearRegistered(id: string): Promise<void> {
+  const store = await kv();
+  if (!store) return;
+  const all = await getReceipts();
+  const i = all.findIndex((r) => r.id === id);
+  if (i >= 0) {
+    delete all[i].registered;
     await store.set(IDX, all);
   }
 }

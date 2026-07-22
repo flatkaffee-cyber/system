@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
-import { ReceiptLineSchema } from "@/lib/receipt";
+import { ReceiptLineSchema, applyAssetThreshold } from "@/lib/receipt";
 import { getReceipt, getReceiptImage, getReceipts } from "@/lib/receipts";
 import { getDecisions } from "@/lib/kb";
 
@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "推測できませんでした" }, { status: 422 });
     }
     return NextResponse.json({
-      lines: res.parsed_output.lines,
+      lines: applyAssetThreshold(res.parsed_output.lines),
       confidence: res.parsed_output.confidence,
       source: parsed ? "image" : "text",
     });
