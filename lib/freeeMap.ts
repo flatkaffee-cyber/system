@@ -4,6 +4,20 @@
 export const YAKUIN_KARIIRE_ID = 1035440156; // 役員借入金（貸方）
 export const YAKUIN_KARIIRE_TAX = 2; // 対象外
 
+// 会計年度の期首日（flat. 第1期 2026-06-01〜2027-05-31）。
+// freeeは期首より前の日付の仕訳を受け付けないため、設立前支出はこの日付で記帳する。
+// ※年度が変わったら更新すること。
+export const FISCAL_START = "2026-06-01";
+
+// 発生日がFISCAL_STARTより前なら期首日に丸める（設立前支出対応）。
+// 戻り値 adjusted=true のとき、original に元の日付が入る。
+export function clampIssueDate(date: string): { issueDate: string; adjusted: boolean; original: string } {
+  if (date && date < FISCAL_START) {
+    return { issueDate: FISCAL_START, adjusted: true, original: date };
+  }
+  return { issueDate: date, adjusted: false, original: date };
+}
+
 // 原価品目のID
 const ITEM = {
   coffee: 252404478, // コーヒー豆・茶葉

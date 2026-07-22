@@ -59,7 +59,13 @@ export default function Receipts() {
             )
           : rs,
       );
-      setMsg(j.already ? "すでに登録済みでした" : "freeeに登録しました ✓");
+      setMsg(
+        j.already
+          ? "すでに登録済みでした"
+          : j.dateAdjusted
+            ? `freeeに登録しました ✓（設立前支出のため発生日を期首 ${j.issueDate} で記帳。原本 ${j.originalDate}／創立費・開業費の扱いは税理士に確認を）`
+            : "freeeに登録しました ✓",
+      );
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "登録に失敗しました");
     } finally {

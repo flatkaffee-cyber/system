@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { FREEE_COMPANY_ID, freeeGet, freeePost, isConnected } from "@/lib/freee";
 import { getReceipt, markRegistered, receiptLines } from "@/lib/receipts";
-import { mapCategory, YAKUIN_KARIIRE_ID, YAKUIN_KARIIRE_TAX } from "@/lib/freeeMap";
+import { mapCategory, clampIssueDate, YAKUIN_KARIIRE_ID, YAKUIN_KARIIRE_TAX } from "@/lib/freeeMap";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -50,7 +50,10 @@ export async function POST(req: NextRequest) {
   }
 
   const partnerId = await resolvePartnerId(r.payer);
-  const desc = (r.memo || r.summary || r.vendor || "").slice(0, 100);
+  // 設立前(期首前)の支出はfreeeが受け付けないので、発生日を期首日に丸める。
+  const { issueDate, adjusted, original } = clampIssueDate(r.date);
+  const dateNote = adjusted ? `（原本日付${original}・設立前支出）` : "";
+  const desc = ((r.memo || r.summary || r.vendor || "") + dateNote).slice(0, 100);
 
   // 内訳（用途/科目ごと）→ 借方を複数行に。合計＝貸)役員借入金1行。
   const lines = receiptLines(r);
@@ -70,7 +73,7 @@ export async function POST(req: NextRequest) {
   // 振替伝票: 借)科目（内訳分だけ複数行） / 貸)役員借入金（取引先＝立替えた人）
   const journal = {
     company_id: COMPANY,
-    issue_date: r.date,
+    issue_date: issueDate,
     details: [
       ...debitDetails,
       {
@@ -91,7 +94,14 @@ export async function POST(req: NextRequest) {
     );
     const journalId = res.manual_journal?.id;
     if (journalId) await markRegistered(r.id, journalId);
-    return NextResponse.json({ ok: true, journalId, partnerId: partnerId ?? null });
+    return NextResponse.json({
+      ok: true,
+      journalId,
+      partnerId: partnerId ?? null,
+      dateAdjusted: adjusted,
+      issueDate,
+      originalDate: original,
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "登録に失敗";
     return NextResponse.json({ error: msg }, { status: 500 });

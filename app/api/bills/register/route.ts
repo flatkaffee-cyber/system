@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { FREEE_COMPANY_ID, freeeGet, freeePost, isConnected } from "@/lib/freee";
-import { mapCategory } from "@/lib/freeeMap";
+import { mapCategory, clampIssueDate } from "@/lib/freeeMap";
 import { getBill, getPayment, markBillRegistered, currentMonthJst, isAutoMethod, type BillMethod } from "@/lib/bills";
 
 export const runtime = "nodejs";
@@ -59,10 +59,11 @@ export async function POST(req: NextRequest) {
   const amount = pay?.amount || bill.amount;
   if (amount <= 0) return NextResponse.json({ error: "金額が不足しています" }, { status: 400 });
 
-  // 記帳日：支払日があればその日、なければ対象月の支払目安日 or 月初
-  const issueDate =
+  // 記帳日：支払日があればその日、なければ対象月の支払目安日 or 月初。期首前なら期首日に丸める。
+  const rawIssueDate =
     body.issueDate ||
     (bill.dueDay ? `${month}-${String(bill.dueDay).padStart(2, "0")}` : `${month}-01`);
+  const { issueDate } = clampIssueDate(rawIssueDate);
 
   const debit = mapCategory(bill.category); // 借)科目（保険料 等）
   const creditName = creditAccountName(bill.method);
