@@ -30,6 +30,7 @@ type Data = {
   month: string;
   staff: string[];
   patterns: { label: string; start: string; end: string; staff?: string }[];
+  templates: { weekday: number; label: string; blocks: { staff: string; start: string; end: string }[]; note?: string }[];
   days: Day[];
   totals: Record<string, { minutes: number; days: number }>;
   totalMinutes: number;
@@ -578,10 +579,40 @@ export default function Shift() {
         <button className="primary" onClick={expand} disabled={busy}>
           {busy ? "処理中…" : "📋 曜日パターンをこの月に展開"}
         </button>
-        <p className="hint" style={{ marginTop: 8 }}>
-          火曜・水曜のパターンを、まだ割当のない日にだけ入れます。<br />
-          手で直した日は上書きしません。
-        </p>
+        {(() => {
+          // 文言を手で書くと、パターンを足したときにずれる。定義から作る
+          const tpl = data?.templates ?? [];
+          const filled = tpl.filter((t) => t.blocks.length > 0).map((t) => WD[t.weekday]);
+          const closed = tpl.filter((t) => t.blocks.length === 0).map((t) => WD[t.weekday]);
+          const none = [0, 1, 2, 3, 4, 5, 6]
+            .filter((w) => !tpl.some((t) => t.weekday === w))
+            .map((w) => WD[w]);
+          return (
+            <p className="hint" style={{ marginTop: 8 }}>
+              {filled.length > 0 && (
+                <>
+                  <b>{filled.join("・")}曜</b>のパターンを、まだ割当のない日にだけ入れます。
+                  <br />
+                </>
+              )}
+              手で直した日は上書きしません。
+              {closed.length > 0 && (
+                <>
+                  <br />
+                  {closed.join("・")}曜は定休日なので空のままです。
+                </>
+              )}
+              {none.length > 0 && (
+                <>
+                  <br />
+                  <span style={{ color: "#c0392b" }}>
+                    {none.join("・")}曜はパターンが無いので、展開しても入りません。手で入れてください。
+                  </span>
+                </>
+              )}
+            </p>
+          );
+        })()}
       </div>
 
       {gapDays.length > 0 && (
