@@ -38,6 +38,7 @@ const GROUPS: Group[] = [
       { href: "/kitchen", label: "🍳 KDS" },
       { href: "/opening", label: "✅ 業務チェック" },
       { href: "/shift", label: "🗓️ シフト" },
+      { href: "/shift-build", label: "🧩 シフトを組む" },
       { href: "/shift-submit", label: "📝 シフト提出" },
       { href: "/kintai", label: "⏰ 勤怠" },
       { href: "/labor", label: "🕒 労働枠" },
