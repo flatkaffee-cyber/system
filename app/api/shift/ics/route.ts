@@ -35,7 +35,7 @@ function icsTime(date: string, hhmm: string): string | null {
 
 /** ICSは特殊文字のエスケープと75オクテット折り返しが要る */
 function esc(v: string): string {
-  return v.replace(/\\/g, "\\\\").replace(/;/g, "\;").replace(/,/g, "\\,").replace(/\n/g, "\\n");
+  return v.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\n/g, "\\n");
 }
 
 function fold(line: string): string {
