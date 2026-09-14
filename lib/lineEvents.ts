@@ -144,6 +144,17 @@ export function eventCarousel(now: Date = new Date()) {
   };
 }
 
+/** 1イベントだけをFlexで返す。告知で「このイベントだけ出したい」ときに使う */
+export function eventMessage(slug: string) {
+  const ev = EVENTS.find((e) => e.slug === slug);
+  if (!ev) return null;
+  return {
+    type: "flex",
+    altText: `${ev.title}（${ev.dateLabel}）の申込`,
+    contents: bubble(ev),
+  };
+}
+
 /** リッチメニューのボタンから送られてくる言葉 */
 export const EVENT_LIST_KEYWORD = "イベント申込";
 
