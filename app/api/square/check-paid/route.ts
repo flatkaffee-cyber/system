@@ -59,6 +59,65 @@ async function closeOrder(
   return { ok: false, detail: d.errors?.[0]?.detail };
 }
 
+// GET ?from=2026-09-15T17:00&to=2026-09-15T22:00 （JSTで指定）
+//   その時間帯のSquareの決済と、すでにどの注文に使ったかを返す。
+//   会計漏れを突き合わせるための読み取り専用の窓口。
+export async function GET(req: NextRequest) {
+  try {
+    const q = req.nextUrl.searchParams;
+    const jst = (v: string) => new Date(`${v}:00+09:00`).toISOString();
+    const from = q.get("from") ? jst(q.get("from")!) : new Date(Date.now() - 12 * 3600_000).toISOString();
+    const to = q.get("to") ? jst(q.get("to")!) : new Date().toISOString();
+
+    const all: any[] = [];
+    let cursor = "";
+    for (let page = 0; page < 5; page++) {
+      const url =
+        `${SQUARE_API}/payments?begin_time=${encodeURIComponent(from)}` +
+        `&end_time=${encodeURIComponent(to)}&sort_order=ASC&limit=100` +
+        (cursor ? `&cursor=${encodeURIComponent(cursor)}` : "");
+      const res = await fetch(url, { headers: hdrs() });
+      const data = await res.json();
+      if (!res.ok) {
+        return NextResponse.json(
+          { error: data.errors?.[0]?.detail || "支払いを調べられませんでした" },
+          { status: res.status },
+        );
+      }
+      all.push(...(data.payments || []));
+      cursor = data.cursor || "";
+      if (!cursor) break;
+    }
+
+    const used = await getUsed();
+    return NextResponse.json({
+      from,
+      to,
+      count: all.length,
+      used,
+      payments: all.map((p: any) => ({
+        id: p.id,
+        amount: p.amount_money?.amount ?? 0,
+        status: p.status,
+        createdAt: p.created_at,
+        createdJst: new Date(Date.parse(p.created_at) + 9 * 3600_000)
+          .toISOString()
+          .replace("T", " ")
+          .slice(0, 19),
+        sourceType: p.source_type,
+        orderId: p.order_id ?? null,
+        usedFor: used[p.id] ?? null,
+        note: p.note ?? null,
+      })),
+    });
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "取得に失敗" },
+      { status: 500 },
+    );
+  }
+}
+
 // カード決済はSquareアプリに飛んで行う。決済したあとブラウザに戻らずに
 // Squareアプリを開いたままにしていると、こちらへ戻る合図が届かず、
 // お金は受け取っているのに注文が開いたまま残る。
