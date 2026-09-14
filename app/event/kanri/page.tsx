@@ -19,6 +19,7 @@ type Summary = {
 };
 
 type AnnInfo = {
+  text: string | null;
   followers: number | null;
   entries: number;
   quota: { limit: number | null; used: number | null; left: number | null };
@@ -98,15 +99,21 @@ export default function EventKanri() {
   useEffect(() => {
     if (!slug) return;
     setAnnMsg("");
+    setAnn("");
     fetch(`/api/line/announce?slug=${slug}`)
       .then((r) => r.json())
       .then((d) => setAnnInfo(d))
       .catch(() => setAnnInfo(null));
   }, [slug]);
 
-  // 申込済みの人が読んでも失礼にならない書き方を既定にしておく
+  // 文面の元は lib/events.ts の announce。無いイベントは中身から組み立てる
   useEffect(() => {
-    if (!title || ann) return;
+    if (ann || !annInfo) return;
+    if (annInfo.text) {
+      setAnn(annInfo.text);
+      return;
+    }
+    if (!title) return;
     setAnn(
       `🎧 ${title}\n\n` +
         plans.map((p) => `${p.label} ¥${p.price.toLocaleString()}`).join("\n") +
@@ -114,7 +121,7 @@ export default function EventKanri() {
         `事前のお申込みがあると準備がスムーズです。\n下のカードからどうぞ👇\n\n` +
         `※すでにお申込みの方、ありがとうございます🙏\n　当日の詳細は前日にこのLINEでお送りします。`,
     );
-  }, [title, plans, ann]);
+  }, [annInfo, title, plans, ann]);
 
   const announce = async (dryRun: boolean) => {
     if (!dryRun) {

@@ -41,6 +41,12 @@ export type FlatEvent = {
   ogImage?: string;
   /** LINEの友だち追加を必須にする。LINEから開かないと申し込めなくなる */
   requireLine?: boolean;
+  /**
+   * 公式LINEに一斉送信するときの文面。
+   * 申込済みの人だけ外して送ることはできないので、
+   * すでに申し込んだ人が読んでも自然な書き方にしておく。
+   */
+  announce?: string;
 };
 
 export const EVENTS: FlatEvent[] = [
@@ -77,6 +83,25 @@ export const EVENTS: FlatEvent[] = [
     requestPlaceholder: "聴きたい曲・ジャンルなど",
     emoji: "🎧",
     ogImage: "/og-djnight.png",
+    announce: `🎧 9月22日（火）flat. DJ NIGHT
+
+19:00スタート、DJ蓮が回します🪩
+
+🍻 飲み放題＋エントランス ¥3,500
+　ビールは1杯まで、それ以外は何杯でも
+🎟 エントランスのみ ¥1,000
+　ドリンクは単品で好きなだけ
+
+テキーラショットも用意してます🥃
+ノンアルコールも揃えているので、
+飲む人も飲まない人も、めちゃくちゃ楽しめる夜です。
+
+当日ふらっと来ていただいてもOKですが、
+事前のお申込みがあると準備がスムーズです。
+下のカードからどうぞ👇
+
+※すでにお申込みの方、ありがとうございます🙏
+　当日の詳細は前日にこのLINEでお送りします。`,
   },
   {
     slug: "oboe",

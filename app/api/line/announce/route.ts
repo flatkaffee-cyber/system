@@ -60,12 +60,15 @@ export async function GET(req: NextRequest) {
     lineGet<{ totalUsage?: number }>("/message/quota/consumption"),
   ]);
 
+  const ev = slug ? eventOf(slug) : undefined;
   const entries = slug ? await getEntries(slug) : [];
   const limit = quota?.value ?? null;
   const used = consumption?.totalUsage ?? null;
 
   return NextResponse.json({
-    event: slug ? (eventOf(slug)?.title ?? "知らないイベント") : null,
+    event: slug ? (ev?.title ?? "知らないイベント") : null,
+    // 登録簿に書いてある告知の文面。画面の初期値にする
+    text: ev?.announce ?? null,
     followers,
     entries: entries.length,
     quota: { limit, used, left: limit != null && used != null ? limit - used : null },
