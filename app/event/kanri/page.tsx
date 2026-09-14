@@ -18,6 +18,12 @@ type Summary = {
   sales: number; gross: number; paid: number; unpaid: number; checkedIn: number;
 };
 
+type AnnInfo = {
+  followers: number | null;
+  entries: number;
+  quota: { limit: number | null; used: number | null; left: number | null };
+};
+
 const DJ_FEE = 20000;
 
 export default function EventKanri() {
@@ -29,6 +35,11 @@ export default function EventKanri() {
   const [sum, setSum] = useState<Summary | null>(null);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState("");
+
+  // 公式LINEへの告知。申込済みだけ外すことはできない（下のhint参照）ので全員に送る
+  const [ann, setAnn] = useState("");
+  const [annInfo, setAnnInfo] = useState<AnnInfo | null>(null);
+  const [annMsg, setAnnMsg] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -44,7 +55,7 @@ export default function EventKanri() {
     } catch (e) {
       setErr(e instanceof Error ? e.message : "取得失敗");
     }
-  }, []);
+  }, [slug]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -78,6 +89,55 @@ export default function EventKanri() {
       await load();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "削除失敗");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  // 友だち数と今月の残り通数。送る前に必ず見せる
+  useEffect(() => {
+    if (!slug) return;
+    setAnnMsg("");
+    fetch(`/api/line/announce?slug=${slug}`)
+      .then((r) => r.json())
+      .then((d) => setAnnInfo(d))
+      .catch(() => setAnnInfo(null));
+  }, [slug]);
+
+  // 申込済みの人が読んでも失礼にならない書き方を既定にしておく
+  useEffect(() => {
+    if (!title || ann) return;
+    setAnn(
+      `🎧 ${title}\n\n` +
+        plans.map((p) => `${p.label} ¥${p.price.toLocaleString()}`).join("\n") +
+        `\n\n当日ふらっと来ていただいてもOKですが、\n` +
+        `事前のお申込みがあると準備がスムーズです。\n下のカードからどうぞ👇\n\n` +
+        `※すでにお申込みの方、ありがとうございます🙏\n　当日の詳細は前日にこのLINEでお送りします。`,
+    );
+  }, [title, plans, ann]);
+
+  const announce = async (dryRun: boolean) => {
+    if (!dryRun) {
+      const n = annInfo?.followers;
+      if (!confirm(`友だち${n ?? "?"}人全員に送ります。取り消せません。`)) return;
+    }
+    setBusy("ann");
+    setAnnMsg("");
+    try {
+      const res = await fetch("/api/line/announce", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug, text: ann, dryRun }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || "送信失敗");
+      setAnnMsg(
+        dryRun
+          ? `この内容で ${d.estimatedMessages ?? "?"} 通ぶん消費します（テキスト＋カードで1人2通）`
+          : `送信しました（${d.estimatedMessages ?? "?"} 通）`,
+      );
+    } catch (e) {
+      setAnnMsg(e instanceof Error ? e.message : "送信失敗");
     } finally {
       setBusy("");
     }
@@ -155,6 +215,41 @@ export default function EventKanri() {
           {" ／ "}
           LINEの入口: <a href="/e" target="_blank" rel="noreferrer">/e</a>（いま受付中のイベントを自動で出します）
         </p>
+      </div>
+
+      <div className="card" style={{ padding: "12px 14px" }}>
+        <div className="cat-title">公式LINEで告知</div>
+        <p className="hint" style={{ marginBottom: 8 }}>
+          友だち{annInfo?.followers ?? "?"}人全員に届きます。
+          <strong>申込済みの人だけ外すことはできません。</strong>
+          除外して送るにはナローキャストが要りますが、LINE側の制限で配信対象が50人以上ないと使えません。
+          申込済みの人が読んでも自然な文にしてあります。
+        </p>
+        <textarea
+          value={ann}
+          onChange={(e) => setAnn(e.target.value)}
+          rows={12}
+          style={{ width: "100%", fontSize: 13, lineHeight: 1.8, padding: 8 }}
+        />
+        <p className="hint" style={{ marginTop: 6 }}>
+          このテキストの下に、申込ボタン付きのイベントカードが自動で付きます。
+          {annInfo?.quota.left != null && (
+            <> 今月の残り {annInfo.quota.left.toLocaleString()} 通。</>
+          )}
+        </p>
+        <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+          <button onClick={() => announce(true)} disabled={busy === "ann"}>
+            下書きを確認
+          </button>
+          <button
+            onClick={() => announce(false)}
+            disabled={busy === "ann" || !ann.trim()}
+            style={{ background: "var(--accent)", color: "#fff", fontWeight: 700 }}
+          >
+            全員に送る
+          </button>
+        </div>
+        {annMsg && <p className="hint" style={{ marginTop: 8 }}>{annMsg}</p>}
       </div>
 
       <div className="card" style={{ padding: "12px 14px" }}>
