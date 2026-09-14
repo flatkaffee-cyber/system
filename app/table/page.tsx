@@ -139,6 +139,10 @@ export default function TablePage() {
   const [moveTo, setMoveTo] = useState<string | null>(null);
   // Squareに飛んだまま戻らないと注文が開いたまま残る。その確認中かどうか。
   const [checking, setChecking] = useState(false);
+  // 同額の決済が見つからなかったとき、前後の決済を並べて選んでもらう
+  const [cands, setCands] = useState<
+    { id: string; amount: number; at: string; method: string; usedFor: string | null }[] | null
+  >(null);
   const [tendered, setTendered] = useState("");
   const [paying, setPaying] = useState(false);
   const [payResult, setPayResult] = useState<{ change: number } | null>(null);
@@ -1022,7 +1026,13 @@ export default function TablePage() {
                       });
                       const d = await res.json();
                       if (!res.ok) throw new Error(d.error);
-                      alert(d.message);
+                      if (d.paid === false && d.nearby?.length) {
+                        // 「ない」で終わらせず、前後の決済を出して選べるようにする
+                        setCands(d.nearby);
+                      } else {
+                        setCands(null);
+                        alert(d.message);
+                      }
                       if (d.closed || d.alreadyClosed) setSelected(null);
                       await loadOrders();
                     } catch (e: any) { setErr(e.message); }
@@ -1062,6 +1072,68 @@ export default function TablePage() {
                 </button>
                 </div>
               </div>
+
+              {/* 同額が無かったとき。前後の決済を並べて、目で見て選んでもらう */}
+              {cands && (
+                <div style={{ marginTop: 8, padding: 10, border: "1px solid #e0b4b4", borderRadius: 8, background: "#fff8f8" }}>
+                  <div style={{ fontSize: 12, color: "#c0392b", marginBottom: 2, fontWeight: 700 }}>
+                    ¥{(currentOrder?.total ?? 0).toLocaleString()} ちょうどの決済は見つかりませんでした
+                  </div>
+                  <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 8 }}>
+                    この注文の前後にあった決済です。この中に該当するものがあれば選んでください
+                    （金額が違っていても閉じられます）。心当たりが無ければ、まだ会計が済んでいません。
+                  </div>
+                  {cands.length === 0 && (
+                    <div style={{ fontSize: 12 }}>前後に決済が1件もありません。</div>
+                  )}
+                  {cands.map((c) => (
+                    <div key={c.id} style={{
+                      display: "flex", alignItems: "center", gap: 8,
+                      padding: "5px 0", borderTop: "1px solid #f0dede", fontSize: 12,
+                    }}>
+                      <span className="mono" style={{ flex: "0 0 54px" }}>
+                        {new Date(c.at).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Tokyo" })}
+                      </span>
+                      <span style={{ flex: "0 0 72px", fontWeight: 700 }}>¥{c.amount.toLocaleString()}</span>
+                      <span style={{ flex: 1, color: "var(--muted)", fontSize: 11 }}>
+                        {c.method === "CARD" ? "カード" : c.method === "CASH" ? "現金" : c.method}
+                        {c.usedFor && "・別の注文で使用済み"}
+                      </span>
+                      <button
+                        disabled={!!c.usedFor || checking}
+                        onClick={async () => {
+                          if (!currentOrder) return;
+                          if (!confirm(`¥${c.amount.toLocaleString()} の決済でこの注文を閉じます。`)) return;
+                          setChecking(true); setErr("");
+                          try {
+                            const res = await fetch("/api/square/check-paid", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ order_id: currentOrder.id, payment_id: c.id }),
+                            });
+                            const d = await res.json();
+                            if (!res.ok) throw new Error(d.error);
+                            alert(d.message);
+                            setCands(null);
+                            if (d.closed) setSelected(null);
+                            await loadOrders();
+                          } catch (e: any) { setErr(e.message); }
+                          finally { setChecking(false); }
+                        }}
+                        style={{
+                          fontSize: 11, padding: "3px 8px", borderRadius: 6, flex: "0 0 auto",
+                          border: "1px solid var(--line)", background: "var(--card)",
+                          cursor: c.usedFor ? "not-allowed" : "pointer",
+                          opacity: c.usedFor ? 0.4 : 1,
+                        }}
+                      >
+                        これで閉じる
+                      </button>
+                    </div>
+                  ))}
+                  <button onClick={() => setCands(null)} style={{ fontSize: 11, marginTop: 8 }}>閉じる</button>
+                </div>
+              )}
 
               {/* 席の移動。空いているテーブルを選ぶとその席へ付け替える */}
               {moveTo !== null && (
