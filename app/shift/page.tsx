@@ -63,6 +63,11 @@ const monthDays = (month: string) => {
   return Array.from({ length: last }, (_, i) => `${month}-${String(i + 1).padStart(2, "0")}`);
 };
 
+const addDays = (date: string, n: number) =>
+  new Date(new Date(date + "T00:00:00Z").getTime() + n * 86400_000)
+    .toISOString()
+    .slice(0, 10);
+
 const shiftMonth = (month: string, delta: number) => {
   const [y, m] = month.split("-").map(Number);
   const d = new Date(Date.UTC(y, m - 1 + delta, 1));
@@ -210,6 +215,8 @@ export default function Shift() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [sel, setSel] = useState<string>(today);
+  // 今日から7日分。月をまたぐので月の表示とは別に取る
+  const [week, setWeek] = useState<Day[] | null>(null);
 
   // 追加フォーム
   const [fStaff, setFStaff] = useState("坂本");
@@ -245,6 +252,34 @@ export default function Shift() {
       .then((d) => { if (!d.error) setTodayData(d); })
       .catch(() => {});
   }, [month, todayMonth, todayData]);
+
+  useEffect(() => {
+    const dates = Array.from({ length: 7 }, (_, i) => addDays(today, i));
+    const months = [...new Set(dates.map((d) => d.slice(0, 7)))];
+    Promise.all(
+      months.map((m) => fetch(`/api/shift?month=${m}`).then((r) => r.json())),
+    )
+      .then((list) => {
+        const map: Record<string, Day> = {};
+        for (const d of list) for (const day of (d?.days as Day[]) || []) map[day.date] = day;
+        setWeek(
+          dates.map(
+            (dt) =>
+              map[dt] ?? {
+                date: dt,
+                entries: [],
+                totalMinutes: 0,
+                gaps: [],
+                doubleMinutes: 0,
+                prepCount: 0,
+                prepOk: true,
+                segments: [],
+              },
+          ),
+        );
+      })
+      .catch(() => setWeek(null));
+  }, [today, busy]);
 
   const dayMap = useMemo(() => {
     const m: Record<string, Day> = {};
@@ -414,6 +449,64 @@ export default function Shift() {
             今日を選ぶ
           </button>
         )}
+      </div>
+
+      {/* ── この1週間 ───────────────────────── */}
+      <div className="card" style={{ padding: 14 }}>
+        <div className="cat-title">この1週間</div>
+        {!week ? (
+          <p className="hint">読み込み中…</p>
+        ) : (
+          week.map((d) => {
+            const wd = wdOf(d.date);
+            const isToday = d.date === today;
+            const closed = d.entries.length === 0 && wd === 2;
+            return (
+              <div
+                key={d.date}
+                onClick={() => { setMonth(d.date.slice(0, 7)); setSel(d.date); }}
+                style={{
+                  display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer",
+                  padding: "8px 6px", borderTop: "1px solid var(--line-soft, #eee)",
+                  background: isToday ? "rgba(181,101,29,0.07)" : undefined,
+                  borderRadius: isToday ? 6 : undefined,
+                }}
+              >
+                <div style={{ flex: "0 0 58px", fontSize: 12.5, fontWeight: isToday ? 800 : 600 }}>
+                  {Number(d.date.slice(5, 7))}/{Number(d.date.slice(8))}
+                  <span style={{ marginLeft: 4, color: wd === 0 ? "#c0392b" : wd === 6 ? "#2d6a9f" : "var(--muted)" }}>
+                    {WD[wd]}
+                  </span>
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  {closed ? (
+                    <span style={{ fontSize: 12.5, color: "var(--muted)" }}>定休日</span>
+                  ) : d.entries.length === 0 ? (
+                    <span style={{ fontSize: 12.5, color: "#c0392b" }}>未定</span>
+                  ) : (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 12px" }}>
+                      {d.entries.map((e) => (
+                        <span key={e.id} style={{ fontSize: 12.5, whiteSpace: "nowrap" }}>
+                          <span className="mono" style={{ color: "var(--muted)" }}>{e.start}〜{e.end}</span>{" "}
+                          <b style={{ color: COLOR[e.staff] }}>{e.staff}</b>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {d.gaps.length > 0 && (
+                    <div style={{ fontSize: 11.5, color: "#c0392b", marginTop: 2 }}>無人: {d.gaps.join("、")}</div>
+                  )}
+                </div>
+                {d.entries.length > 0 && (
+                  <div style={{ flex: "0 0 auto", fontSize: 11.5, color: "var(--muted)" }}>
+                    {hoursText(d.totalMinutes)}
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+        <p className="hint" style={{ marginTop: 8 }}>日付を押すと、その日の詳しい帯に切り替わります。</p>
       </div>
 
       {/* ── 月の切り替え ───────────────────────── */}
