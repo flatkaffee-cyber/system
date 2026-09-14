@@ -18,8 +18,14 @@ type Summary = {
   sales: number; gross: number; paid: number; unpaid: number; checkedIn: number;
 };
 
+type Scheduled = {
+  id: string; slug: string; text: string; sendAt: string;
+  sentAt?: string; error?: string; count?: number;
+};
+
 type AnnInfo = {
   text: string | null;
+  scheduled?: Scheduled[];
   followers: number | null;
   entries: number;
   quota: { limit: number | null; used: number | null; left: number | null };
@@ -41,6 +47,11 @@ export default function EventKanri() {
   const [ann, setAnn] = useState("");
   const [annInfo, setAnnInfo] = useState<AnnInfo | null>(null);
   const [annMsg, setAnnMsg] = useState("");
+  // 予約送信の時刻。既定は明日の朝9時
+  const [annAt, setAnnAt] = useState(() => {
+    const d = new Date(Date.now() + 9 * 3600_000 + 86400_000);
+    return `${d.toISOString().slice(0, 10)}T09:00`;
+  });
 
   const load = useCallback(async () => {
     try {
@@ -122,6 +133,44 @@ export default function EventKanri() {
         `※すでにお申込みの方、ありがとうございます🙏\n　当日の詳細は前日にこのLINEでお送りします。`,
     );
   }, [annInfo, title, plans, ann]);
+
+  const reserve = async () => {
+    if (!annAt) return;
+    setBusy("ann");
+    setAnnMsg("");
+    try {
+      const res = await fetch("/api/line/announce", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug, text: ann, sendAt: `${annAt}:00+09:00` }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || "予約失敗");
+      setAnnMsg("予約しました。時刻を過ぎると自動で送られます。");
+      const r = await fetch(`/api/line/announce?slug=${slug}`).then((x) => x.json());
+      setAnnInfo(r);
+    } catch (e) {
+      setAnnMsg(e instanceof Error ? e.message : "予約失敗");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const cancelReserve = async (id: string) => {
+    if (!confirm("この予約を取り消します。")) return;
+    setBusy("ann");
+    try {
+      await fetch("/api/line/announce", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cancelId: id }),
+      });
+      const r = await fetch(`/api/line/announce?slug=${slug}`).then((x) => x.json());
+      setAnnInfo(r);
+    } finally {
+      setBusy("");
+    }
+  };
 
   const announce = async (dryRun: boolean) => {
     if (!dryRun) {
@@ -256,6 +305,54 @@ export default function EventKanri() {
             全員に送る
           </button>
         </div>
+        <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <span style={{ fontSize: 12.5, fontWeight: 700 }}>予約して送る</span>
+          <input
+            type="datetime-local"
+            value={annAt}
+            onChange={(e) => setAnnAt(e.target.value)}
+            style={{ fontSize: 12, padding: "4px 6px", width: "auto", flex: "0 0 auto" }}
+          />
+          <button onClick={reserve} disabled={busy === "ann" || !ann.trim()} style={{ fontSize: 12 }}>
+            この時刻に送る
+          </button>
+        </div>
+        <p className="hint" style={{ marginTop: 4 }}>
+          毎正時に予約を見に行くので、送られるのは指定した時刻ちょうどです（分は無視されます）。
+        </p>
+
+        {!!annInfo?.scheduled?.length && (
+          <div style={{ marginTop: 10, borderTop: "1px solid var(--line-soft, #eee)", paddingTop: 8 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 4 }}>予約と送信の記録</div>
+            {annInfo.scheduled.map((s) => {
+              const at = new Date(s.sendAt).toLocaleString("ja-JP", {
+                month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit",
+                timeZone: "Asia/Tokyo",
+              });
+              return (
+                <div key={s.id} style={{
+                  display: "flex", alignItems: "center", gap: 8, fontSize: 12,
+                  padding: "4px 0", borderTop: "1px solid var(--line-soft, #f2f2f2)",
+                }}>
+                  <span className="mono" style={{ flex: "0 0 auto" }}>{at}</span>
+                  <span style={{ flex: 1, minWidth: 0, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {s.text.split("\n")[0]}
+                  </span>
+                  {s.sentAt ? (
+                    <span style={{ color: "#3f7d58", flex: "0 0 auto" }}>送信済{s.count ? `・${s.count}通` : ""}</span>
+                  ) : s.error ? (
+                    <span style={{ color: "#c0392b", flex: "0 0 auto" }}>失敗</span>
+                  ) : (
+                    <button onClick={() => cancelReserve(s.id)} style={{ fontSize: 11, padding: "2px 8px", flex: "0 0 auto" }}>
+                      取消
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         {annMsg && <p className="hint" style={{ marginTop: 8 }}>{annMsg}</p>}
       </div>
 
