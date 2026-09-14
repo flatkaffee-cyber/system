@@ -18,7 +18,18 @@ type Order = {
   total: number;
   items: OrderItem[];
 };
-type CartItem = { catalog_object_id: string; name: string; price: number; quantity: number; note?: string };
+/** modifiers = ソイ変更のような追加料金。Squareにもこの形で送る */
+type CartItem = {
+  catalog_object_id: string;
+  name: string;
+  price: number;
+  quantity: number;
+  note?: string;
+  modifiers?: { name: string; price: number }[];
+};
+
+/** ソイ変更の追加料金 */
+const SOY_EXTRA = 50;
 
 // 注文画面に出さないメニュー。
 // ソイラテ・オーツラテはSquareのカタログに独立商品として残っているが、
@@ -282,9 +293,12 @@ export default function TablePage() {
       return;
     }
     const note = tempNote || undefined;
-    // ソイ変更の場合は+50円
+    // ソイ変更の+50円。
+    // 以前はカートの表示だけ足していて、Squareには送っていなかったため
+    // 実際の会計が50円安いままだった。追加料金としてSquareにも渡す。
     const isSoy = note?.includes("ソイ");
-    const price = isSoy ? v.price + 50 : v.price;
+    const modifiers = isSoy ? [{ name: "ソイ変更", price: SOY_EXTRA }] : undefined;
+    const price = isSoy ? v.price + SOY_EXTRA : v.price;
     setCart((prev) => {
       const exists = prev.find((c) => c.catalog_object_id === v.id && c.note === note);
       if (exists) {
@@ -292,7 +306,7 @@ export default function TablePage() {
           c.catalog_object_id === v.id && c.note === note ? { ...c, quantity: c.quantity + 1 } : c
         );
       }
-      return [...prev, { catalog_object_id: v.id, name: item.name, price, quantity: 1, note }];
+      return [...prev, { catalog_object_id: v.id, name: item.name, price, quantity: 1, note, modifiers }];
     });
   };
 
@@ -350,6 +364,7 @@ export default function TablePage() {
         quantity: c.quantity,
         note: c.note || undefined,
         name: c.name, // 消費税（店内10%/持ち帰り8%・酒類10%）の判定に使う
+        modifiers: c.modifiers,
       }));
 
       let res;
@@ -399,6 +414,7 @@ export default function TablePage() {
         quantity: c.quantity,
         note: c.note || undefined,
         name: c.name, // 消費税（店内10%/持ち帰り8%・酒類10%）の判定に使う
+        modifiers: c.modifiers,
       }));
       const total = cart.reduce((s, c) => s + c.price * c.quantity, 0);
 

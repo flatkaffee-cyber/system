@@ -103,7 +103,14 @@ export async function POST(req: NextRequest) {
     const { table, items, orderType } = (await req.json()) as {
       table: string;
       orderType?: OrderType;
-      items: { catalog_object_id: string; quantity: number; note?: string; name?: string }[];
+      items: {
+        catalog_object_id: string;
+        quantity: number;
+        note?: string;
+        name?: string;
+        /** ソイ変更のような追加料金。Squareのカタログに無くてもその場で付けられる */
+        modifiers?: { name: string; price: number }[];
+      }[];
     };
     if (!table || !items?.length) {
       return NextResponse.json({ error: "table と items が必要" }, { status: 400 });
@@ -124,6 +131,15 @@ export async function POST(req: NextRequest) {
       catalog_object_id: it.catalog_object_id,
       quantity: String(it.quantity),
       ...(it.note ? { note: it.note } : {}),
+      ...(it.modifiers?.length
+        ? {
+            // 追加料金。カタログに商品を作らなくても、その場で名前と金額を付けられる
+            modifiers: it.modifiers.map((m) => ({
+              name: m.name,
+              base_price_money: { amount: Math.round(m.price), currency: "JPY" },
+            })),
+          }
+        : {}),
       applied_taxes: [{ tax_uid: appliedTaxUids[i] }],
     }));
 
@@ -176,7 +192,12 @@ export async function PUT(req: NextRequest) {
   try {
     const { order_id, items, version } = (await req.json()) as {
       order_id: string;
-      items: { catalog_object_id: string; quantity: number; note?: string }[];
+      items: {
+        catalog_object_id: string;
+        quantity: number;
+        note?: string;
+        modifiers?: { name: string; price: number }[];
+      }[];
       version: number;
     };
     if (!order_id || !items?.length) {
@@ -187,6 +208,14 @@ export async function PUT(req: NextRequest) {
       catalog_object_id: it.catalog_object_id,
       quantity: String(it.quantity),
       ...(it.note ? { note: it.note } : {}),
+      ...(it.modifiers?.length
+        ? {
+            modifiers: it.modifiers.map((m) => ({
+              name: m.name,
+              base_price_money: { amount: Math.round(m.price), currency: "JPY" },
+            })),
+          }
+        : {}),
     }));
 
     const res = await fetch(`${SQUARE_API}/orders/${order_id}`, {
