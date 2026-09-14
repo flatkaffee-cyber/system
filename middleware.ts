@@ -14,6 +14,8 @@ const PUBLIC_EXACT = new Set([
   "/djnight", // 配布済みの古いURL
   "/natsumatsuri",
   "/e",
+  // カレンダーの購読。URLの鍵はルートの中で確かめる
+  "/api/shift/ics",
   // LINEのサーバーが叩くもの
   "/api/line/webhook",
   "/api/line/friendship",

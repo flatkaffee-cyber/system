@@ -13,6 +13,7 @@ import {
   WEEKDAY_TEMPLATES,
   type ShiftEntry,
 } from "@/lib/shift";
+import { icsToken } from "@/lib/siteAuth";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -38,6 +39,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       month,
       staff: STAFF,
+      // カレンダー購読URLに付ける鍵。画面で購読リンクを組み立てる
+      icsKey: await icsToken(),
       patterns: PATTERNS,
       templates: WEEKDAY_TEMPLATES,
       entries,

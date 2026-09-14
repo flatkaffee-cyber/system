@@ -27,7 +27,7 @@ export function authEnabled(): boolean {
  * Cookieに入れる値。合言葉そのものではなく、そこから作った署名を入れる。
  * 合言葉を変えると署名も変わるので、全端末が自動でログアウトになる。
  */
-export async function sessionToken(): Promise<string> {
+async function hmacHex(message: string): Promise<string> {
   const key = await crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(sitePassword()),
@@ -35,8 +35,26 @@ export async function sessionToken(): Promise<string> {
     false,
     ["sign"],
   );
-  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(MESSAGE));
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message));
   return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+export async function sessionToken(): Promise<string> {
+  return hmacHex(MESSAGE);
+}
+
+/**
+ * シフトのカレンダー購読URLに付ける鍵。
+ * GoogleカレンダーにURLを貼るので、ログインのCookieとは別の値にする。
+ * 合言葉を変えると購読も無効になる（意図通り。漏れたときはここを変える）。
+ */
+export async function icsToken(): Promise<string> {
+  return hmacHex("flat-shift-ics-v1");
+}
+
+export async function checkIcsToken(v: string | null): Promise<boolean> {
+  if (!authEnabled()) return true;
+  return !!v && sameSecret(v, await icsToken());
 }
 
 /** 長さと中身が同じかを、途中で打ち切らずに比べる */

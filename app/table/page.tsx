@@ -231,29 +231,64 @@ export default function TablePage() {
       }
       if (!cardOrderId) cardOrderId = sessionStorage.getItem("card_pending_order");
     }
-    if (posError) {
-      setErr(`カード決済に失敗しました（${posError}）`);
-      sessionStorage.removeItem("card_pending_order");
-      window.history.replaceState({}, "", "/table");
-    } else if (cardOrderId) {
-      // Square POSで決済完了 → OPEN注文をCOMPLETEDに
+    // Square POSで決済完了 → OPEN注文をCOMPLETEDにする
+    const finishCard = (id: string) => {
       fetch("/api/square/pay", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          order_id: cardOrderId,
-          amount: 0,
-          tendered: 0,
-          method: "card_close",
-        }),
-      }).catch(() => {}).finally(() => {
-        sessionStorage.removeItem("card_pending_order");
-        loadOrders();
-      });
+        body: JSON.stringify({ order_id: id, amount: 0, tendered: 0, method: "card_close" }),
+      })
+        .catch(() => {})
+        .finally(() => {
+          sessionStorage.removeItem("card_pending_order");
+          fetch("/api/square/card-pending", { method: "DELETE" }).catch(() => {});
+          loadOrders();
+        });
       window.history.replaceState({}, "", "/table");
+    };
+
+    // ホーム画面アプリから出てSafariに戻ったときは、端末の控えが無い。
+    // サーバーの控えを見に行ってから続ける。
+    const resolveOrderId = async (): Promise<string | null> => {
+      if (cardOrderId) return cardOrderId;
+      if (!params.has("data")) return null;
+      try {
+        const r = await fetch("/api/square/card-pending");
+        const d = await r.json();
+        return d.orderId || null;
+      } catch {
+        return null;
+      }
+    };
+
+    if (posError) {
+      setErr(`カード決済に失敗しました（${posError}）`);
+      sessionStorage.removeItem("card_pending_order");
+      fetch("/api/square/card-pending", { method: "DELETE" }).catch(() => {});
+      window.history.replaceState({}, "", "/table");
+    } else if (params.has("data") || cardOrderId) {
+      void resolveOrderId().then((id) => {
+        if (!id) return;
+        cardOrderId = id;
+        finishCard(id);
+      });
     }
     const iv = setInterval(loadOrders, 10000);
-    return () => clearInterval(iv);
+    // 画面に戻ってきたら取り直す。
+    // ホーム画面アプリはバックグラウンドで止まるので、10秒おきの更新が動かず、
+    // Squareから戻っても会計済みの注文が残って見えていた。
+    const onWake = () => {
+      if (document.visibilityState === "visible") loadOrders();
+    };
+    document.addEventListener("visibilitychange", onWake);
+    window.addEventListener("focus", onWake);
+    window.addEventListener("pageshow", onWake);
+    return () => {
+      clearInterval(iv);
+      document.removeEventListener("visibilitychange", onWake);
+      window.removeEventListener("focus", onWake);
+      window.removeEventListener("pageshow", onWake);
+    };
   }, [loadOrders, loadMenu]);
 
   // テーブルの注文を見つける
@@ -432,7 +467,13 @@ export default function TablePage() {
       if (payMethod === "card") {
         // カード: Square POSに飛ばす。
         // callback_urlは登録済みURLと完全一致が必要なのでクエリを付けず、注文IDは退避しておく。
+        // ホーム画面アプリとSafariで入れ物が別なので、サーバーにも控える
         sessionStorage.setItem("card_pending_order", orderId);
+        await fetch("/api/square/card-pending", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ order_id: orderId }),
+        }).catch(() => {});
         const posData = {
           amount_money: { amount: total, currency_code: "JPY" },
           callback_url: squareCallbackUrl || `${window.location.origin}/table`,
@@ -536,6 +577,11 @@ export default function TablePage() {
       if (method === "card") {
         if (!squareAppId) throw new Error("Square Application IDが未設定です");
         sessionStorage.setItem("card_pending_order", targetId);
+        await fetch("/api/square/card-pending", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ order_id: targetId }),
+        }).catch(() => {});
         const posData = {
           amount_money: { amount, currency_code: "JPY" },
           callback_url: squareCallbackUrl || `${window.location.origin}/table`,

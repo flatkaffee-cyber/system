@@ -29,6 +29,7 @@ type Day = {
 type Data = {
   month: string;
   staff: string[];
+  icsKey?: string;
   patterns: { label: string; start: string; end: string; staff?: string }[];
   templates: { weekday: number; label: string; blocks: { staff: string; start: string; end: string }[]; note?: string }[];
   days: Day[];
@@ -650,6 +651,46 @@ export default function Shift() {
               {prepShortDays.length > 8 && <span>ほか {prepShortDays.length - 8} 日</span>}
             </div>
           </div>
+        </div>
+      )}
+
+      {data?.icsKey && (
+        <div className="card" style={{ padding: "12px 14px", marginTop: 12 }}>
+          <div className="cat-title">カレンダーに入れる</div>
+          <p className="hint" style={{ marginBottom: 8 }}>
+            下のURLをGoogleカレンダーの「他のカレンダーを追加 → URLで追加」に貼ると、
+            シフトが自分のカレンダーに入ります。以後シフトを直すと自動で反映されます
+            （Googleが取りに来るまで数時間かかることがあります）。
+          </p>
+          {[...data.staff, ""].map((who) => {
+            const url =
+              `${typeof window === "undefined" ? "" : window.location.origin}` +
+              `/api/shift/ics?key=${data.icsKey}` +
+              (who ? `&staff=${encodeURIComponent(who)}` : "");
+            return (
+              <div key={who || "all"} style={{ marginTop: 8 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 700 }}>{who || "全員ぶん"}</div>
+                <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 3 }}>
+                  <input
+                    readOnly
+                    value={url}
+                    onFocus={(e) => e.currentTarget.select()}
+                    style={{ flex: 1, fontSize: 11, padding: "4px 6px" }}
+                  />
+                  <button
+                    onClick={() => navigator.clipboard?.writeText(url)}
+                    style={{ fontSize: 11, padding: "4px 8px", flex: "0 0 auto" }}
+                  >
+                    コピー
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+          <p className="hint" style={{ marginTop: 10 }}>
+            このURLを知っている人は、そのシフトを見られます。人に渡すときは本人ぶんだけにしてください。
+            漏れたときは合言葉（SITE_PASSWORD）を変えると、すべての購読が無効になります。
+          </p>
         </div>
       )}
 
