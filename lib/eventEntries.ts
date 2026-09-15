@@ -29,6 +29,8 @@ export type Entry = {
   lineUserId?: string;
   email?: string;
   planId: string;
+  /** 申込人数。1組で複数人のことがあるので、申込1件＝1人とは限らない */
+  people?: number;
   /** 事前に払ったか。当日払いもOK */
   paid: boolean;
   /** 受付で確認した日時。当日ここを押す */
@@ -101,18 +103,22 @@ export function summary(ev: FlatEvent, entries: Entry[]) {
   let sales = 0;
   let gross = 0;
   let paid = 0;
+  let people = 0;
   for (const e of entries) {
     const p = planOf(ev, e.planId);
     if (!p) continue;
-    byPlan[e.planId] = (byPlan[e.planId] ?? 0) + 1;
-    sales += p.price;
+    // 1件で複数人のことがあるので、人数ぶんで数える
+    const n = Math.max(1, Math.floor(e.people ?? 1));
+    people += n;
+    byPlan[e.planId] = (byPlan[e.planId] ?? 0) + n;
+    sales += p.price * n;
     const cups = cupsOf(e.planId);
-    const cost = BEER + OTHER * (cups - 1);
-    gross += p.price - cost - p.price * FEE;
-    if (e.paid) paid += p.price;
+    const cost = (BEER + OTHER * (cups - 1)) * n;
+    gross += p.price * n - cost - p.price * n * FEE;
+    if (e.paid) paid += p.price * n;
   }
   return {
-    people: entries.length,
+    people,
     byPlan,
     sales,
     gross: Math.round(gross),

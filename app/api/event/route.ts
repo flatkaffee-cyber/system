@@ -12,6 +12,7 @@ import {
   type Entry,
 } from "@/lib/eventEntries";
 import { getStaffLineIds, pushLine } from "@/lib/staffLine";
+import { AUTH_COOKIE, hasValidSession } from "@/lib/siteAuth";
 
 export const runtime = "nodejs";
 
@@ -58,6 +59,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const b = (await req.json()) as Partial<Entry> & { slug?: string };
+    // 店側が電話や口頭で受けた申込を代わりに入れる。
+    // 合言葉を通っている（＝スタッフ）ときだけ、LINE必須を外す。
+    const staff = await hasValidSession(req.cookies.get(AUTH_COOKIE)?.value);
     const ev = b.slug ? eventOf(b.slug) : currentEvent();
     if (!ev) return NextResponse.json({ error: "イベントが見つかりません" }, { status: 400 });
     const name = (b.name || "").trim();
@@ -67,7 +71,7 @@ export async function POST(req: NextRequest) {
 
     // LINE必須のイベントは、画面の出し分けだけでなくここでも止める。
     // 判定できないとき（トークン未設定など）は通す。友だちでないと分かったときだけ弾く。
-    if (ev.requireLine) {
+    if (ev.requireLine && !staff) {
       const uid = (b.lineUserId || "").trim();
       if (!uid) {
         return NextResponse.json(
@@ -90,6 +94,7 @@ export async function POST(req: NextRequest) {
       lineUserId: b.lineUserId || undefined,
       email: (b.email || "").trim() || undefined,
       planId: plan.id,
+      people: Math.max(1, Math.floor(Number(b.people) || 1)),
       paid: !!b.paid,
       djRequest: (b.djRequest || "").trim() || undefined,
       photoOk: b.photoOk !== false,
