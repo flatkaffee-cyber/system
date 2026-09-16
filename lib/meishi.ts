@@ -1,3 +1,4 @@
+import { putFile } from "@/lib/fileStore";
 // 名刺・連絡先の保存。KVに一覧を保持する。
 
 const IDX = "contacts:index";
@@ -59,7 +60,7 @@ export async function saveContact(contact: Contact): Promise<void> {
   // 名刺画像は別キーに保存（大きすぎればスキップ）
   if (contact.imageDataUrl && contact.imageDataUrl.length < 6_000_000) {
     try {
-      await store.set(`contact:image:${contact.id}`, contact.imageDataUrl);
+      await putFile(`contact:image:${contact.id}`, contact.imageDataUrl);
     } catch {
       // 画像保存失敗はスルー
     }
@@ -97,7 +98,7 @@ export async function updateContact(
   // 画像が更新されたら別キーも更新
   if (patch.imageDataUrl && patch.imageDataUrl.length < 6_000_000) {
     try {
-      await store.set(`contact:image:${id}`, patch.imageDataUrl);
+      await putFile(`contact:image:${id}`, patch.imageDataUrl);
     } catch {
       // スルー
     }

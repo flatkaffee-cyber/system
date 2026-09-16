@@ -1,3 +1,4 @@
+import { putFile, getFile } from "@/lib/fileStore";
 // 定期請求（毎月の固定費）。請求書を登録し、月ごとに「支払ったか」を管理する。
 // 領収書(receipts)＝立替(貸)役員借入金)とは別。こちらは会社が業者へ毎月払うもの。
 // KV: bills:index（マスター配列）/ bill:file:{id}（請求書画像）/ bill:payments（月次記録配列）
@@ -69,7 +70,7 @@ export async function saveBill(
   await store.set(BILLS_IDX, list);
   if (imageDataUrl && imageDataUrl.length < 6_000_000) {
     try {
-      await store.set(`bill:file:${b.id}`, imageDataUrl);
+      await putFile(`bill:file:${b.id}`, imageDataUrl);
     } catch {
       /* 画像保存失敗はスルー */
     }
@@ -107,7 +108,7 @@ export async function deleteBill(id: string): Promise<void> {
 export async function getBillImage(id: string): Promise<string | null> {
   const store = await kv();
   if (!store) return null;
-  return (await store.get<string>(`bill:file:${id}`)) ?? null;
+  return (await getFile(`bill:file:${id}`)) ?? null;
 }
 
 export async function getPayments(): Promise<BillPayment[]> {

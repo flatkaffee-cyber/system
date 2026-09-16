@@ -2,6 +2,7 @@
 // 整理（月フォルダ等）はNAS導入時にまとめて行う前提。今は「消えないように保存」だけが目的。
 
 import { applyAssetThreshold } from "@/lib/receipt";
+import { putFile, getFile } from "@/lib/fileStore";
 
 const IDX = "receipts:index";
 
@@ -75,7 +76,7 @@ export async function saveReceipt(
   // 原本画像（dataURL）は別キー。大きすぎればデータのみ（NAS導入時に対応）。
   if (imageDataUrl && imageDataUrl.length < 6_000_000) {
     try {
-      await store.set(`receipt:file:${r.id}`, imageDataUrl);
+      await putFile(`receipt:file:${r.id}`, imageDataUrl);
     } catch {
       // 原本保存失敗はスルー（抽出データは保存済み）
     }
@@ -85,7 +86,7 @@ export async function saveReceipt(
 export async function getReceiptImage(id: string): Promise<string | null> {
   const store = await kv();
   if (!store) return null;
-  return (await store.get<string>(`receipt:file:${id}`)) ?? null;
+  return (await getFile(`receipt:file:${id}`)) ?? null;
 }
 
 export async function getReceipt(id: string): Promise<SavedReceipt | null> {

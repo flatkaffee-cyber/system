@@ -1,3 +1,4 @@
+import { putFile, getFile } from "@/lib/fileStore";
 // 契約書。書類庫（/shorui）が「届いた紙を溜める場所」なのに対し、
 // こちらは「いま生きている約束」を管理する。
 //
@@ -91,13 +92,13 @@ export async function saveContractFile(id: string, dataUrl: string): Promise<voi
   const store = await kv();
   if (!store) throw new Error("KV未設定");
   if (dataUrl.length > 6_000_000) throw new Error("ファイルが大きすぎます（6MBまで）");
-  await store.set(`contract:file:${id}`, dataUrl);
+  await putFile(`contract:file:${id}`, dataUrl);
 }
 
 export async function getContractFile(id: string): Promise<string | null> {
   const store = await kv();
   if (!store) return null;
-  return (await store.get<string>(`contract:file:${id}`)) ?? null;
+  return (await getFile(`contract:file:${id}`)) ?? null;
 }
 
 const addMonths = (iso: string, n: number) => {

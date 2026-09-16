@@ -1,3 +1,4 @@
+import { putFile, getFile } from "@/lib/fileStore";
 // 会社書類。定款・登記事項証明書・印鑑証明・許認可・税務署への届出など、
 // 会社そのものを証明する書類をまとめる。
 //
@@ -73,11 +74,11 @@ export async function saveCompanyFile(id: string, dataUrl: string): Promise<void
   const store = await kv();
   if (!store) throw new Error("KV未設定");
   if (dataUrl.length > 6_000_000) throw new Error("ファイルが大きすぎます（6MBまで）");
-  await store.set(`companydoc:file:${id}`, dataUrl);
+  await putFile(`companydoc:file:${id}`, dataUrl);
 }
 
 export async function getCompanyFile(id: string): Promise<string | null> {
   const store = await kv();
   if (!store) return null;
-  return (await store.get<string>(`companydoc:file:${id}`)) ?? null;
+  return (await getFile(`companydoc:file:${id}`)) ?? null;
 }
