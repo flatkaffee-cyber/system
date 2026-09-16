@@ -7,7 +7,8 @@
 // KVは文字データだけを持つ。読むときは Blob → 無ければ KV の順で探すので、
 // 移行が済んでいないものもそのまま読める。
 
-import { put, del, head } from "@vercel/blob";
+// ストアは非公開で作ってある。読み書きともトークンが要るので、URLが漏れても開けない
+import { put, del, head, get } from "@vercel/blob";
 
 async function kv() {
   const url = process.env.KV_REST_API_URL ?? process.env.UPSTASH_REDIS_REST_URL;
@@ -44,7 +45,7 @@ export async function putFile(key: string, dataUrl: string): Promise<boolean> {
     if (parsed) {
       try {
         await put(pathOf(key), parsed.body, {
-          access: "public", // ストア自体が非公開なので、URLを知っていても開けない
+          access: "private",
           contentType: parsed.contentType,
           addRandomSuffix: false,
           allowOverwrite: true,
@@ -70,14 +71,11 @@ export async function putFile(key: string, dataUrl: string): Promise<boolean> {
 export async function getFile(key: string): Promise<string | null> {
   if (blobEnabled()) {
     try {
-      const info = await head(pathOf(key));
-      if (info?.url) {
-        const res = await fetch(info.url);
-        if (res.ok) {
-          const buf = Buffer.from(await res.arrayBuffer());
-          const type = res.headers.get("content-type") || "image/jpeg";
-          return `data:${type};base64,${buf.toString("base64")}`;
-        }
+      const r = await get(pathOf(key), { access: "private" });
+      if (r?.statusCode === 200 && r.stream) {
+        const buf = Buffer.from(await new Response(r.stream).arrayBuffer());
+        const type = r.blob.contentType || "image/jpeg";
+        return `data:${type};base64,${buf.toString("base64")}`;
       }
     } catch {
       /* Blobに無ければKVを見る */
@@ -121,14 +119,14 @@ export async function migrateKey(key: string): Promise<number> {
   const parsed = parseDataUrl(dataUrl);
   if (!parsed) return 0;
   await put(pathOf(key), parsed.body, {
-    access: "public",
+    access: "private",
     contentType: parsed.contentType,
     addRandomSuffix: false,
     allowOverwrite: true,
   });
   // Blobに入ったことを確かめてからKVを消す
   const info = await head(pathOf(key));
-  if (!info?.url) return 0;
+  if (!info) return 0;
   const size = dataUrl.length;
   await store.del(key);
   return size;
