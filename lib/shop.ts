@@ -14,9 +14,14 @@ export const SHOP = {
   postalCode: "522-0081",
   address: "滋賀県彦根市京町二丁目3-1",
   tel: "080-4239-6023",
-  /** 営業時間（通常）。lib/shift.ts の OPEN_MIN / CLOSE_MIN と揃える */
-  open: "10:00",
-  close: "24:30",
+  /**
+   * 営業時間。18:00〜19:00は夜の準備で一度閉める（中休み）。
+   * lib/shift.ts の IDLE_WINDOWS と、締めチェックの「19時からのオープン前準備」に対応する。
+   */
+  hours: [
+    { label: "カフェ", from: "10:00", to: "18:00" },
+    { label: "バー", from: "19:00", to: "24:30" },
+  ],
   lastOrder: "23:30",
   /** 定休日（0=日 … 6=土） */
   closedWeekday: 2,
@@ -27,7 +32,10 @@ export const SHOP = {
     "昼はコーヒーとワッフル、夜はお酒も出しています。",
 } as const;
 
-/** 営業時間の1行表記 */
-export function hoursLine(): string {
-  return `${SHOP.open}〜${SHOP.close}（ラストオーダー ${SHOP.lastOrder}）`;
+/** 営業時間の表記。中休みがあるので2行になる */
+export function hoursLines(): string[] {
+  return [
+    ...SHOP.hours.map((h) => `${h.label} ${h.from}〜${h.to}`),
+    `（ラストオーダー ${SHOP.lastOrder}）`,
+  ];
 }

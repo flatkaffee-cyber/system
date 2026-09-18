@@ -1,5 +1,5 @@
 import { EVENTS, type FlatEvent } from "@/lib/events";
-import { SHOP, hoursLine } from "@/lib/shop";
+import { SHOP, hoursLines } from "@/lib/shop";
 
 // LINEで「イベント申込一覧」を出すためのカルーセル。
 //
@@ -172,7 +172,7 @@ export function greetingMessage(now: Date = new Date()): string {
     SHOP.intro,
     ``,
     `🕘 営業時間`,
-    hoursLine(),
+    ...hoursLines(),
     `${SHOP.closedLabel}定休`,
     ``,
     `📍 ${SHOP.address}`,

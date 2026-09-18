@@ -55,7 +55,7 @@ export const EVENTS: FlatEvent[] = [
     title: "flat. DJ NIGHT",
     dateLabel: "9月22日（火）",
     date: "2026-09-22",
-    lead: "定休日のflat.を、この日だけ開けます🎧",
+    lead: "音に合わせて、みんなでワイワイ盛り上がる夜です🪩",
     deadline: "2026-09-22T18:00:00+09:00",
     kvKey: "djnight:entries",
     plans: [
@@ -105,10 +105,10 @@ export const EVENTS: FlatEvent[] = [
   },
   {
     slug: "oboe",
-    title: "オーボエ ミニ演奏会",
+    title: "ふらっと演奏会",
     dateLabel: "9月26日（土）",
     date: "2026-09-26",
-    lead: "須田聡子さんをお迎えして、30分ほどのミニコンサートです🎶",
+    lead: "須田聡子さんのオーボエで、素敵なひとときを🎶",
     // 夜公演の開場まで受け付ける。過ぎても当日参加は受ける
     deadline: "2026-09-26T20:00:00+09:00",
     kvKey: "oboe:entries",
