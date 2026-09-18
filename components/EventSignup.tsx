@@ -20,6 +20,8 @@ type EventInfo = {
 // window.liff は他のページでも別の形で宣言しているので、ここでは都度取り出す。
 type Liff = {
   init: (c: { liffId: string }) => Promise<void>;
+  /** LINEアプリの中で開かれているか。外部ブラウザでは false */
+  isInClient: () => boolean;
   isLoggedIn: () => boolean;
   login: (c?: { redirectUri?: string }) => void;
   getProfile: () => Promise<{ displayName: string; userId: string }>;
@@ -109,6 +111,11 @@ export default function EventSignup({ slug }: { slug: string }) {
         if (!liff) return;
         await liff.init({ liffId });
         if (!liff.isLoggedIn()) {
+          // 自動ログインはLINEアプリの中だけにする。
+          // 外部ブラウザ（Instagramなどのアプリ内ブラウザを含む）で login() を
+          // 呼ぶと access.line.me が 400 Bad Request を返し、申込画面まで
+          // たどり着けない。LINE外では友だち追加の案内をそのまま出す。
+          if (!liff.isInClient()) return;
           // ログイン後は必ず「開いていたページ」に戻す。
           // 指定しないとLIFFの固定エンドポイント（/e）へ戻ってしまい、
           // /e は直近のイベントを出すので、別のイベントの案内にすり替わる。
