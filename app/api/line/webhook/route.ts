@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { eventCarousel, wantsEventList } from "@/lib/lineEvents";
+import { eventCarousel, wantsEventList, greetingMessage } from "@/lib/lineEvents";
 
 export const runtime = "nodejs";
 
@@ -9,23 +9,8 @@ export const runtime = "nodejs";
 // OA Managerのあいさつメッセージの代わりにここで管理する（コードで変更できる）。
 // 必要な環境変数: LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET
 
-const GREETING = `友だち追加ありがとうございます🏮
-彦根のカフェ flat. です☕
-
-🎆 8/22（土）flat. 夏祭り2026 開催！
-🌅 琵琶湖でサンセットchill
-🎆 彦根城ふもとで手持ち花火
-🪩 flat.で盆踊りパーティー（DJあり🎧）
-
-申込がまだの方は、下のメニュー
-「参加申込はこちら」から続きをお願いします👇
-（このLINEから開くと名前の入力が省けます）
-
-⏰ 申込期限
-・花火から参加 → 8/18（火）まで
-・パーティのみ → 8/20（木）まで
-
-当日の連絡・写真データの共有はこのLINEでお送りします😉`;
+// あいさつの中身は lib/lineEvents.ts の greetingMessage() が組み立てる。
+// 店の情報と「いま受付中のイベント」から毎回作るので、書き換え忘れが起きない。
 
 type LineEvent = {
   type: string;
@@ -73,7 +58,7 @@ export async function POST(req: NextRequest) {
 
   for (const ev of events) {
     if (ev.type === "follow" && ev.replyToken) {
-      await reply(ev.replyToken, GREETING);
+      await reply(ev.replyToken, greetingMessage());
       continue;
     }
     // リッチメニューの「イベント申込」ボタン（message アクション）と、

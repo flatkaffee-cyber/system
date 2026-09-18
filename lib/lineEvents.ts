@@ -1,4 +1,5 @@
 import { EVENTS, type FlatEvent } from "@/lib/events";
+import { SHOP, hoursLine } from "@/lib/shop";
 
 // LINEで「イベント申込一覧」を出すためのカルーセル。
 //
@@ -153,6 +154,57 @@ export function eventMessage(slug: string) {
     altText: `${ev.title}（${ev.dateLabel}）の申込`,
     contents: bubble(ev),
   };
+}
+
+/**
+ * 友だち追加したときのあいさつ。
+ *
+ * 前は夏祭りの案内を直接書いていたので、イベントが終わったあとも
+ * 8月の告知が届き続けていた。店の情報と「いま受付中のイベント」から
+ * 毎回組み立てるようにして、書き換え忘れが起きないようにする。
+ */
+export function greetingMessage(now: Date = new Date()): string {
+  const evs = upcomingEvents(now).slice(0, 3);
+  const lines = [
+    `友だち追加ありがとうございます☕`,
+    `彦根のカフェ ${SHOP.name} です。`,
+    ``,
+    SHOP.intro,
+    ``,
+    `🕘 営業時間`,
+    hoursLine(),
+    `${SHOP.closedLabel}定休`,
+    ``,
+    `📍 ${SHOP.address}`,
+    `☎ ${SHOP.tel}`,
+  ];
+
+  if (evs.length > 0) {
+    lines.push(``, `＿＿＿＿＿＿＿＿＿＿`, ``, `開催予定のイベント`);
+    for (const e of evs) {
+      const from = Math.min(...e.plans.map((p) => p.price));
+      lines.push(
+        ``,
+        `${e.emoji ? `${e.emoji} ` : ""}${e.dateLabel} ${e.title}`,
+        `${e.lead}`,
+        `¥${from.toLocaleString()}${e.plans.length > 1 ? "〜" : ""}`,
+      );
+    }
+    lines.push(
+      ``,
+      `＿＿＿＿＿＿＿＿＿＿`,
+      ``,
+      `お申込みは下のメニュー「イベント申込」から👇`,
+      `（このLINEから開くと名前の入力が省けます）`,
+    );
+  } else {
+    lines.push(
+      ``,
+      `イベントを開くときは、このLINEでお知らせします🌙`,
+    );
+  }
+
+  return lines.join("\n");
 }
 
 /** リッチメニューのボタンから送られてくる言葉 */
