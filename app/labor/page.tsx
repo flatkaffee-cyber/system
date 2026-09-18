@@ -124,7 +124,7 @@ export default function Labor() {
       )}
 
       <p className="hint" style={{ marginTop: 12 }}>
-        ※ 名前対応：坂本達郎→坂本、杏(Anne)→國仲は確定。<strong>Sho・kankichi→櫻井・町田は仮</strong>（違えば直します）。労働時間は勤怠シートの出勤・退勤・休憩から計算。退勤未入力の行は集計対象外。
+        ※ 名前対応：坂本達郎→坂本、杏(Anne)→國仲、kankichi→櫻井（櫻井勘吉）、Sho→町田（町田創）。労働時間は勤怠シートの出勤・退勤・休憩から計算。退勤未入力の行は集計対象外。
       </p>
     </div>
   );

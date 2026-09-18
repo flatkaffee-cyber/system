@@ -15,9 +15,9 @@ const NAME_MAP: [string, Member][] = [
   ["杏", "國仲"],
   ["Anne", "國仲"],
   ["櫻井", "櫻井"],
-  ["kankichi", "櫻井"], // 櫻井＝kankichi
+  ["kankichi", "櫻井"], // 櫻井勘吉。勤怠シートでは kankichi
   ["町田", "町田"],
-  ["Sho", "町田"], // 町田＝Sho
+  ["Sho", "町田"], // 町田創。勤怠シートでは Sho
 ];
 
 export function mapName(raw: string): Member | null {
