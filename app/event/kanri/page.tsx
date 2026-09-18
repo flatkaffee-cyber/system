@@ -8,7 +8,7 @@ import Nav from "@/components/Nav";
 
 type Plan = { id: string; label: string; price: number; detail: string; payUrl?: string };
 type Entry = {
-  id: string; name: string; lineName?: string; email?: string;
+  id: string; name: string; lineName?: string; email?: string; tel?: string;
   planId: string; paid: boolean; checkedInAt?: string;
   djRequest?: string; photoOk: boolean; note?: string; createdAt: string;
 };
@@ -372,6 +372,11 @@ export default function EventKanri() {
                   <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 2 }}>
                     {p ? `${p.label} ¥${p.price.toLocaleString()}` : e.planId}
                   </div>
+                  {e.tel && (
+                    <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
+                      ☎️ <a href={`tel:${e.tel}`} style={{ color: "inherit" }}>{e.tel}</a>
+                    </div>
+                  )}
                   {e.djRequest && (
                     <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>🎵 {e.djRequest}</div>
                   )}

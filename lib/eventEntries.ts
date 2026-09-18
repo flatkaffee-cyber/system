@@ -28,6 +28,8 @@ export type Entry = {
   lineName?: string;
   lineUserId?: string;
   email?: string;
+  /** 電話番号。LINE必須でないイベントで、連絡手段を残すために聞く */
+  tel?: string;
   planId: string;
   /** 申込人数。1組で複数人のことがあるので、申込1件＝1人とは限らない */
   people?: number;

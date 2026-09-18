@@ -44,6 +44,8 @@ export default function EventSignup({ slug }: { slug: string }) {
   const [djRequest, setDjRequest] = useState("");
   const [photoOk, setPhotoOk] = useState(true);
   const [note, setNote] = useState("");
+  // LINE必須でないイベントの連絡先。LINEが無い人にも連絡できるようにする
+  const [tel, setTel] = useState("");
 
   const [lineUserId, setLineUserId] = useState("");
   const [viaLine, setViaLine] = useState(false);
@@ -153,7 +155,7 @@ export default function EventSignup({ slug }: { slug: string }) {
       const res = await fetch("/api/event", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slug, name, lineName, lineUserId, planId, djRequest, photoOk, note }),
+        body: JSON.stringify({ slug, name, lineName, lineUserId, planId, djRequest, photoOk, note, tel }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "送信に失敗しました");
@@ -314,6 +316,15 @@ export default function EventSignup({ slug }: { slug: string }) {
               {viaLine && <span style={{ color: "#c9a227", marginLeft: 6 }}>LINEから自動で入りました</span>}
             </label>
             <input value={lineName} onChange={(e) => setLineName(e.target.value)} placeholder="当日の照合に使います" />
+
+            <label>お電話番号（任意）</label>
+            <input
+              type="tel"
+              inputMode="tel"
+              value={tel}
+              onChange={(e) => setTel(e.target.value)}
+              placeholder="変更やご連絡が必要なときだけ使います"
+            />
           </>
         )}
 

@@ -127,7 +127,9 @@ export const EVENTS: FlatEvent[] = [
         detail: "20:30開場／21:00開演。入場料500円＋1オーダー",
       },
     ],
-    requireLine: true,
+    // ¥500＋1オーダーの気軽な演奏会。電話予約も受けているので、
+    // リンクからそのまま申し込めるようにする（連絡先は電話番号で取る）。
+    requireLine: false,
     requestLabel: "須田さんへのメッセージ（任意）",
     requestPlaceholder: "楽しみにしていること、聴きたい曲など",
     notes: [
