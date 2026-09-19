@@ -38,11 +38,13 @@ export async function GET(req: NextRequest) {
       },
       plans: ev.plans,
       closed: deadlinePassed(ev),
-      people: entries.length,
+      // 出さない設定のイベントでは、人数そのものを外に出さない
+      people: ev.hidePeople ? 0 : entries.length,
     };
     if (req.nextUrl.searchParams.get("admin") !== "1") return NextResponse.json(base);
     return NextResponse.json({
       ...base,
+      people: entries.length,
       events: EVENTS.map((e) => ({ slug: e.slug, title: e.title, dateLabel: e.dateLabel })),
       entries,
       summary: summary(ev, entries),
