@@ -22,6 +22,37 @@ async function getLocationId(): Promise<string> {
 }
 
 // カタログIDから商品名を引くためのマップを作成
+// 返金の取得。Squareは会計済み(COMPLETED)の注文を取り消せないため、
+// 二重計上などを直すと「注文はそのまま・返金だけ増える」状態になる。
+// 注文だけを見ていると返した分が売上に残り、ドロワーが合わなくなる。
+//
+// 返金はそれ自体の発生日（created_at）で当日に付ける。
+// レジ締めは「その日ドロワーから出ていったか」で見るのが実態に合うため。
+async function listRefunds(
+  locationId: string,
+  beginAt: string,
+  endAt: string,
+): Promise<any[]> {
+  const out: any[] = [];
+  let cursor: string | undefined;
+  do {
+    const q = new URLSearchParams({
+      location_id: locationId,
+      begin_time: new Date(beginAt).toISOString(),
+      end_time: new Date(endAt).toISOString(),
+      status: "COMPLETED",
+      limit: "100",
+    });
+    if (cursor) q.set("cursor", cursor);
+    const res = await fetch(`${SQUARE_API}/refunds?${q}`, { headers: headers() });
+    if (!res.ok) break; // 返金が取れなくても売上は返す
+    const data = await res.json();
+    out.push(...(data.refunds || []));
+    cursor = data.cursor;
+  } while (cursor);
+  return out;
+}
+
 async function buildCatalogMap(): Promise<Record<string, string>> {
   const map: Record<string, string> = {};
   let cursor: string | undefined;
@@ -230,6 +261,28 @@ export async function GET(req: NextRequest) {
         byTender[key].amount += t.amount;
       }
     }
+    // 返金を差し引く。支払方法ごとに引くので、現金の期待額も正しくなる。
+    const refundList = await listRefunds(locationId, beginAt, endAt);
+    const refunds = refundList.map((r: any) => ({
+      id: r.id,
+      order_id: r.order_id || "",
+      payment_id: r.payment_id || "",
+      amount: r.amount_money?.amount || 0,
+      // 返金先。現金で返したのか、カードに戻したのか
+      type: r.destination_type || "",
+      created_at: r.created_at,
+      reason: r.reason || "",
+    }));
+    const refundTotal = refunds.reduce((sum, r) => sum + r.amount, 0);
+    for (const r of refunds) {
+      const key =
+        r.type === "CASH" ? "現金"
+        : r.type === "CARD" ? "カード"
+        : "その他";
+      byTender[key] = byTender[key] || { count: 0, amount: 0 };
+      byTender[key].amount -= r.amount;
+    }
+
     const cashTotal = byTender["現金"]?.amount || 0;
 
     // 商品別集計
@@ -258,8 +311,17 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       period: { begin: beginAt, end: endAt },
-      summary: { totalSales, totalTax, orderCount, cashTotal, untendered },
+      summary: {
+        totalSales: totalSales - refundTotal,
+        grossSales: totalSales,
+        refundTotal,
+        totalTax,
+        orderCount,
+        cashTotal,
+        untendered,
+      },
       byTender,
+      refunds,
       byProduct,
       byHour,
       orders,

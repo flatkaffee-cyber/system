@@ -22,6 +22,10 @@ type SalesData = {
   summary: {
     totalSales: number; totalTax: number; orderCount: number;
     cashTotal?: number; untendered?: number;
+    /** 返金を引く前の売上。返金がない日は totalSales と同じ */
+    grossSales?: number;
+    /** その日に返した金額の合計 */
+    refundTotal?: number;
   };
   byTender?: Record<string, { count: number; amount: number }>;
   byProduct: ProductRow[];
@@ -195,6 +199,12 @@ export default function SalesPage() {
                 : `${from} 〜 ${to}`}
             </div>
             <div className="total-amount">¥{fmt(data.summary.totalSales)}</div>
+            {!!data.summary.refundTotal && (
+              <div style={{ fontSize: 13, opacity: 0.85, marginTop: 4 }}>
+                売上 ¥{fmt(data.summary.grossSales ?? 0)} − 返金 ¥
+                {fmt(data.summary.refundTotal)}
+              </div>
+            )}
             <div
               style={{
                 display: "flex",
