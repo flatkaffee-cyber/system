@@ -20,11 +20,7 @@ type Task = {
   pendingOrder?: boolean;
   choices?: [string, string];
   answer?: string | null;
-  hotsand?: "night";
-  hotsandAfternoon?: boolean;
-  hotsandTane?: boolean;
-  hotsandBread?: boolean;
-  hotsandPrep?: boolean;
+  hotsand?: "fridge" | "freezer" | "bread" | "prep" | "breadOrder" | "tane";
   daily?: "morning" | "afternoon" | "evening";
   dailyAction?: "buy" | "prep" | "refill";
   wafflePrep?: boolean;
@@ -36,51 +32,6 @@ type Task = {
 };
 
 type Slot = "morning" | "afternoon" | "evening";
-type Hotsand = {
-  flavors: string[];
-  fridgePar: number;
-  freezerLowTotal: number;
-  batch: number;
-  intervalDays: number;
-  afternoon: {
-    counted: boolean;
-    freezer: Record<string, number> | null;
-    total: number | null;
-  };
-  night: {
-    counted: boolean;
-    fridge: Record<string, number> | null;
-    freezer: Record<string, number> | null;
-    tane: boolean | null;
-  };
-  lastMade: string | null;
-  nextPrep: string | null;
-  daysSinceMade: number | null;
-  total: number | null;
-  short: boolean;
-  madeToday: number;
-  needBreadCall: boolean;
-  needTane: boolean;
-  needPrep: boolean;
-  freezerTarget: number;
-  prepTomorrow: boolean;
-  plannedFromYesterday: {
-    target: number;
-    byFlavor: { flavor: string; have: number; make: number }[];
-    total: number;
-    breadSlices: number;
-    breadLoaves: number;
-    slicesPerLoaf: number;
-  } | null;
-  prepPlan: {
-    target: number;
-    byFlavor: { flavor: string; have: number; make: number }[];
-    total: number;
-    breadSlices: number;
-    breadLoaves: number;
-    slicesPerLoaf: number;
-  } | null;
-};
 
 type DailyItem = {
   id: string; name: string; kind: "count" | "full";
@@ -120,9 +71,6 @@ export default function OpeningPage() {
   const [pendingOrders, setPendingOrders] = useState<PendingOrder[]>([]);
   const [wBusy, setWBusy] = useState(false);
   // ホットサンドの在庫。朝と夕方で別々に数える
-  const [hs, setHs] = useState<Hotsand | null>(null);
-  const [hsIn, setHsIn] = useState<Record<string, string>>({});
-  const [hsBusy, setHsBusy] = useState(false);
   // 牛乳・コールドブリュー・アメリカーノ用の水
   const [daily, setDaily] = useState<Daily | null>(null);
   const [dcIn, setDcIn] = useState<Record<string, string>>({});
@@ -181,7 +129,6 @@ export default function OpeningPage() {
       setDoneCount(d.doneCount || 0);
       setWaffle(d.waffle || null);
       setPendingOrders(d.pendingOrders || []);
-      setHs(d.hotsand || null);
       setDaily(d.daily || null);
       setKin(d.kintai || null);
       if (d.waffle?.today) {
@@ -254,80 +201,9 @@ export default function OpeningPage() {
   };
 
   // key は "fridge:クラシックメルト" のように作る
-  const hsKey = (where: string, f: string) => `${where}:${f}`;
-  const hsNum = (where: string, f: string) => Number(hsIn[hsKey(where, f)] || 0);
 
-  const saveHotsandAfternoon = async () => {
-    if (!hs) return;
-    setHsBusy(true);
-    setErr("");
-    try {
-      const freezer: Record<string, number> = {};
-      for (const f of hs.flavors) freezer[f] = hsNum("afternoon", f);
-      const res = await fetch("/api/opening", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ hotsandAfternoon: { freezer } }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error);
-      await load();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "保存に失敗");
-    } finally {
-      setHsBusy(false);
-    }
-  };
 
-  const saveHotsand = async (tane: boolean) => {
-    if (!hs) return;
-    setHsBusy(true);
-    setErr("");
-    try {
-      const fridge: Record<string, number> = {};
-      const freezer: Record<string, number> = {};
-      for (const f of hs.flavors) {
-        fridge[f] = hsNum("fridge", f);
-        freezer[f] = hsNum("freezer", f);
-      }
-      const res = await fetch("/api/opening", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ hotsandCount: { fridge, freezer, tane } }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error);
-      await load();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "保存に失敗");
-    } finally {
-      setHsBusy(false);
-    }
-  };
 
-  const saveHotsandMade = async () => {
-    if (!hs) return;
-    setHsBusy(true);
-    setErr("");
-    try {
-      const freezer: Record<string, number> = {};
-      for (const f of hs.flavors) freezer[f] = hsNum("made", f);
-      const res = await fetch("/api/opening", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ hotsandMade: { freezer } }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error);
-      setHsIn((p) => {
-        const n = { ...p };
-        for (const f of hs.flavors) delete n[hsKey("made", f)];
-        return n;
-      });
-      await load();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "保存に失敗");
-    } finally {
-      setHsBusy(false);
-    }
-  };
 
   const dcKey = (slot: Slot, id: string) => `${slot}:${id}`;
 
@@ -634,213 +510,6 @@ export default function OpeningPage() {
               </div>
             );
           })()}
-          {t.hotsandAfternoon && hs && (
-            <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 8 }}>
-              <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 4 }}>
-                冷凍庫の残り（合計が{hs.freezerLowTotal}個を切ったら、今日のうちに食パンを頼んでタネを仕込む）
-              </div>
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                {hs.flavors.map((f) => (
-                  <div key={f} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                    <span style={{ fontSize: 12.5 }}>{f}</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={hsIn[hsKey("afternoon", f)] ?? (hs.afternoon.counted ? String(hs.afternoon.freezer?.[f] ?? 0) : "")}
-                      onChange={(e) => setHsIn((p) => ({ ...p, [hsKey("afternoon", f)]: e.target.value }))}
-                      style={{ width: 54, fontSize: 14, padding: "6px 8px", textAlign: "center" }}
-                    />
-                    <span style={{ fontSize: 12, color: "var(--muted)" }}>個</span>
-                  </div>
-                ))}
-              </div>
-              <button
-                onClick={saveHotsandAfternoon}
-                disabled={hsBusy}
-                style={{
-                  marginTop: 8, padding: "9px 16px", borderRadius: 8, border: "none",
-                  background: "var(--accent)", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer",
-                }}
-              >
-                {hsBusy ? "記録中…" : "記録する"}
-              </button>
-              {hs.afternoon.counted && (
-                <div style={{
-                  marginTop: 8, padding: "9px 11px", borderRadius: 7, fontSize: 12.5, lineHeight: 1.7,
-                  background: hs.short ? "#fde8e8" : "#eaf6ec",
-                  border: `1px solid ${hs.short ? "#e0b4b4" : "#b7dfc0"}`,
-                  color: hs.short ? "#c0392b" : "var(--ok)", fontWeight: 700,
-                }}>
-                  合計{hs.afternoon.total}個。
-                  {hs.short
-                    ? `${hs.freezerLowTotal}個を切っています。今日のうちに食パンを頼んで、タネを仕込んでください（明日${hs.prepPlan?.total ?? hs.batch}個仕込みます）`
-                    : "まだ足りています"}
-                </div>
-              )}
-            </div>
-          )}
-          {t.hotsandBread && hs && (
-            <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 8 }}>
-              <div style={{
-                padding: "10px 11px", borderRadius: 7, fontSize: 12.5, lineHeight: 1.75,
-                background: "#fdf6ec", border: "1px solid #e8d5b0", color: "#9c5f22",
-              }}>
-                15時の時点で冷凍庫の合計が{hs.afternoon.total}個でした。
-                今日中に平和堂へ連絡すると明日届きます。
-                {hs.prepPlan && hs.prepPlan.total > 0 && (
-                  <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px dashed #e8d5b0" }}>
-                    <div>
-                      明日つくるのは{" "}
-                      {hs.prepPlan.byFlavor
-                        .filter((b) => b.make > 0)
-                        .map((b) => `${b.flavor}${b.make}個`)
-                        .join("・")}
-                      {" "}＝ 合計{hs.prepPlan.total}個
-                      <span style={{ color: "#b08050" }}>（冷凍庫を各{hs.prepPlan.target}個にそろえる）</span>
-                    </div>
-                    <div style={{ marginTop: 3, fontWeight: 700, fontSize: 13.5 }}>
-                      → 食パン{hs.prepPlan.breadSlices}枚。
-                      {hs.prepPlan.slicesPerLoaf}枚入りを<span style={{ fontSize: 16 }}>{hs.prepPlan.breadLoaves}斤</span>頼む
-                    </div>
-                  </div>
-                )}
-                <div style={{ marginTop: 4, fontWeight: 700 }}>★平和堂は手続き中。完了するまで発注しない</div>
-              </div>
-            </div>
-          )}
-          {t.hotsandTane && hs && (
-            <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 8 }}>
-              <div style={{
-                padding: "10px 11px", borderRadius: 7, fontSize: 12.5, lineHeight: 1.75,
-                background: "#fdf6ec", border: "1px solid #e8d5b0", color: "#9c5f22",
-              }}>
-                明日{hs.prepPlan && hs.prepPlan.total > 0 ? hs.prepPlan.total : hs.batch}個仕込むので、今日のうちにタネを作っておきます。
-                {hs.nextPrep && <div>次の仕込み予定日: {hs.nextPrep.slice(5).replace("-", "/")}</div>}
-              </div>
-            </div>
-          )}
-          {t.hotsand && hs && (
-            <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 8 }}>
-              <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 4 }}>
-                冷蔵庫（各{hs.fridgePar}個にそろえる）
-              </div>
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                {hs.flavors.map((f) => (
-                  <div key={f} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                    <span style={{ fontSize: 12.5 }}>{f}</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={hsIn[hsKey("fridge", f)] ?? (hs.night.counted ? String(hs.night.fridge?.[f] ?? 0) : String(hs.fridgePar))}
-                      onChange={(e) => setHsIn((p) => ({ ...p, [hsKey("fridge", f)]: e.target.value }))}
-                      style={{ width: 54, fontSize: 14, padding: "6px 8px", textAlign: "center" }}
-                    />
-                    <span style={{ fontSize: 12, color: "var(--muted)" }}>個</span>
-                  </div>
-                ))}
-              </div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-                {[true, false].map((tane) => {
-                  const on = hs.night.tane === tane;
-                  return (
-                    <button
-                      key={String(tane)}
-                      onClick={() => saveHotsand(tane)}
-                      disabled={hsBusy}
-                      style={{
-                        padding: "9px 14px", borderRadius: 8, cursor: "pointer",
-                        fontSize: 13, fontWeight: 700,
-                        border: on ? `2px solid ${tane ? "var(--ok)" : "#c0392b"}` : "1px solid var(--line)",
-                        background: on ? (tane ? "var(--ok)" : "#fde8e8") : "#fff",
-                        color: on ? (tane ? "#fff" : "#c0392b") : "var(--ink)",
-                      }}
-                    >
-                      記録する（タネ{tane ? "あり" : "なし"}）
-                    </button>
-                  );
-                })}
-              </div>
-              {hs.night.counted && (
-                <div style={{
-                  marginTop: 8, padding: "9px 11px", borderRadius: 7, fontSize: 12.5, lineHeight: 1.7,
-                  background: hs.night.tane === false ? "#fde8e8" : "#eaf6ec",
-                  border: `1px solid ${hs.night.tane === false ? "#e0b4b4" : "#b7dfc0"}`,
-                  color: hs.night.tane === false ? "#c0392b" : "var(--ok)", fontWeight: 700,
-                }}>
-                  {hs.night.tane === false
-                    ? "タネがありません。翌日仕込むならタネから作ってください"
-                    : "記録しました。冷凍庫の数は15時のチェックで見ます"}
-                </div>
-              )}
-            </div>
-          )}
-          {t.hotsandPrep && hs && (
-            <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 8 }}>
-              <div style={{
-                padding: "10px 11px", borderRadius: 7,
-                background: "#fdf6ec", border: "1px solid #e8d5b0",
-              }}>
-                <div style={{ fontSize: 12.5, fontWeight: 700 }}>
-                  {hs.nextPrep && hs.nextPrep <= (hs.lastMade ?? "")
-                    ? ""
-                    : hs.lastMade
-                      ? `前回の仕込みは${hs.lastMade.slice(5).replace("-", "/")}（${hs.daysSinceMade}日前）`
-                      : "まだ仕込みの記録がありません"}
-                </div>
-                <div style={{ fontSize: 12.5, color: "#9c5f22", marginTop: 3, lineHeight: 1.7 }}>
-                  {hs.plannedFromYesterday && hs.plannedFromYesterday.total > 0 ? (
-                    <>
-                      冷凍庫を各{hs.plannedFromYesterday.target}個にそろえます。
-                      <strong>
-                        {hs.plannedFromYesterday.byFlavor
-                          .filter((b) => b.make > 0)
-                          .map((b) => `${b.flavor}${b.make}個`)
-                          .join("・")}
-                        （合計{hs.plannedFromYesterday.total}個）
-                      </strong>
-                      <div style={{ fontSize: 11.5, color: "var(--muted)" }}>
-                        昨日15時の残り（
-                        {hs.plannedFromYesterday.byFlavor.map((b) => `${b.flavor}${b.have}`).join("・")}
-                        ）から計算しています
-                      </div>
-                    </>
-                  ) : (
-                    <>冷凍庫を各{hs.freezerTarget}個にそろえる分だけ仕込みます。</>
-                  )}
-                  仕込んだ日から{hs.intervalDays}日空けて次にまわります
-                </div>
-                <div style={{ fontSize: 11.5, color: "var(--muted)", margin: "8px 0 4px" }}>
-                  仕込んで冷凍庫に入れた数
-                </div>
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                  {hs.flavors.map((f) => (
-                    <div key={f} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                      <span style={{ fontSize: 12.5 }}>{f}</span>
-                      <input
-                        type="number"
-                        min={0}
-                        value={hsIn[hsKey("made", f)] ?? ""}
-                        onChange={(e) => setHsIn((p) => ({ ...p, [hsKey("made", f)]: e.target.value }))}
-                        style={{ width: 54, fontSize: 14, padding: "6px 8px", textAlign: "center" }}
-                      />
-                      <span style={{ fontSize: 12, color: "var(--muted)" }}>個</span>
-                    </div>
-                  ))}
-                </div>
-                <button
-                  onClick={saveHotsandMade}
-                  disabled={hsBusy}
-                  style={{
-                    marginTop: 8, padding: "8px 14px", borderRadius: 8, border: "none",
-                    background: "var(--accent)", color: "#fff", fontSize: 13,
-                    fontWeight: 700, cursor: "pointer",
-                  }}
-                >
-                  {hsBusy ? "記録中…" : "仕込んだ数を記録する"}
-                </button>
-              </div>
-            </div>
-          )}
           {t.orderList && (
             <div onClick={(e) => e.stopPropagation()}>
               <Link

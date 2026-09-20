@@ -44,16 +44,11 @@ export type Task = {
   pendingOrder?: boolean;
   /** 「やった／今日はやらなくていい」を選ぶ作業。押したほうが記録される */
   choices?: [string, string];
-  /** 閉めるときにホットサンドを整える作業 */
-  hotsand?: "night";
-  /** 15時に冷凍庫のホットサンドを数える作業 */
-  hotsandAfternoon?: boolean;
-  /** 15時に足りなければ出す、食パンを頼む作業 */
-  hotsandBread?: boolean;
-  /** 翌日仕込むことが決まったときに出す、タネを仕込む作業 */
-  hotsandTane?: boolean;
-  /** ホットサンドが足りないときだけ出す仕込みの作業 */
-  hotsandPrep?: boolean;
+  /**
+   * ホットサンドの一連の作業。朝の確認から枝分かれする。
+   * freezer と bread の答えを見て、あとの作業を出すかどうかを決める。
+   */
+  hotsand?: "fridge" | "freezer" | "bread" | "prep" | "breadOrder" | "tane";
   /** 牛乳・コールドブリュー・水を数える作業。朝か夜か */
   daily?: "morning" | "afternoon" | "evening";
   /** 数えた結果、足りないときだけ出す手当ての作業 */
@@ -218,46 +213,57 @@ export const TASKS: Task[] = [
     daily: "afternoon",
   },
   {
-    id: "hotsand-afternoon",
-    phase: "営業中",
-    name: "15時にホットサンドの冷凍庫を数える",
+    // ホットサンドは「朝に見て、その日のうちに動く」に一本化した。
+    // 前は15時に数えて記録していたが、数を残しても使い道がなかった。
+    id: "hotsand-fridge",
+    phase: "朝",
+    name: "ホットサンドを冷蔵庫に補充する",
     detail:
-      "2フレーバーの残りを入れる。合計が5個を切っていたら、その日のうちに" +
-      "食パンを頼む作業とタネを仕込む作業が出る",
-    hotsandAfternoon: true,
+      "平日は各3つ、土日・連休は各5つ。足りなければ冷凍庫から移す。" +
+      "連休かどうかは自分で判断する",
+    hotsand: "fridge",
+  },
+  {
+    id: "hotsand-freezer",
+    phase: "朝",
+    name: "冷凍庫のホットサンドを確認する",
+    detail: "クラシックメルトとガーデンメルトが、それぞれ5つあるか",
+    hotsand: "freezer",
+    choices: ["各5つある", "5つない"],
   },
   {
     id: "hotsand-bread",
-    phase: "営業中",
-    name: "食パンを平和堂に連絡する",
-    detail: "今日中に連絡すれば明日届く。★平和堂は手続き中なので、完了するまでは発注しない",
-    hotsandBread: true,
-  },
-  {
-    id: "hotsand-tane",
-    phase: "営業中",
-    name: "ホットサンドのタネを仕込む",
-    detail: "明日10個仕込むので、その前日にタネを作っておく",
-    hotsandTane: true,
-  },
-  {
-    id: "hotsand-night",
-    phase: "締め",
-    name: "ホットサンドを冷蔵庫に3つずつ補充する",
-    detail:
-      "冷凍庫から移して冷蔵庫を各3個にそろえる。数を見るのは15時のチェックなので、" +
-      "ここではタネの有無だけ記録する",
-    hotsand: "night",
+    phase: "朝",
+    name: "食パンがあるか確認する",
+    detail: "10個ずつ仕込むには食パンが40枚（約7斤）要る",
+    hotsand: "bread",
+    choices: ["食パンはある", "食パンがない"],
   },
   {
     id: "hotsand-prep",
-    phase: "営業中",
-    name: "ホットサンドを仕込む",
+    phase: "朝",
+    name: "ホットサンドを10個ずつ仕込む",
+    detail: "クラシックメルトとガーデンメルトを10個ずつ作って冷凍庫へ",
+    hotsand: "prep",
+  },
+  {
+    id: "hotsand-bread-order",
+    phase: "朝",
+    name: "食パンを手配する",
     detail:
-      "前回の仕込みから3日たった日、または前日15時に冷凍庫が5個を切っていたら出る。" +
-      "いつも10個ずつではなく、冷凍庫を各10個にそろえる分だけ作る。" +
-      "仕込んだ日を起点に、次はそこから3日後",
-    hotsandPrep: true,
+      "その日に買い出しに行くか、平和堂に連絡して翌日持ってきてもらう。" +
+      "届いた翌日に10個ずつ（無理ならできるだけ多く）仕込む。" +
+      "★平和堂は手続き中なので、完了するまでは買い出しで対応する",
+    hotsand: "breadOrder",
+  },
+  {
+    id: "hotsand-tane",
+    phase: "締め",
+    name: "ホットサンドのタネを仕込む",
+    detail:
+      "今日は冷凍庫の確認ができていないか、食パンが無くて仕込めなかった日。" +
+      "タネだけ作っておけば、翌日すぐ焼ける",
+    hotsand: "tane",
   },
   {
     id: "waffle-count",

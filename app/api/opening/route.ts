@@ -19,7 +19,6 @@ import {
 import { openOrders } from "@/lib/purchase";
 import { getShifts } from "@/lib/shift";
 import { getKintai } from "@/lib/kintai";
-import { dayState, saveNight, saveAfternoon, saveMade as saveHotsandMade } from "@/lib/hotsand";
 import type { Slot } from "@/lib/dailycheck";
 import {
   dayState as dailyState,
@@ -45,7 +44,6 @@ export async function GET(req: NextRequest) {
     // 発注チェックは、届いていない発注があるときだけ出す
     const pending = await openOrders();
     const choices = await getChoices(date);
-    const hotsand = await dayState(date);
     const daily = await dailyState(date);
     const [shifts, kin] = await Promise.all([getShifts(), getKintai()]);
     // 夜に足りなかったものは、翌朝の手当てとして持ち越す。
@@ -71,18 +69,26 @@ export async function GET(req: NextRequest) {
         if (t.pendingOrder) {
           return { ...t, done: done.includes(t.id), due: pending.length > 0 };
         }
-        if (t.hotsandAfternoon) {
-          return { ...t, done: done.includes(t.id), due: true };
-        }
-        if (t.hotsandBread) {
-          return { ...t, done: done.includes(t.id), due: hotsand.needBreadCall };
-        }
-        if (t.hotsandTane) {
-          return { ...t, done: done.includes(t.id), due: hotsand.needTane };
-        }
-        if (t.hotsandPrep) {
-          // 前の晩に冷凍庫が少なければ、その日に仕込む
-          return { ...t, done: done.includes(t.id), due: hotsand.needPrep };
+        if (t.hotsand) {
+          // 朝の2つの答えから、そのあとの作業を出すかどうかを決める。
+          // 冷凍庫が足りない → 食パンを確認 → あれば仕込む／無ければ手配
+          const freezerShort = choices["hotsand-freezer"] === "5つない";
+          const noBread = choices["hotsand-bread"] === "食パンがない";
+          const checked = !!choices["hotsand-freezer"];
+          const due =
+            t.hotsand === "fridge" ? true
+            : t.hotsand === "freezer" ? true
+            : t.hotsand === "bread" ? freezerShort
+            : t.hotsand === "prep" ? freezerShort && choices["hotsand-bread"] === "食パンはある"
+            : t.hotsand === "breadOrder" ? freezerShort && noBread
+            // 確認していない日と、食パンが無くて仕込めなかった日は、タネだけ作る
+            : /* tane */ !checked || noBread;
+          return {
+            ...t,
+            done: done.includes(t.id),
+            due,
+            ...(t.choices ? { answer: choices[t.id] ?? null } : {}),
+          };
         }
         if (t.kintai) {
           // シフトに載っている全員の勤怠がある日は、もう出さない
@@ -144,7 +150,6 @@ export async function GET(req: NextRequest) {
         night,
       },
       pendingOrders: pending,
-      hotsand,
       daily: { ...daily, carried },
       // 締めで勤怠をつけるときに使う。シフトと、すでに入っている勤怠
       kintai: {
@@ -166,8 +171,6 @@ export async function GET(req: NextRequest) {
 //   { taskId, done, date? }              … チェックの付け外し
 //   { choice: { taskId, answer }, date? } … 2択の作業でどちらを選んだか
 //   { dailyCount: {...}, date? }         … 牛乳・コールドブリュー・水を数えた結果
-//   { hotsandCount: {...}, date? }       … 閉めるときのホットサンドの記録
-//   { hotsandMade: {...}, date? }        … ホットサンドを仕込んだ数
 //   { waffleBaked: true|false, date? }   … 朝、焼いたか冷蔵庫から出したか
 //   { waffleCounts, bakedAt?, date? }    … 夜のワッフル残数の記録
 export async function POST(req: NextRequest) {
@@ -180,13 +183,6 @@ export async function POST(req: NextRequest) {
       bakedAt?: string;
       waffleBaked?: boolean;
       choice?: { taskId?: string; answer?: string };
-      hotsandCount?: {
-        fridge?: Record<string, number>;
-        freezer?: Record<string, number>;
-        tane?: boolean;
-      };
-      hotsandAfternoon?: { freezer?: Record<string, number> };
-      hotsandMade?: { freezer?: Record<string, number> };
       dailyCount?: { slot?: Slot; values?: DailyValues };
     };
 
@@ -210,31 +206,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, date, daily: await dailyState(date) });
     }
 
-    if (b.hotsandCount) {
-      const date = b.date || todayJST();
-      await saveNight(
-        date,
-        b.hotsandCount.fridge ?? {},
-        b.hotsandCount.freezer ?? {},
-        !!b.hotsandCount.tane,
-      );
-      await toggle(date, "hotsand-night", true);
-      return NextResponse.json({ ok: true, date, hotsand: await dayState(date) });
-    }
 
-    if (b.hotsandAfternoon) {
-      const date = b.date || todayJST();
-      await saveAfternoon(date, b.hotsandAfternoon.freezer ?? {});
-      await toggle(date, "hotsand-afternoon", true);
-      return NextResponse.json({ ok: true, date, hotsand: await dayState(date) });
-    }
 
-    if (b.hotsandMade) {
-      const date = b.date || todayJST();
-      await saveHotsandMade(date, b.hotsandMade.freezer ?? {});
-      await toggle(date, "hotsand-prep", true);
-      return NextResponse.json({ ok: true, date, hotsand: await dayState(date) });
-    }
 
     if (b.waffleBaked !== undefined) {
       const date = b.date || todayJST();
