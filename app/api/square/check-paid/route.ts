@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { markCardPaid } from "@/lib/cardPaid";
 
 const USED_KEY = "checkpaid:used";
 
@@ -54,7 +55,10 @@ async function closeOrder(
       idempotency_key: `chk_${orderId.slice(-10)}_${Date.now().toString(36)}`,
     }),
   });
-  if (res.ok) return { ok: true };
+  if (res.ok) {
+    await markCardPaid(orderId).catch(() => {});
+    return { ok: true };
+  }
   const d = await res.json().catch(() => ({}) as any);
   return { ok: false, detail: d.errors?.[0]?.detail };
 }

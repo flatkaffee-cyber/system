@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { decrementStock } from "@/lib/stock";
 import { buildTaxes, type OrderType } from "@/lib/tax";
+import { cardPaidIds } from "@/lib/cardPaid";
 
 export const runtime = "nodejs";
 
@@ -41,7 +42,10 @@ export async function GET(req: NextRequest) {
         query: {
           filter: {
             state_filter: {
-              states: sinceMinutes > 0 ? ["OPEN", "COMPLETED"] : ["OPEN"],
+              // KDS向けはCANCELEDも取る。カード決済はSquare POS側で計上されるため、
+              // こちらの注文はCANCELEDで閉じるしかなく、それだけ厨房の画面から消えていた。
+              // 本当に取り消した注文は下で除く。
+              states: sinceMinutes > 0 ? ["OPEN", "COMPLETED", "CANCELED"] : ["OPEN"],
             },
             ...(sinceMinutes > 0
               ? {
@@ -63,7 +67,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: data.errors?.[0]?.detail || "取得エラー" }, { status: res.status });
     }
 
-    const orders = (data.orders || []).map((o: any) => ({
+    const paidIds = sinceMinutes > 0 ? await cardPaidIds() : new Set<string>();
+    const orders = (data.orders || [])
+      .filter((o: any) => o.state !== "CANCELED" || paidIds.has(o.id))
+      .map((o: any) => ({
       id: o.id,
       ticket_name: o.ticket_name || "",
       state: o.state,

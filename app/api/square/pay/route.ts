@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { markCardPaid } from "@/lib/cardPaid";
 
 export const runtime = "nodejs";
 
@@ -74,6 +75,8 @@ export async function POST(req: NextRequest) {
           { status: closeRes.status },
         );
       }
+      // KDSから消えないよう、カード決済で閉じたことを控える
+      await markCardPaid(order_id).catch(() => {});
       return NextResponse.json({ ok: true, method: "card_close" });
     }
 

@@ -253,46 +253,72 @@ export default function TablePage() {
       }
       if (!cardOrderId) cardOrderId = sessionStorage.getItem("card_pending_order");
     }
-    // Square POSで決済完了 → OPEN注文をCOMPLETEDにする
-    const finishCard = (id: string) => {
-      fetch("/api/square/pay", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ order_id: id, amount: 0, tendered: 0, method: "card_close" }),
-      })
-        .catch(() => {})
-        .finally(() => {
-          sessionStorage.removeItem("card_pending_order");
-          fetch("/api/square/card-pending", { method: "DELETE" }).catch(() => {});
-          loadOrders();
-        });
+    // Square POSから戻ってきた注文を閉じる。
+    // 以前は戻ってきただけで閉じていた（決済したかを確かめていなかった）。
+    // 別端末の注文を誤って閉じることがあったので、Squareに同じ金額の決済が
+    // 実際にあるかを確かめてから閉じる。見つからなければ開いたままにして、
+    // 「支払い確認」から手で閉じられるようにする。
+    const finishCard = async (ids: string[]) => {
       window.history.replaceState({}, "", "/table");
+      let closed = 0;
+      let unpaid = 0;
+      for (const id of ids) {
+        try {
+          const r = await fetch("/api/square/check-paid", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ order_id: id }),
+          });
+          const d = await r.json();
+          if (d.closed || d.alreadyClosed) {
+            closed += 1;
+            fetch(`/api/square/card-pending?order_id=${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => {});
+          } else {
+            unpaid += 1;
+          }
+        } catch {
+          unpaid += 1;
+        }
+      }
+      sessionStorage.removeItem("card_pending_order");
+      if (unpaid > 0) {
+        setErr(
+          closed > 0
+            ? `カード決済の確認：${closed}件は閉じました。${unpaid}件は決済が見つからず開いたままです。「支払い確認」から閉じてください。`
+            : "Squareに決済が見つかりませんでした。注文は開いたままです。決済できていれば「支払い確認」から閉じてください。",
+        );
+      }
+      loadOrders();
     };
 
     // ホーム画面アプリから出てSafariに戻ったときは、端末の控えが無い。
-    // サーバーの控えを見に行ってから続ける。
-    const resolveOrderId = async (): Promise<string | null> => {
-      if (cardOrderId) return cardOrderId;
-      if (!params.has("data")) return null;
+    // サーバーの控えを見に行く。複数の注文が決済に出ているときは全部照合する
+    // （どれが戻ってきたのかは分からないので、決済のある注文だけが閉まる）。
+    const resolveOrderIds = async (): Promise<string[]> => {
+      if (cardOrderId) return [cardOrderId];
+      if (!params.has("data")) return [];
       try {
         const r = await fetch("/api/square/card-pending");
         const d = await r.json();
-        return d.orderId || null;
+        const list: string[] = Array.isArray(d.pending) ? d.pending : d.orderId ? [d.orderId] : [];
+        return list;
       } catch {
-        return null;
+        return [];
       }
     };
 
     if (posError) {
       setErr(`カード決済に失敗しました（${posError}）`);
+      const failedId = cardOrderId || sessionStorage.getItem("card_pending_order");
       sessionStorage.removeItem("card_pending_order");
-      fetch("/api/square/card-pending", { method: "DELETE" }).catch(() => {});
+      if (failedId) {
+        fetch(`/api/square/card-pending?order_id=${encodeURIComponent(failedId)}`, { method: "DELETE" }).catch(() => {});
+      }
       window.history.replaceState({}, "", "/table");
     } else if (params.has("data") || cardOrderId) {
-      void resolveOrderId().then((id) => {
-        if (!id) return;
-        cardOrderId = id;
-        finishCard(id);
+      void resolveOrderIds().then((ids) => {
+        if (!ids.length) return;
+        void finishCard(ids);
       });
     }
     const iv = setInterval(loadOrders, 10000);
@@ -445,7 +471,21 @@ export default function TablePage() {
         });
       }
 
-      const data = await res.json();
+      let data = await res.json();
+      // 別の端末が同じ卓に先に追加していると version がずれて弾かれる。
+      // 最新の注文を取り直して、1回だけやり直す。
+      if (!res.ok && existing && /version/i.test(String(data.error || ""))) {
+        const fresh = await fetch("/api/square/order").then((r) => r.json()).catch(() => null);
+        const latest = (fresh?.orders || []).find((o: Order) => o.id === existing.id);
+        if (latest) {
+          res = await fetch("/api/square/order", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ order_id: latest.id, items, version: latest.version }),
+          });
+          data = await res.json();
+        }
+      }
       if (!res.ok) throw new Error(data.error || "送信失敗");
 
       setMsg(existing ? "追加注文を送りました" : "注文を送りました");
