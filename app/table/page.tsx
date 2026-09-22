@@ -747,10 +747,15 @@ export default function TablePage() {
                   const cat = item.category || "その他";
                   (grouped[cat] ??= []).push(item);
                 }
-                const cats = [
+                let cats = [
                   ...catOrder.filter(c => grouped[c]),
                   ...Object.keys(grouped).filter(c => !catOrder.includes(c)),
                 ];
+                // パーティ受付は参加費を先頭に出す。入口で最初に打つのがこれなので
+                if (party) {
+                  const fee = "🎆 パーティ参加費";
+                  cats = [fee, ...cats.filter(c => c !== fee)].filter(c => grouped[c]);
+                }
 
                 return cats.map(cat => (
                   <div className="card" key={cat}>
