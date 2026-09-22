@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { listCategories, createCategory, createItem } from "@/lib/squareCatalog";
 
 export const runtime = "nodejs";
 
@@ -15,7 +16,7 @@ function hdrs() {
 
 // Squareのカタログに商品を追加する。
 // 注文画面は catalog_object_id で注文を作るので、Squareに無い商品は売れない。
-// POST { name, price, category?, description? }
+// POST { name, price, category?(名前), dryRun:false }  ※dryRunを明示しないと作らない
 // 既存の商品名や価格を直す。
 // Squareは差分更新ができないので、今のオブジェクトを取ってきて必要な所だけ書き換えて戻す。
 // PUT { id, name?, price? }
@@ -82,50 +83,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ dryRun: true, willCreate: b });
     }
 
-    const key = `item_${Date.now()}`;
-    const body = {
-      idempotency_key: key,
-      object: {
-        type: "ITEM",
-        id: `#${key}`,
-        item_data: {
-          name: b.name,
-          ...(b.description ? { description: b.description } : {}),
-          variations: [
-            {
-              type: "ITEM_VARIATION",
-              id: `#${key}_v`,
-              item_variation_data: {
-                name: "Regular",
-                pricing_type: "FIXED_PRICING",
-                price_money: { amount: b.price, currency: "JPY" },
-              },
-            },
-          ],
-        },
-      },
-    };
-
-    const res = await fetch(`${SQUARE_API}/catalog/object`, {
-      method: "POST",
-      headers: hdrs(),
-      body: JSON.stringify(body),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      return NextResponse.json(
-        { error: data.errors?.[0]?.detail || `登録に失敗(${res.status})`, details: data.errors },
-        { status: res.status },
-      );
+    // カテゴリは名前で受ける。注文画面の大分類はSquareのカテゴリで決まるので、
+    // ここで付けておかないと「その他」に落ちる。無い名前なら作る。
+    let categoryId: string | null = null;
+    if (b.category?.trim()) {
+      const name = b.category.trim();
+      const found = (await listCategories()).find((c) => c.name === name);
+      categoryId = found ? found.id : (await createCategory(name)).id;
     }
-    const obj = data.catalog_object;
-    return NextResponse.json({
-      ok: true,
-      id: obj?.id,
-      name: obj?.item_data?.name,
-      variationId: obj?.item_data?.variations?.[0]?.id,
-      price: obj?.item_data?.variations?.[0]?.item_variation_data?.price_money?.amount,
-    });
+    const it = await createItem(b.name, Math.round(b.price), categoryId);
+    return NextResponse.json({ ok: true, ...it, categoryId });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "登録に失敗" },

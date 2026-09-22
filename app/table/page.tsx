@@ -104,9 +104,22 @@ function autoMode(): "day" | "night" {
   return mins >= 360 && mins < 1110 ? "day" : "night";
 }
 
-// 盆踊りパーティの参加費。通常のメニューとは別扱いにして、
-// パーティモードのときだけ出す。
-const PARTY_NAMES = [
+// パーティモードで出す品目の決め方。
+// 以前は盆踊りの参加費を商品名で直書きしていたが、イベントのたびに
+// コードを直すことになるので、Squareのカテゴリで決める。
+//
+//   パーティ専用（普段の画面には出さない）… 参加費・ショット・スナック
+//   パーティでも普段でも出す              … ビール・ハイボール・サワー・お茶割り・カクテル・ソフトドリンク・グッズ
+//   それ以外（フード・カフェ・ワインなど）… 普段だけ
+const PARTY_ONLY_CATEGORIES = new Set(["🎆 パーティ参加費", "🌵 テキーラ", "🍿 スナック"]);
+const PARTY_SHARED_CATEGORIES = new Set([
+  "🍺 ビール", "🥃 ハイボール", "🍋 サワー", "🍵 お茶割り", "🍸 カクテル", "🥤 ソフトドリンク", "👕 グッズ",
+]);
+// カテゴリは違うがパーティメニューに載っているもの（モクテル）
+const PARTY_SHARED_NAMES = new Set(["梅ライムソーダ", "柚子レモネード"]);
+// 終わったイベントの参加費。Squareに残っているが、どの画面にも出さない。
+// メニュー管理で「提供停止」にしたら、ここから消してよい。
+const RETIRED_NAMES = new Set([
   "花火＋パーティ（飲み放題＋ビール1杯）",
   "花火＋パーティ（3杯）",
   "花火のみ",
@@ -114,11 +127,16 @@ const PARTY_NAMES = [
   "パーティのみ（ほろ酔い3杯）",
   "パーティのみ（ノンアル飲み放題）",
   "パーティのみ（入場のみ）",
-];
-// パーティ当日だけ売るドリンク。参加費とは別枠だが、出す場面は同じ。
-const PARTY_DRINK_NAMES = ["テキーラショット", "テキーラボトル"];
-// パーティモードで出す品目の全体。ここに入っているものは通常営業の画面には出さない。
-const PARTY_SET = new Set([...PARTY_NAMES, ...PARTY_DRINK_NAMES]);
+]);
+function showInParty(item: { name: string; category?: string }): boolean {
+  if (RETIRED_NAMES.has(item.name)) return false;
+  const c = item.category || "";
+  return PARTY_ONLY_CATEGORIES.has(c) || PARTY_SHARED_CATEGORIES.has(c) || PARTY_SHARED_NAMES.has(item.name);
+}
+function showInNormal(item: { name: string; category?: string }): boolean {
+  if (RETIRED_NAMES.has(item.name)) return false;
+  return !PARTY_ONLY_CATEGORIES.has(item.category || "");
+}
 
 export default function TablePage() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -640,7 +658,7 @@ export default function TablePage() {
     <div className="wrap">
       <header>
         <h1>🛎️ 注文</h1>
-        <p>{party ? "🎆 盆踊りパーティ 受付" : mode === "day" || takeout ? `カウンター注文（${orderType}）` : "テーブル注文"}</p>
+        <p>{party ? "🎉 パーティ 受付" : mode === "day" || takeout ? `カウンター注文（${orderType}）` : "テーブル注文"}</p>
       </header>
       <Nav />
 
@@ -722,7 +740,7 @@ export default function TablePage() {
                   const v = item.variations[0];
                   if (!v || v.price == null) return false;
                   // 参加費は普段のメニューには出さない
-                  return party ? PARTY_SET.has(item.name) : !PARTY_SET.has(item.name);
+                  return party ? showInParty(item) : showInNormal(item);
                 });
                 const grouped: Record<string, MenuItem[]> = {};
                 for (const item of validItems) {
@@ -1432,7 +1450,7 @@ export default function TablePage() {
             const validItems = menu.filter(item => {
               const v = item.variations[0];
               // 参加費はパーティモード専用なので、テーブル注文には出さない
-              return v && v.price != null && !PARTY_SET.has(item.name);
+              return v && v.price != null && showInNormal(item);
             });
 
             const grouped: Record<string, MenuItem[]> = {};
