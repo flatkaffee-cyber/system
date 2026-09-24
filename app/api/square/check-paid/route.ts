@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { markCardPaid } from "@/lib/cardPaid";
+import { saveFix, type FixItem } from "@/lib/salesFix";
 
 const USED_KEY = "checkpaid:used";
 
@@ -40,6 +41,31 @@ function hdrs() {
     Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
   };
+}
+
+/**
+ * カード決済はSquare POSが作った別の注文にひも付く。その注文は金額だけで品目が無いので、
+ * 売上の品目別集計に「金額入力」として出ていた。こちらの注文の品目を、POS側の注文に写しておく。
+ * 売上ページは対応表（sales-fix）を最優先で読むので、これで品目が出るようになる。
+ * 失敗しても会計は済んでいるので、閉じる処理は止めない。
+ */
+async function copyItemsToPosOrder(payment: any, ourOrderId: string, ourOrder: any): Promise<boolean> {
+  const posOrderId: string | undefined = payment?.order_id;
+  if (!posOrderId || posOrderId === ourOrderId) return false;
+  const items: FixItem[] = (ourOrder?.line_items || [])
+    .filter((li: any) => li.name)
+    .map((li: any) => ({
+      name: String(li.name),
+      qty: parseInt(li.quantity) || 1,
+      amount: li.total_money?.amount ?? 0,
+    }));
+  if (!items.length) return false;
+  try {
+    await saveFix(posOrderId, items);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** 開いたままの注文を閉じる。売上はSquare側で計上済みなのでCANCELEDにする */
@@ -222,12 +248,14 @@ export async function POST(req: NextRequest) {
         });
       }
       await markUsed(p.id, order_id);
+      const itemsCopied = await copyItemsToPosOrder(p, order_id, order);
       const amt = p.amount_money?.amount ?? 0;
       return NextResponse.json({
         ok: true,
         paid: true,
         closed: true,
         total,
+        itemsCopied,
         message:
           `¥${amt.toLocaleString()} の決済でこの注文を閉じました。` +
           (amt !== total ? `（注文は¥${total.toLocaleString()}。差額は¥${(amt - total).toLocaleString()}）` : ""),
@@ -309,11 +337,13 @@ export async function POST(req: NextRequest) {
     const p = payments[0];
     // この決済は使い切った印を付ける。次の注文では候補に出さない。
     await markUsed(p.id, order_id);
+    const itemsCopied = await copyItemsToPosOrder(p, order_id, order);
     return NextResponse.json({
       ok: true,
       paid: true,
       closed: true,
       total,
+      itemsCopied,
       paidAt: p.created_at,
       method: p.source_type,
       message: `¥${total.toLocaleString()} の支払いを確認しました。注文を閉じました。`,
