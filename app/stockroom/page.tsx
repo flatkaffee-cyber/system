@@ -489,7 +489,7 @@ export default function StockroomPage() {
                           onClick={() => { setEditId(i.id); setEditPar(String(i.par)); }}
                           style={{ fontSize: 12, color: "var(--muted)", marginTop: 2, cursor: "pointer" }}
                         >
-                          あるべき数: <strong style={{ color: "var(--ink)" }}>{i.par}{i.unit}</strong>
+                          目安: <strong style={{ color: "var(--ink)" }}>{i.par}{i.unit}</strong><span style={{ color: "var(--muted)", marginLeft: 4 }}>（メモ。この数を切ったら発注、という決まりではない）</span>
                           <span style={{ marginLeft: 4, fontSize: 10.5 }}>（タップで変更）</span>
                           {i.note && <span style={{ marginLeft: 6 }}>／ {i.note}</span>}
                         </div>
