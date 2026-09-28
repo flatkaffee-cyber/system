@@ -106,7 +106,7 @@ export const SEED_ITEMS: Item[] = [
   { id: "shred-cheese", name: "シュレッダーチーズ", group: "フード", par: 500, unit: "g", orderQty: 1000 },
   { id: "tuna", name: "ツナ缶", group: "フード", par: 4, unit: "缶" },
   { id: "sausage", name: "ソーセージ（冷凍）", group: "フード", par: 10, unit: "本" },
-  { id: "sauerkraut", name: "ザワークラウト", group: "フード", par: 1, unit: "袋" },
+  { id: "cabbage", name: "キャベツ", group: "フード", par: 1, unit: "玉", buyId: 44, note: "自家製ザワークラウトの材料（1回の仕込みで1kg）" },
   { id: "olive", name: "オリーブ（黒・緑）", group: "フード", par: 1, unit: "瓶ずつ" },
   { id: "pickles", name: "ピクルス", group: "フード", par: 1, unit: "瓶" },
   { id: "cracker", name: "クラッカー", group: "フード", par: 2, unit: "箱" },
@@ -134,6 +134,7 @@ export const SEED_ITEMS: Item[] = [
   // 仕込み品（足りなければ発注ではなく仕込み）
   { id: "mashed", name: "マッシュポテト", group: "仕込み品", par: 800, unit: "g", madeInHouse: true, shikomiId: "mashed-potato", keepDays: 10 },
   { id: "amiebi", name: "あみえびクリームチーズ", group: "仕込み品", par: 1, unit: "タッパ", madeInHouse: true, shikomiId: "amiebi-cream-cheese", keepDays: 10 },
+  { id: "sauerkraut", name: "自家製ザワークラウト", group: "仕込み品", par: 1, unit: "タッパ", madeInHouse: true, shikomiId: "sauerkraut", keepDays: 60, note: "キャベツから仕込む。発酵に夏3日・冬7日かかる" },
   { id: "ajillo", name: "アヒージョセット（冷凍）", group: "仕込み品", par: 6, unit: "セット", madeInHouse: true },
   { id: "cold-brew", name: "コールドブリュー", group: "仕込み品", par: 2, unit: "本", madeInHouse: true },
   { id: "bread-baked", name: "自家製パン（冷凍・焼き済み）", group: "仕込み品", par: 6, unit: "個", madeInHouse: true },

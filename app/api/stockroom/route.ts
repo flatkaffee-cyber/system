@@ -184,7 +184,15 @@ export async function POST(req: NextRequest) {
         note: b.item.note ?? cur?.note,
         ...(b.item.buyId !== undefined ? { buyId: Number(b.item.buyId) } : {}),
         ...(b.item.orderQty !== undefined ? { orderQty: Number(b.item.orderQty) } : {}),
+        ...(b.item.shikomiId !== undefined ? { shikomiId: String(b.item.shikomiId) } : {}),
+        ...(b.item.keepDays !== undefined ? { keepDays: Number(b.item.keepDays) } : {}),
       };
+      // null を送った項目は外す。買う品から仕込み品に変えたとき、
+      // 仕入れ表へのひも付け(buyId)が残ったままにならないように。
+      const raw = b.item as Record<string, unknown>;
+      for (const k of ["buyId", "orderQty", "shikomiId", "keepDays"] as const) {
+        if (raw[k] === null) delete item[k];
+      }
       await saveItem(item);
       return NextResponse.json({ ok: true, item });
     }
