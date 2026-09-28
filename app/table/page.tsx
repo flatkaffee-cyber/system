@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Nav from "@/components/Nav";
 
 type MenuItem = {
@@ -195,12 +195,28 @@ export default function TablePage() {
   // 仕込み在庫
   const [stock, setStock] = useState<Record<string, number>>({});
 
+  // 割引を付けた直後の金額。Squareの注文一覧は反映が10秒ほど遅れるので、
+  // その間に定期更新で古い金額に戻され、古い金額で会計しないよう30秒はこちらを優先する
+  const freshTotals = useRef<Record<string, { total: number; discount: number; version?: number; until: number }>>({});
+  const applyFresh = (list: Order[]): Order[] =>
+    list.map((o) => {
+      const f = freshTotals.current[o.id];
+      if (!f || Date.now() > f.until) return o;
+      return { ...o, total: f.total, discount: f.discount, version: f.version ?? o.version };
+    });
+
+  const rememberFresh = (id: string, o?: { total?: number; discount?: number; version?: number }) => {
+    if (!o || typeof o.total !== "number") return;
+    freshTotals.current[id] = { total: o.total, discount: o.discount ?? 0, version: o.version, until: Date.now() + 30_000 };
+    setOrders((prev) => applyFresh(prev));
+  };
+
   // OPEN注文を取得
   const loadOrders = useCallback(async () => {
     try {
       const res = await fetch("/api/square/order");
       const data = await res.json();
-      if (res.ok) setOrders(data.orders || []);
+      if (res.ok) setOrders(applyFresh(data.orders || []));
     } catch {}
   }, []);
 
@@ -1354,7 +1370,7 @@ export default function TablePage() {
                   });
                   const d = await r.json().catch(() => ({}));
                   if (!r.ok) setErr(d.error || "割引を付けられませんでした");
-                  await loadOrders();
+                  else rememberFresh(currentOrder.id, d.order);
                 }}
                 onClear={async () => {
                   setErr("");
@@ -1365,7 +1381,7 @@ export default function TablePage() {
                   });
                   const d = await r.json().catch(() => ({}));
                   if (!r.ok) setErr(d.error || "割引を外せませんでした");
-                  await loadOrders();
+                  else rememberFresh(currentOrder.id, d.order);
                 }}
               />
               <div style={{ textAlign: "right", fontWeight: 700, fontSize: 16, marginTop: 8, paddingTop: 8, borderTop: "2px solid var(--line)" }}>

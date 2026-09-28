@@ -285,6 +285,8 @@ export async function PUT(req: NextRequest) {
         id: data.order?.id,
         ticket_name: data.order?.ticket_name,
         total: data.order?.total_money?.amount || 0,
+        discount: data.order?.total_discount_money?.amount || 0,
+        version: data.order?.version,
       },
     });
   } catch (e) {
