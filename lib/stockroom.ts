@@ -72,7 +72,6 @@ export const SEED_ITEMS: Item[] = [
   { id: "gf-j", name: "グレープフルーツジュース（お酒にプラス）", group: "ドリンク（ノンアル）", par: 2, unit: "本" },
   { id: "yuzu", name: "ゆず茶", group: "ドリンク（ノンアル）", par: 1, unit: "瓶" },
   { id: "ume-j", name: "梅ジュース", group: "ドリンク（ノンアル）", par: 1, unit: "本" },
-  { id: "gum", name: "ガムシロップ", group: "ドリンク（ノンアル）", par: 1, unit: "本", buyId: 23, orderQty: 1 },
 
   // ドリンク（酒）— ほとんど動かないので1本
   { id: "beer-heineken", name: "ハイネケン", group: "ドリンク（酒）", par: 6, unit: "本", buyId: 26, orderQty: 24 },
@@ -106,7 +105,7 @@ export const SEED_ITEMS: Item[] = [
   { id: "shred-cheese", name: "シュレッダーチーズ", group: "フード", par: 500, unit: "g", orderQty: 1000 },
   { id: "tuna", name: "ツナ缶", group: "フード", par: 4, unit: "缶" },
   { id: "sausage", name: "ソーセージ（冷凍）", group: "フード", par: 10, unit: "本" },
-  { id: "cabbage", name: "キャベツ", group: "フード", par: 1, unit: "玉", buyId: 44, note: "自家製ザワークラウトの材料（1回の仕込みで1kg）" },
+  { id: "cabbage", name: "キャベツ", group: "フード", par: 1, unit: "玉", buyId: 57, note: "自家製ザワークラウトの材料（1回の仕込みで1kg）" },
   { id: "olive", name: "オリーブ（黒・緑）", group: "フード", par: 1, unit: "瓶ずつ" },
   { id: "pickles", name: "ピクルス", group: "フード", par: 1, unit: "瓶" },
   { id: "cracker", name: "クラッカー", group: "フード", par: 2, unit: "箱" },
