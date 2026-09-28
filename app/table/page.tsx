@@ -9,7 +9,7 @@ type MenuItem = {
   category: string;
   variations: { id: string; name: string; price: number }[];
 };
-type OrderItem = { uid: string; name: string; qty: number; amount: number; catalog_object_id: string; note?: string };
+type OrderItem = { uid: string; name: string; qty: number; amount: number; catalog_object_id: string; note?: string; /** 値引き前の金額 */ gross?: number };
 type Order = {
   id: string;
   ticket_name: string;
@@ -159,6 +159,8 @@ export default function TablePage() {
   const [variantPending, setVariantPending] = useState<MenuItem | null>(null);
   const [soyPending, setSoyPending] = useState<{ item: MenuItem; note: string } | null>(null);
   const [payMode, setPayMode] = useState(false);
+  // PayPayの会計画面（お客さんにQRと金額を見せる）
+  const [paypayView, setPaypayView] = useState(false);
   // お客さんが席を移ったときの移動先。空なら移動UIを閉じている
   const [moveTo, setMoveTo] = useState<string | null>(null);
   // Squareに飛んだまま戻らないと注文が開いたまま残る。その確認中かどうか。
@@ -756,13 +758,13 @@ export default function TablePage() {
 
       {/* 昼/夜 切替 */}
       <div className="sub-tabs" style={{ marginBottom: 12 }}>
-        <button className={`sub-tab ${mode === "day" && !party ? "active" : ""}`} onClick={() => { setMode("day"); setParty(false); setTakeout(false); setOrderType("店内"); setSelected(null); setCart([]); setDiscount(0); setPayMode(false); setPayResult(null); }}>
+        <button className={`sub-tab ${mode === "day" && !party ? "active" : ""}`} onClick={() => { setMode("day"); setParty(false); setTakeout(false); setOrderType("店内"); setSelected(null); setCart([]); setDiscount(0); setPayMode(false); setPaypayView(false); setPayResult(null); }}>
           ☀️ 昼（カウンター）
         </button>
-        <button className={`sub-tab ${mode === "night" && !party ? "active" : ""}`} onClick={() => { setMode("night"); setParty(false); setCart([]); setDiscount(0); setPayMode(false); setPayResult(null); }}>
+        <button className={`sub-tab ${mode === "night" && !party ? "active" : ""}`} onClick={() => { setMode("night"); setParty(false); setCart([]); setDiscount(0); setPayMode(false); setPaypayView(false); setPayResult(null); }}>
           🌙 夜（テーブル）
         </button>
-        <button className={`sub-tab ${party ? "active" : ""}`} onClick={() => { setMode("day"); setParty(true); setTakeout(false); setOrderType("パーティ受付"); setSelected(null); setCart([]); setDiscount(0); setPayMode(false); setPayResult(null); }}>
+        <button className={`sub-tab ${party ? "active" : ""}`} onClick={() => { setMode("day"); setParty(true); setTakeout(false); setOrderType("パーティ受付"); setSelected(null); setCart([]); setDiscount(0); setPayMode(false); setPaypayView(false); setPayResult(null); }}>
           🎆 パーティ
         </button>
       </div>
@@ -800,7 +802,7 @@ export default function TablePage() {
         <>
           {takeout && (
             <button
-              onClick={() => { setTakeout(false); setOrderType("店内"); setCart([]); setDiscount(0); setPayMode(false); setPayResult(null); }}
+              onClick={() => { setTakeout(false); setOrderType("店内"); setCart([]); setDiscount(0); setPayMode(false); setPaypayView(false); setPayResult(null); }}
               style={{
                 width: "100%", padding: "10px 0", marginBottom: 10, borderRadius: 10,
                 border: "1px solid var(--line)", background: "#fff", fontSize: 14,
@@ -988,8 +990,34 @@ export default function TablePage() {
                     </div>
                   )}
 
+                  {/* PayPay: お客さんにQRと金額を見せてから確定する */}
+                  {paypayView && (
+                    <CustomerView
+                      method="paypay"
+                      lines={cart.map((c) => ({ name: c.note ? `${c.name}（${c.note}）` : c.name, qty: c.quantity, amount: c.price * c.quantity }))}
+                      discount={discount}
+                      total={cartTotal}
+                      onBack={() => setPaypayView(false)}
+                    >
+                      <button
+                        disabled={sending}
+                        onClick={async () => { await submitDayOrder("paypay"); setPaypayView(false); }}
+                        style={{ width: "100%", padding: "16px 0", borderRadius: 12, background: "#e60020", color: "#fff", fontSize: 18, fontWeight: 800, border: "none", cursor: "pointer" }}
+                      >
+                        {sending ? "処理中..." : "PayPayで受け取った（会計を確定）"}
+                      </button>
+                    </CustomerView>
+                  )}
+
                   {/* 現金会計モード */}
                   {payMode ? (
+                    <CustomerView
+                      method="cash"
+                      lines={cart.map((c) => ({ name: c.note ? `${c.name}（${c.note}）` : c.name, qty: c.quantity, amount: c.price * c.quantity }))}
+                      discount={discount}
+                      total={cartTotal}
+                      onBack={() => setPayMode(false)}
+                    >
                     <div style={{ marginTop: 10 }}>
                       <label>お預かり金額</label>
                       <input type="number" value={tendered} onChange={(e) => setTendered(e.target.value)} placeholder={String(cartTotal)} style={{ textAlign: "right", fontSize: 20, fontWeight: 700 }} autoFocus />
@@ -1012,11 +1040,12 @@ export default function TablePage() {
                         >{sending ? "処理中..." : "現金で決済"}</button>
                       </div>
                     </div>
+                    </CustomerView>
                   ) : (
                     <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                       <button onClick={() => { setPayMode(true); setTendered(""); }} style={{ flex: 1, padding: "14px 0", borderRadius: 10, background: "var(--ok)", color: "#fff", fontSize: 15, fontWeight: 700, border: "none", cursor: "pointer" }}>💴 現金</button>
                       <button onClick={() => submitDayOrder("card")} disabled={!squareAppId || sending} style={{ flex: 1, padding: "14px 0", borderRadius: 10, background: "#2980b9", color: "#fff", fontSize: 15, fontWeight: 700, border: "none", cursor: "pointer" }}>💳 カード</button>
-                      <button onClick={() => { if (confirm("PayPay支払い済みですか？")) submitDayOrder("paypay"); }} disabled={sending} style={{ flex: 1, padding: "14px 0", borderRadius: 10, background: "#e60020", color: "#fff", fontSize: 15, fontWeight: 700, border: "none", cursor: "pointer" }}>PayPay</button>
+                      <button onClick={() => setPaypayView(true)} disabled={sending} style={{ flex: 1, padding: "14px 0", borderRadius: 10, background: "#e60020", color: "#fff", fontSize: 15, fontWeight: 700, border: "none", cursor: "pointer" }}>PayPay</button>
                     </div>
                   )}
                 </div>
@@ -1031,7 +1060,7 @@ export default function TablePage() {
 
       {/* テイクアウト（夜でも受けられる） */}
       <button
-        onClick={() => { setTakeout(true); setOrderType("テイクアウト"); setSelected(null); setCart([]); setDiscount(0); setPayMode(false); setPayResult(null); }}
+        onClick={() => { setTakeout(true); setOrderType("テイクアウト"); setSelected(null); setCart([]); setDiscount(0); setPayMode(false); setPaypayView(false); setPayResult(null); }}
         style={{
           width: "100%", padding: "14px 0", marginBottom: 12, borderRadius: 10,
           border: "none", background: "#8e6f4e", color: "#fff",
@@ -1470,10 +1499,7 @@ export default function TablePage() {
                     💳 カード
                   </button>
                   <button
-                    onClick={() => {
-                      if (!confirm(`${isSplit ? `選択した${pickedQty}点（${fmt(payTargetTotal)}）` : selected} をPayPay支払い済みにしますか？`)) return;
-                      settle("paypay");
-                    }}
+                    onClick={() => setPaypayView(true)}
                     disabled={paying}
                     style={{
                       flex: 1, padding: "14px 0", borderRadius: 10,
@@ -1486,8 +1512,38 @@ export default function TablePage() {
                 </div>
               )}
 
+              {/* PayPay: お客さんにQRと金額を見せてから確定する */}
+              {paypayView && !payResult && (
+                <CustomerView
+                  method="paypay"
+                  lines={isSplit
+                        ? splitItems.map((p) => ({ name: p.item.note ? `${p.item.name}（${p.item.note}）` : p.item.name, qty: p.qty, amount: Math.round((p.item.amount / p.item.qty) * p.qty) }))
+                        : (currentOrder?.items ?? []).map((i) => ({ name: i.note ? `${i.name}（${i.note}）` : i.name, qty: i.qty, amount: i.gross ?? i.amount }))}
+                  discount={isSplit ? 0 : currentOrder?.discount ?? 0}
+                  total={payTargetTotal}
+                  onBack={() => setPaypayView(false)}
+                >
+                  <button
+                    disabled={paying}
+                    onClick={async () => { await settle("paypay"); setPaypayView(false); }}
+                    style={{ width: "100%", padding: "16px 0", borderRadius: 12, background: "#e60020", color: "#fff", fontSize: 18, fontWeight: 800, border: "none", cursor: "pointer" }}
+                  >
+                    {paying ? "処理中..." : "PayPayで受け取った（会計を確定）"}
+                  </button>
+                </CustomerView>
+              )}
+
               {/* 決済フロー */}
               {payMode && !payResult && (
+                <CustomerView
+                  method="cash"
+                  lines={isSplit
+                        ? splitItems.map((p) => ({ name: p.item.note ? `${p.item.name}（${p.item.note}）` : p.item.name, qty: p.qty, amount: Math.round((p.item.amount / p.item.qty) * p.qty) }))
+                        : (currentOrder?.items ?? []).map((i) => ({ name: i.note ? `${i.name}（${i.note}）` : i.name, qty: i.qty, amount: i.gross ?? i.amount }))}
+                  discount={isSplit ? 0 : currentOrder?.discount ?? 0}
+                  total={payTargetTotal}
+                  onBack={() => setPayMode(false)}
+                >
                 <div style={{ marginTop: 12, borderTop: "2px solid var(--line)", paddingTop: 12 }}>
                   <div style={{ textAlign: "center", fontSize: 24, fontWeight: 800, marginBottom: 12 }}>
                     {fmt(payTargetTotal)}
@@ -1550,6 +1606,7 @@ export default function TablePage() {
                   </div>
                   {err && <p className="err">{err}</p>}
                 </div>
+                </CustomerView>
               )}
 
               {/* 決済完了 */}
@@ -1869,6 +1926,103 @@ function DiscountRow({
           </button>
         </>
       )}
+    </div>
+  );
+}
+
+
+/**
+ * お客さんに見せる会計画面。明細と合計を大きく出す。
+ * PayPayのときは店舗のQRコード（public/paypay-qr.png）も出す。
+ * 下半分（children）はスタッフが操作する部分（お預かり金額・確定ボタン）。
+ */
+function CustomerView({
+  method,
+  lines,
+  discount = 0,
+  total,
+  onBack,
+  children,
+}: {
+  method: "cash" | "paypay";
+  lines: { name: string; qty: number; amount: number }[];
+  discount?: number;
+  total: number;
+  onBack: () => void;
+  children?: React.ReactNode;
+}) {
+  const [qrOk, setQrOk] = useState(true);
+  const yen = (n: number) => `¥${n.toLocaleString()}`;
+  return (
+    <div
+      style={{
+        position: "fixed", inset: 0, zIndex: 200, background: "#fffdf8",
+        overflowY: "auto", WebkitOverflowScrolling: "touch",
+      }}
+    >
+      <div style={{ maxWidth: 560, margin: "0 auto", padding: "20px 18px 32px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: method === "paypay" ? "#e60020" : "var(--ok)" }}>
+            {method === "paypay" ? "PayPay でお支払い" : "💴 現金でお支払い"}
+          </div>
+          <button
+            onClick={onBack}
+            style={{ padding: "8px 14px", borderRadius: 10, border: "1px solid var(--line)", background: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" }}
+          >
+            ← 戻る
+          </button>
+        </div>
+
+        {/* 明細 */}
+        <div style={{ marginTop: 14, borderTop: "2px solid var(--ink)" }}>
+          {lines.map((l, i) => (
+            <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "10px 0", borderBottom: "1px solid #eee", fontSize: 19 }}>
+              <span style={{ fontWeight: 600 }}>
+                {l.name}
+                {l.qty > 1 && <span style={{ color: "var(--muted)", fontWeight: 500 }}> ×{l.qty}</span>}
+              </span>
+              <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>{yen(l.amount)}</span>
+            </div>
+          ))}
+          {discount > 0 && (
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #eee", fontSize: 19, color: "#c0392b" }}>
+              <span style={{ fontWeight: 600 }}>割引</span>
+              <span style={{ fontWeight: 700 }}>−{yen(discount)}</span>
+            </div>
+          )}
+        </div>
+
+        {/* 合計 */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 14 }}>
+          <span style={{ fontSize: 20, fontWeight: 700 }}>合計</span>
+          <span style={{ fontSize: 60, fontWeight: 800, letterSpacing: -1, lineHeight: 1 }}>{yen(total)}</span>
+        </div>
+        <div style={{ textAlign: "right", fontSize: 12, color: "var(--muted)", marginTop: 4 }}>（税込）</div>
+
+        {/* PayPayのQR */}
+        {method === "paypay" && (
+          <div style={{ textAlign: "center", marginTop: 18 }}>
+            {qrOk ? (
+              <img
+                src="/paypay-qr.png"
+                alt="PayPay QRコード"
+                onError={() => setQrOk(false)}
+                style={{ width: "min(78vw, 320px)", height: "auto", border: "1px solid #eee", borderRadius: 12, background: "#fff" }}
+              />
+            ) : (
+              <div style={{ padding: 20, borderRadius: 12, background: "#fde8e8", color: "#c0392b", fontSize: 14, fontWeight: 700 }}>
+                PayPayのQRコード画像が未登録です（public/paypay-qr.png）
+              </div>
+            )}
+            <div style={{ fontSize: 15, fontWeight: 700, marginTop: 10 }}>
+              PayPayアプリで読み取り、<span style={{ color: "#e60020" }}>{yen(total)}</span> を入力してください
+            </div>
+          </div>
+        )}
+
+        {/* スタッフの操作 */}
+        <div style={{ marginTop: 22 }}>{children}</div>
+      </div>
     </div>
   );
 }

@@ -106,6 +106,8 @@ export async function GET(req: NextRequest) {
         name: li.name || "",
         qty: parseInt(li.quantity) || 1,
         amount: li.total_money?.amount || 0,
+        // 値引き前の金額。割引を付けると amount は按分後の額になるので、明細の表示用に残す
+        gross: li.gross_sales_money?.amount ?? li.total_money?.amount ?? 0,
         catalog_object_id: li.catalog_object_id || "",
         note: li.note || "",
         tax: li.total_tax_money?.amount ?? 0,
