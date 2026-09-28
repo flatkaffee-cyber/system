@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import Nav from "@/components/Nav";
 
 type MenuItem = {
@@ -1953,10 +1954,13 @@ function CustomerView({
 }) {
   const [qrOk, setQrOk] = useState(true);
   const yen = (n: number) => `¥${n.toLocaleString()}`;
-  return (
+  // カートの枠（position: sticky）の中に置くと重なり順がその枠に閉じ込められ、
+  // 味選びの小窓などが上に重なる。ページ直下に出して必ず最前面にする
+  if (typeof document === "undefined") return null;
+  return createPortal(
     <div
       style={{
-        position: "fixed", inset: 0, zIndex: 200, background: "#fffdf8",
+        position: "fixed", inset: 0, zIndex: 1000, background: "#fffdf8",
         overflowY: "auto", WebkitOverflowScrolling: "touch",
       }}
     >
@@ -2023,6 +2027,7 @@ function CustomerView({
         {/* スタッフの操作 */}
         <div style={{ marginTop: 22 }}>{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
