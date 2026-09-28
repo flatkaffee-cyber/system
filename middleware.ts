@@ -36,6 +36,7 @@ const PUBLIC_FILES = new Set([
   "/icon-512.svg",
   "/og-djnight.png",
   "/og-oboe.png",
+  "/paypay-qr.png",
   "/ping.wav",
   "/richmenu-events.png",
 ]);
