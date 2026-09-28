@@ -193,7 +193,8 @@ export async function buildCandidates(): Promise<{
       url: linked?.url || undefined,
       supplier: linked?.supplier || undefined,
       price: linked?.price,
-      needsLink: !linked,
+      // 仕入れ表にあっても購入先URLが無ければ、どこで買うか分からないので未設定扱い
+      needsLink: !linked || !linked.url,
     });
   }
 

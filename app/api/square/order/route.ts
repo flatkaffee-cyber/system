@@ -17,6 +17,21 @@ function hdrs() {
   };
 }
 
+/**
+ * 注文全体への値引き。Squareはマイナス価格の商品を受け付けないので、
+ * 「50円引き」「100円引き」は商品ではなく注文の値引きとして付ける。
+ * 内税の消費税はSquareが値引き後の金額で計算し直す。
+ */
+function discountObj(amount: number) {
+  return {
+    uid: `disc_${Date.now().toString(36)}`,
+    name: `割引 ${Math.round(amount)}円`,
+    type: "FIXED_AMOUNT",
+    amount_money: { amount: Math.round(amount), currency: "JPY" },
+    scope: "ORDER",
+  };
+}
+
 async function getLocationId(): Promise<string> {
   const res = await fetch(`${SQUARE_API}/locations`, { headers: hdrs() });
   const data = await res.json();
@@ -77,6 +92,8 @@ export async function GET(req: NextRequest) {
       created_at: o.created_at,
       version: o.version,
       total: o.total_money?.amount || 0,
+      /** 注文全体への値引きの合計（割引ボタンで付けたもの） */
+      discount: o.total_discount_money?.amount || 0,
       // 内税の消費税額。税率ごとの区分は taxes に入る（店内10% / 持ち帰り8%）。
       tax: o.total_tax_money?.amount ?? o.net_amounts?.tax_money?.amount ?? 0,
       taxes: (o.taxes || []).map((t: any) => ({
@@ -107,9 +124,11 @@ export async function GET(req: NextRequest) {
 // 夜のテーブル注文は orderType 省略で店内扱い。
 export async function POST(req: NextRequest) {
   try {
-    const { table, items, orderType } = (await req.json()) as {
+    const { table, items, orderType, discount } = (await req.json()) as {
       table: string;
       orderType?: OrderType;
+      /** 注文全体への値引き（円）。割引ボタンで付ける */
+      discount?: number;
       items: {
         catalog_object_id: string;
         quantity: number;
@@ -160,6 +179,7 @@ export async function POST(req: NextRequest) {
           line_items: lineItems,
           taxes,
           state: "OPEN",
+          ...(discount && discount > 0 ? { discounts: [discountObj(discount)] } : {}),
         },
         idempotency_key: `order_${table}_${Date.now()}`,
       }),
@@ -197,18 +217,30 @@ export async function POST(req: NextRequest) {
 // body: { order_id, items: [{ catalog_object_id, quantity, note? }], version }
 export async function PUT(req: NextRequest) {
   try {
-    const { order_id, items, version } = (await req.json()) as {
+    const { order_id, items = [], version, discount, clearDiscount } = (await req.json()) as {
       order_id: string;
-      items: {
+      items?: {
         catalog_object_id: string;
         quantity: number;
         note?: string;
         modifiers?: { name: string; price: number }[];
       }[];
-      version: number;
+      version?: number;
+      /** 会計の前に注文全体へ値引きを足す（円） */
+      discount?: number;
+      /** 付けた値引きをすべて外す */
+      clearDiscount?: boolean;
     };
-    if (!order_id || !items?.length) {
-      return NextResponse.json({ error: "order_id と items が必要" }, { status: 400 });
+    const wantsDiscount = (discount ?? 0) > 0 || !!clearDiscount;
+    if (!order_id || (!items.length && !wantsDiscount)) {
+      return NextResponse.json({ error: "order_id と items（または discount）が必要" }, { status: 400 });
+    }
+    // 割引だけのときは画面の version が古いことが多いので、最新を取り直す
+    let ver = version;
+    if (!ver || wantsDiscount) {
+      const cur = await fetch(`${SQUARE_API}/orders/${order_id}`, { headers: hdrs() }).then((r) => r.json());
+      ver = cur.order?.version;
+      if (!ver) return NextResponse.json({ error: "注文が見つかりません" }, { status: 404 });
     }
 
     const lineItems = items.map((it) => ({
@@ -230,9 +262,11 @@ export async function PUT(req: NextRequest) {
       headers: hdrs(),
       body: JSON.stringify({
         order: {
-          version,
-          line_items: lineItems,
+          version: ver,
+          ...(lineItems.length ? { line_items: lineItems } : {}),
+          ...(discount && discount > 0 ? { discounts: [discountObj(discount)] } : {}),
         },
+        ...(clearDiscount ? { fields_to_clear: ["discounts"] } : {}),
         idempotency_key: `add_${order_id}_${Date.now()}`,
       }),
     });

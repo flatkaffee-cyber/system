@@ -16,6 +16,8 @@ type Order = {
   state: string;
   version: number;
   total: number;
+  /** 注文全体への値引き（円） */
+  discount?: number;
   items: OrderItem[];
 };
 /** modifiers = ソイ変更のような追加料金。Squareにもこの形で送る */
@@ -146,6 +148,8 @@ export default function TablePage() {
   const [mode, setMode] = useState<"day" | "night">(autoMode());
   const [selected, setSelected] = useState<string | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
+  // カウンター会計の値引き（円）。割引ボタンで足していく
+  const [discount, setDiscount] = useState(0);
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
@@ -513,13 +517,13 @@ export default function TablePage() {
         name: c.name, // 消費税（店内10%/持ち帰り8%・酒類10%）の判定に使う
         modifiers: c.modifiers,
       }));
-      const total = cart.reduce((s, c) => s + c.price * c.quantity, 0);
+      const total = Math.max(0, cart.reduce((s, c) => s + c.price * c.quantity, 0) - discount);
 
       // 注文作成（ticket_name: "counter"）
       const orderRes = await fetch("/api/square/order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ table: orderType, orderType, items }),
+        body: JSON.stringify({ table: orderType, orderType, items, discount: discount || undefined }),
       });
       const orderData = await orderRes.json();
       if (!orderRes.ok) throw new Error(orderData.error || "注文作成失敗");
@@ -566,6 +570,7 @@ export default function TablePage() {
       const change = payMethod === "cash" ? Math.max(0, (tenderedAmt || total) - total) : 0;
       setPayResult({ change });
       setCart([]);
+      setDiscount(0);
       await loadStock();
     } catch (e: any) {
       setErr(e.message);
@@ -574,7 +579,10 @@ export default function TablePage() {
     }
   };
 
-  const cartTotal = cart.reduce((s, c) => s + c.price * c.quantity, 0);
+  const cartGross = cart.reduce((s, c) => s + c.price * c.quantity, 0);
+  // 値引きはカウンター会計（昼・テイクアウト・パーティ）だけ。夜のテーブルは会計のときに付ける
+  const counterMode = mode === "day" || takeout;
+  const cartTotal = Math.max(0, cartGross - (counterMode ? discount : 0));
   // 会計。別会計で品目が選ばれていれば、その分を新しい注文に切り出してから会計する。
   // 元注文には残りの品目が残るので、続けて次の人の会計ができる。
   const settle = async (method: "cash" | "card" | "paypay", tenderedAmt?: number) => {
@@ -704,13 +712,13 @@ export default function TablePage() {
 
       {/* 昼/夜 切替 */}
       <div className="sub-tabs" style={{ marginBottom: 12 }}>
-        <button className={`sub-tab ${mode === "day" && !party ? "active" : ""}`} onClick={() => { setMode("day"); setParty(false); setTakeout(false); setOrderType("店内"); setSelected(null); setCart([]); setPayMode(false); setPayResult(null); }}>
+        <button className={`sub-tab ${mode === "day" && !party ? "active" : ""}`} onClick={() => { setMode("day"); setParty(false); setTakeout(false); setOrderType("店内"); setSelected(null); setCart([]); setDiscount(0); setPayMode(false); setPayResult(null); }}>
           ☀️ 昼（カウンター）
         </button>
-        <button className={`sub-tab ${mode === "night" && !party ? "active" : ""}`} onClick={() => { setMode("night"); setParty(false); setCart([]); setPayMode(false); setPayResult(null); }}>
+        <button className={`sub-tab ${mode === "night" && !party ? "active" : ""}`} onClick={() => { setMode("night"); setParty(false); setCart([]); setDiscount(0); setPayMode(false); setPayResult(null); }}>
           🌙 夜（テーブル）
         </button>
-        <button className={`sub-tab ${party ? "active" : ""}`} onClick={() => { setMode("day"); setParty(true); setTakeout(false); setOrderType("パーティ受付"); setSelected(null); setCart([]); setPayMode(false); setPayResult(null); }}>
+        <button className={`sub-tab ${party ? "active" : ""}`} onClick={() => { setMode("day"); setParty(true); setTakeout(false); setOrderType("パーティ受付"); setSelected(null); setCart([]); setDiscount(0); setPayMode(false); setPayResult(null); }}>
           🎆 パーティ
         </button>
       </div>
@@ -748,7 +756,7 @@ export default function TablePage() {
         <>
           {takeout && (
             <button
-              onClick={() => { setTakeout(false); setOrderType("店内"); setCart([]); setPayMode(false); setPayResult(null); }}
+              onClick={() => { setTakeout(false); setOrderType("店内"); setCart([]); setDiscount(0); setPayMode(false); setPayResult(null); }}
               style={{
                 width: "100%", padding: "10px 0", marginBottom: 10, borderRadius: 10,
                 border: "1px solid var(--line)", background: "#fff", fontSize: 14,
@@ -766,7 +774,7 @@ export default function TablePage() {
               {payResult.change > 0 && (
                 <div style={{ fontSize: 22, fontWeight: 800, color: "var(--accent)" }}>お釣り: {fmt(payResult.change)}</div>
               )}
-              <button className="primary" onClick={() => { setPayResult(null); setCart([]); setErr(""); setMsg(""); setPayMode(false); setTendered(""); }} style={{ marginTop: 16 }}>
+              <button className="primary" onClick={() => { setPayResult(null); setCart([]); setDiscount(0); setErr(""); setMsg(""); setPayMode(false); setTendered(""); }} style={{ marginTop: 16 }}>
                 次の注文へ
               </button>
             </div>
@@ -895,7 +903,17 @@ export default function TablePage() {
                       </div>
                     </div>
                   ))}
+                  <DiscountRow
+                    current={discount}
+                    onAdd={(n) => setDiscount((d) => Math.min(d + n, cartGross))}
+                    onClear={() => setDiscount(0)}
+                  />
                   <div style={{ textAlign: "right", fontWeight: 700, fontSize: 18, marginTop: 6, paddingTop: 8, borderTop: "2px solid var(--line)" }}>
+                    {discount > 0 && (
+                      <span style={{ fontSize: 13, fontWeight: 600, color: "var(--muted)", marginRight: 8 }}>
+                        {fmt(cartGross)} − {fmt(discount)} =
+                      </span>
+                    )}
                     {fmt(cartTotal)}
                   </div>
                   {err && <p className="err">{err}</p>}
@@ -969,7 +987,7 @@ export default function TablePage() {
 
       {/* テイクアウト（夜でも受けられる） */}
       <button
-        onClick={() => { setTakeout(true); setOrderType("テイクアウト"); setSelected(null); setCart([]); setPayMode(false); setPayResult(null); }}
+        onClick={() => { setTakeout(true); setOrderType("テイクアウト"); setSelected(null); setCart([]); setDiscount(0); setPayMode(false); setPayResult(null); }}
         style={{
           width: "100%", padding: "14px 0", marginBottom: 12, borderRadius: 10,
           border: "none", background: "#8e6f4e", color: "#fff",
@@ -1325,7 +1343,37 @@ export default function TablePage() {
                   </button>
                 </div>
               ))}
+              <DiscountRow
+                current={currentOrder.discount ?? 0}
+                onAdd={async (n) => {
+                  setErr("");
+                  const r = await fetch("/api/square/order", {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ order_id: currentOrder.id, discount: n }),
+                  });
+                  const d = await r.json().catch(() => ({}));
+                  if (!r.ok) setErr(d.error || "割引を付けられませんでした");
+                  await loadOrders();
+                }}
+                onClear={async () => {
+                  setErr("");
+                  const r = await fetch("/api/square/order", {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ order_id: currentOrder.id, clearDiscount: true }),
+                  });
+                  const d = await r.json().catch(() => ({}));
+                  if (!r.ok) setErr(d.error || "割引を外せませんでした");
+                  await loadOrders();
+                }}
+              />
               <div style={{ textAlign: "right", fontWeight: 700, fontSize: 16, marginTop: 8, paddingTop: 8, borderTop: "2px solid var(--line)" }}>
+                {(currentOrder.discount ?? 0) > 0 && (
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "var(--muted)", marginRight: 8 }}>
+                    割引 −{fmt(currentOrder.discount ?? 0)}
+                  </span>
+                )}
                 合計 {fmt(currentOrder.total)}
               </div>
               {pickedQty > 0 && (
@@ -1728,6 +1776,54 @@ export default function TablePage() {
             </div>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+
+/**
+ * 割引の行。「−50」「−100」を押すたびに値引きが足される。「金額」で任意の額。
+ * Squareはマイナス価格の商品を受け付けないので、商品ではなく注文全体の値引きとして付く。
+ */
+function DiscountRow({
+  current,
+  onAdd,
+  onClear,
+}: {
+  current: number;
+  onAdd: (yen: number) => void | Promise<void>;
+  onClear: () => void | Promise<void>;
+}) {
+  const btn = {
+    padding: "6px 10px", borderRadius: 8, border: "1px solid #c9a227",
+    background: "#fffaf0", color: "#8a6d00", fontSize: 13, fontWeight: 700, cursor: "pointer",
+  } as const;
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, marginTop: 8 }}>
+      <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>🏷 割引</span>
+      <button style={btn} onClick={() => onAdd(50)}>−50</button>
+      <button style={btn} onClick={() => onAdd(100)}>−100</button>
+      <button
+        style={btn}
+        onClick={() => {
+          const v = prompt("値引きする金額（円）");
+          const n = Math.round(Number(v));
+          if (v && Number.isFinite(n) && n > 0) onAdd(n);
+        }}
+      >
+        金額
+      </button>
+      {current > 0 && (
+        <>
+          <span style={{ fontSize: 13, fontWeight: 700, color: "#c0392b" }}>−¥{current.toLocaleString()}</span>
+          <button
+            style={{ ...btn, border: "1px solid var(--line)", background: "#fff", color: "var(--muted)" }}
+            onClick={() => onClear()}
+          >
+            取消
+          </button>
+        </>
       )}
     </div>
   );
