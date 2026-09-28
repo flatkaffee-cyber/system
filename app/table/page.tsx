@@ -150,6 +150,8 @@ export default function TablePage() {
   const [cart, setCart] = useState<CartItem[]>([]);
   // カウンター会計の値引き（円）。割引ボタンで足していく
   const [discount, setDiscount] = useState(0);
+  // 会計ボタンの二度押し防止
+  const submittingRef = useRef(false);
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
@@ -282,14 +284,25 @@ export default function TablePage() {
       window.history.replaceState({}, "", "/table");
       let closed = 0;
       let unpaid = 0;
-      for (const id of ids) {
-        try {
+      // 戻った直後は、Squareの決済一覧にまだ出ていないことがある（反映に数秒〜10秒かかる）。
+      // 見つからなければ少し待って照合し直す
+      const check = async (id: string) => {
+        let d: any = {};
+        for (let attempt = 0; attempt < 4; attempt++) {
+          if (attempt > 0) await new Promise((res) => setTimeout(res, 4000));
           const r = await fetch("/api/square/check-paid", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ order_id: id }),
           });
-          const d = await r.json();
+          d = await r.json();
+          if (d.closed || d.alreadyClosed) break;
+        }
+        return d;
+      };
+      for (const id of ids) {
+        try {
+          const d = await check(id);
           if (d.closed || d.alreadyClosed) {
             closed += 1;
             fetch(`/api/square/card-pending?order_id=${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => {});
@@ -522,6 +535,10 @@ export default function TablePage() {
   // 昼モード: カウンター注文送信 → 即会計
   const submitDayOrder = async (payMethod: "cash" | "card" | "paypay", tenderedAmt?: number) => {
     if (!cart.length) return;
+    // 連打で同じ会計の注文が2つできていた（カードは片方しか閉じず、未会計が残る）
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setTimeout(() => { submittingRef.current = false; }, 8000);
     setSending(true);
     setErr("");
     setMsg("");
@@ -590,8 +607,19 @@ export default function TablePage() {
       await loadStock();
     } catch (e: any) {
       setErr(e.message);
-    } finally {
+      // 失敗したときはすぐ押し直せるようにする
+      submittingRef.current = false;
       setSending(false);
+      return;
+    } finally {
+      // カードはSquareアプリへ切り替わるまで少し間がある。ここで押せる状態に戻すと
+      // 切り替わる前に二度押しされ、同じ会計の注文が2つできる。戻ってくれば画面は読み直される
+      if (payMethod !== "card") {
+        submittingRef.current = false;
+        setSending(false);
+      } else {
+        setTimeout(() => setSending(false), 8000);
+      }
     }
   };
 
@@ -987,7 +1015,7 @@ export default function TablePage() {
                   ) : (
                     <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                       <button onClick={() => { setPayMode(true); setTendered(""); }} style={{ flex: 1, padding: "14px 0", borderRadius: 10, background: "var(--ok)", color: "#fff", fontSize: 15, fontWeight: 700, border: "none", cursor: "pointer" }}>💴 現金</button>
-                      <button onClick={() => submitDayOrder("card")} disabled={!squareAppId} style={{ flex: 1, padding: "14px 0", borderRadius: 10, background: "#2980b9", color: "#fff", fontSize: 15, fontWeight: 700, border: "none", cursor: "pointer" }}>💳 カード</button>
+                      <button onClick={() => submitDayOrder("card")} disabled={!squareAppId || sending} style={{ flex: 1, padding: "14px 0", borderRadius: 10, background: "#2980b9", color: "#fff", fontSize: 15, fontWeight: 700, border: "none", cursor: "pointer" }}>💳 カード</button>
                       <button onClick={() => { if (confirm("PayPay支払い済みですか？")) submitDayOrder("paypay"); }} disabled={sending} style={{ flex: 1, padding: "14px 0", borderRadius: 10, background: "#e60020", color: "#fff", fontSize: 15, fontWeight: 700, border: "none", cursor: "pointer" }}>PayPay</button>
                     </div>
                   )}
