@@ -11,6 +11,7 @@ import {
 } from "@/lib/stockroom";
 import { getOrders, openOrders } from "@/lib/purchase";
 import { getRecords } from "@/lib/shikomi";
+import { getInventoryItems } from "@/lib/inventory";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -93,6 +94,8 @@ export async function GET(req: NextRequest) {
     // 3日経ったら次の確認をする番なので、履歴へ送る（🗂 過去のストック確認）。
     const ACTIVE_DAYS = 3;
     const allOrders = await getOrders();
+    // 発注先のリンクと単価。ここから直接買いに行けるようにする
+    const invById = new Map((await getInventoryItems()).map((i) => [i.id, i]));
     const current = last
       ? {
           date: last.date,
@@ -116,6 +119,13 @@ export async function GET(req: NextRequest) {
                 unit: item.unit,
                 par: item.par,
                 madeInHouse: !!item.madeInHouse,
+                orderQty: item.orderQty ?? 1,
+                buy: (() => {
+                  if (item.madeInHouse || item.buyId == null) return null;
+                  const inv = invById.get(item.buyId);
+                  if (!inv) return null;
+                  return { url: inv.url || null, supplier: inv.supplier || null, price: inv.price ?? null };
+                })(),
                 ordered: o
                   ? {
                       orderedAt: o.orderedAt,

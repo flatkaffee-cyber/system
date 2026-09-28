@@ -24,8 +24,14 @@ type MadeAt = { date: string; daysAgo: number; keepDays: number; daysLeft: numbe
 type CurrentRow = {
   id: string; name: string; group: string; unit: string; par: number;
   madeInHouse: boolean;
+  /** 1回に発注する数の既定 */
+  orderQty?: number;
+  /** 仕入れ表の購入先。ここから直接買いに行く */
+  buy?: { url: string | null; supplier: string | null; price: number | null } | null;
   ordered: { orderedAt: string; qty: number; unit: string; arrivedAt: string | null } | null;
 };
+type PaidBy = "card" | "own" | "cash";
+const PAID_LABEL: Record<PaidBy, string> = { card: "💳 会社カード", own: "🙋 立替", cash: "💴 現金" };
 type Current = {
   date: string; daysSince: number; active: boolean; activeDays: number;
   note: string; rows: CurrentRow[];
@@ -62,6 +68,9 @@ export default function StockroomPage() {
   const [note, setNote] = useState("");
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
+  // いまの在庫確認から、その場で「発注した」を記録する
+  const [ordering, setOrdering] = useState<{ id: string; qty: number; paidBy: PaidBy } | null>(null);
+  const [orderSaving, setOrderSaving] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [editPar, setEditPar] = useState("");
@@ -94,6 +103,40 @@ export default function StockroomPage() {
     }
   }, []);
 
+
+  const recordOrder = async (r: CurrentRow) => {
+    if (!ordering || ordering.id !== r.id || orderSaving) return;
+    setOrderSaving(true);
+    setErr("");
+    try {
+      const shop = r.buy?.supplier || undefined;
+      const res = await fetch("/api/purchase", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lines: [{
+            itemId: r.id,
+            name: r.name,
+            unit: r.unit,
+            qty: Math.max(1, ordering.qty || 1),
+            url: r.buy?.url || undefined,
+            supplier: shop,
+          }],
+          shop,
+          paidBy: ordering.paidBy,
+        }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || "記録に失敗");
+      setMsg(`${r.name} を発注済みにしました。届いたら「業務チェック」で押してください`);
+      setOrdering(null);
+      await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "記録に失敗");
+    } finally {
+      setOrderSaving(false);
+    }
+  };
   useEffect(() => { load(); }, [load]);
 
   // その日の確認結果を取りに行く
@@ -238,6 +281,95 @@ export default function StockroomPage() {
                         ? `${r.ordered.orderedAt.slice(5).replace("-", "/")}に${r.ordered.qty}${r.ordered.unit}を発注${r.ordered.arrivedAt ? `／${r.ordered.arrivedAt.slice(5).replace("-", "/")}に到着` : "／まだ届いていません"}`
                         : "まだ発注していません"}
                   </div>
+                  {!r.madeInHouse && !r.ordered && (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
+                      {r.buy?.url ? (
+                        <a
+                          href={r.buy.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            fontSize: 12, fontWeight: 700, padding: "5px 10px", borderRadius: 6,
+                            background: "var(--accent)", color: "#fff", textDecoration: "none",
+                          }}
+                        >
+                          🛒 {r.buy.supplier || "購入ページ"}で買う ↗
+                        </a>
+                      ) : (
+                        <span style={{ fontSize: 11.5, color: "#c0392b", padding: "5px 0" }}>
+                          購入先のリンク未設定
+                        </span>
+                      )}
+                      {ordering?.id !== r.id && (
+                        <button
+                          onClick={() => setOrdering({ id: r.id, qty: r.orderQty ?? 1, paidBy: "card" })}
+                          style={{
+                            fontSize: 12, fontWeight: 700, padding: "5px 10px", borderRadius: 6,
+                            border: "1px solid var(--accent)", background: "#fff", color: "var(--accent)",
+                          }}
+                        >
+                          ✓ 発注した
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {ordering?.id === r.id && (
+                    <div style={{ marginTop: 8, padding: 10, borderRadius: 8, background: "#fff", border: "1px solid #eadfc8" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5 }}>
+                        発注した数
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min={1}
+                          value={ordering.qty}
+                          onChange={(e) => setOrdering({ ...ordering, qty: Number(e.target.value) || 1 })}
+                          style={{ width: 64, padding: "4px 6px", fontSize: 14 }}
+                        />
+                        {r.unit}
+                      </div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                        {(Object.keys(PAID_LABEL) as PaidBy[]).map((v) => {
+                          const on = ordering.paidBy === v;
+                          return (
+                            <button
+                              key={v}
+                              onClick={() => setOrdering({ ...ordering, paidBy: v })}
+                              style={{
+                                fontSize: 12, padding: "5px 9px", borderRadius: 6,
+                                border: on ? "2px solid var(--accent)" : "1px solid #ddd",
+                                background: on ? "#fdf1e3" : "#fff", fontWeight: on ? 700 : 400,
+                              }}
+                            >
+                              {PAID_LABEL[v]}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 6, lineHeight: 1.6 }}>
+                        {ordering.paidBy === "card"
+                          ? "会社カードは銀行明細から経理に入るので、レシート登録はしません"
+                          : "立替・現金はレシートの登録が必要です"}
+                      </div>
+                      <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                        <button
+                          onClick={() => recordOrder(r)}
+                          disabled={orderSaving}
+                          style={{
+                            flex: 1, fontSize: 13, fontWeight: 700, padding: "8px", borderRadius: 7,
+                            border: "none", background: "var(--accent)", color: "#fff",
+                          }}
+                        >
+                          {orderSaving ? "記録中…" : "発注済みにする"}
+                        </button>
+                        <button
+                          onClick={() => setOrdering(null)}
+                          style={{ fontSize: 13, padding: "8px 12px", borderRadius: 7, border: "1px solid #ddd", background: "#fff" }}
+                        >
+                          やめる
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <span style={{
                   flexShrink: 0, fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 5,
