@@ -73,6 +73,7 @@ const GROUPS: Group[] = [
       { href: "/knowledge", label: "📚 ナレッジ" },
       { href: "/meishi", label: "🪪 名刺" },
       { href: "/event/kanri", label: "🎧 イベント申込" },
+      { href: "/supporters", label: "☕ 支援者チケット" },
       { href: "/natsumatsuri/kanri", label: "🎆 夏祭り申込" },
       { href: "/help", label: "❓ 使い方" },
     ],
