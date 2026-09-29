@@ -100,6 +100,17 @@ export default function ShiftBuild() {
     load();
   }, [load]);
 
+  // 保存し忘れたまま画面を閉じないように
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+
   function draftRows(days: Day[]): Row[] {
     return days.flatMap((d) =>
       d.slots.map((s, i) => ({
@@ -125,7 +136,10 @@ export default function ShiftBuild() {
     if (!data) return;
     const bad = rows.find((r) => !r.staff || hours(r.start, r.end) <= 0);
     if (bad) {
-      setErr(`${bad.date} の枠に、人か時間が入っていません`);
+      const m = `${bad.date.slice(5).replace("-", "/")} の枠に、人か時間が入っていません`;
+      setErr(m);
+      // 下の日から保存したときは上のエラー表示が見えないので、その場で知らせる
+      alert(m);
       return;
     }
     setBusy(true);
@@ -145,7 +159,9 @@ export default function ShiftBuild() {
       setDirty(false);
       await load(data.week);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "保存に失敗");
+      const m = e instanceof Error ? e.message : "保存に失敗";
+      setErr(m);
+      alert(m);
     } finally {
       setBusy(false);
     }
@@ -202,7 +218,7 @@ export default function ShiftBuild() {
       <Nav />
       <h1 style={{ fontSize: 19, margin: "4px 0 2px" }}>🧩 シフトを組む</h1>
       <p style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 12 }}>
-        提出された希望から下書きを作ります。人と時間を直してから保存してください。
+        提出された希望から下書きを作ります。人と時間を直してから保存してください。入力中は行が動かず、保存すると時間順に並びます。
       </p>
 
       <div className="card" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -253,9 +269,9 @@ export default function ShiftBuild() {
       </div>
 
       {data.days.map((d) => {
-        const list = (byDate[d.date] ?? []).sort((a, b) =>
-          (toMin(a.start) ?? 0) - (toMin(b.start) ?? 0),
-        );
+        // 入力中は並べ替えない。時間を打つたびに行が上下に動くと入力しづらいため。
+        // 保存すると読み込み直しで時間順に並ぶ。
+        const list = byDate[d.date] ?? [];
         return (
           <div className="card" key={d.date}>
             <div className="cat-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -323,9 +339,26 @@ export default function ShiftBuild() {
               );
             })}
 
-            <button onClick={() => add(d.date)} style={{ fontSize: 12, marginTop: 8 }}>
-              ＋ 枠を追加
-            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+              <button onClick={() => add(d.date)} style={{ fontSize: 12 }}>
+                ＋ 枠を追加
+              </button>
+              {dirty && (
+                <>
+                  <button
+                    className="primary"
+                    onClick={save}
+                    disabled={busy}
+                    style={{ fontSize: 12, marginLeft: "auto" }}
+                  >
+                    {busy ? "保存中…" : "💾 シフトを保存"}
+                  </button>
+                  <span style={{ flexBasis: "100%", fontSize: 11, color: "var(--muted)", textAlign: "right" }}>
+                    保存すると時間順に並びます
+                  </span>
+                </>
+              )}
+            </div>
 
             <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 8, lineHeight: 1.8 }}>
               この日に入れる人：
