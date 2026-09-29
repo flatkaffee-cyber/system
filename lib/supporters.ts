@@ -268,12 +268,13 @@ export function rewardNotes(s: Pick<Supporter, "sets">): string {
 
 /** 文面の差し込み */
 export function fillTemplate(text: string, s: Supporter): string {
+  const notes = rewardNotes(s);
   return text
+    // {notes} が空の人は、その行ごと消す（空行が残ると箇条書きが割れる）
+    .replaceAll("{notes}\n", notes ? `${notes}\n` : "")
+    .replaceAll("{notes}", notes)
     .replaceAll("{name}", s.name)
     .replaceAll("{rewards}", rewardLabel(s))
-    .replaceAll("{notes}", rewardNotes(s))
     .replaceAll("{tickets}", String(s.tickets))
-    .replaceAll("{course}", s.course ?? "")
-    // {notes} が空のときに空行が残らないようにする
-    .replace(/\n{3,}/g, "\n\n");
+    .replaceAll("{course}", s.course ?? "");
 }
