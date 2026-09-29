@@ -7,34 +7,50 @@ import Nav from "@/components/Nav";
 // CSVを貼る → 文面を確認 → まだ送っていない人に送る → 来店したら「渡した」を押す。
 
 type Supporter = {
-  id: string; name: string; email: string; course?: string; tickets: number;
+  id: string; name: string; email: string; course?: string;
+  tickets: number; sets: number;
   sentAt?: string; sendError?: string; redeemedAt?: string; note?: string;
 };
 
-const DEFAULT_SUBJECT = "【flat.】ご支援ありがとうございました｜コーヒーチケットのお渡しについて";
+const rewardLabel = (s: Supporter) =>
+  [s.tickets > 0 ? `コーヒー${s.tickets}杯` : "", s.sets > 0 ? `セット${s.sets}食` : ""]
+    .filter(Boolean)
+    .join("・");
+
+const DEFAULT_SUBJECT = "【flat.】ご支援ありがとうございました｜チケット引き換えのご案内";
 
 const DEFAULT_BODY = `{name} さま
 
-このたびは flat. のクラウドファンディングにご支援いただき、
-本当にありがとうございました。
+この度は、flat.のクラウドファンディングにご支援いただき、本当にありがとうございました。
+たくさんの方に応援していただき、目標金額を達成することができました。皆さんからいただいた支援や言葉のひとつひとつが、flat.をつくる大きな力になりました。
 
-彦根の小さなカフェですが、ここが誰かの「ふらっと寄れる場所」に
-なればと思って続けています。その一歩を後押ししていただきました。
+誰かがふらっと立ち寄って、誰かと出会って、気づけば少し長居している。そんな小さなきっかけが生まれる「彦根のまちのリビング」を、これから皆さんと一緒につくっていきたいと思っています。
+
+ここから始まるflat.が、皆さんの日常にそっと残る場所になれたら嬉しいです。
+
+flat.でお待ちしております。
 
 
-■ コーヒーチケットのお渡しについて
+────────────────
+チケットの引き換えについて
+────────────────
 
-ご来店の際に、このメールをスタッフへお見せください。
-その場でコーヒーチケット {tickets} 枚をお渡しします。
+{rewards}
 
-・受け取り期限　2027年3月31日まで
-・チケットの有効期限　お渡しから3か月
+ご来店の際に、このメールをスタッフにお見せください。
+その場で紙の回数券とお引き換えします。
+
+・有効期間　2026年8月8日 〜 2027年8月8日
+・現金へのお引き換えはできません。おつりは出ません
+{notes}
 ・スマートフォンの画面でも、印刷したものでも構いません
 
 事前のご連絡は不要です。お好きなタイミングでお越しください。
 
 
-■ お店のご案内
+────────────────
+お店のご案内
+────────────────
 
 flat.
 滋賀県彦根市京町二丁目3-1
@@ -47,7 +63,7 @@ https://www.google.com/maps/search/?api=1&query=滋賀県彦根市京町二丁�
 
 
 ご不明な点があれば、このメールにご返信ください。
-お会いできるのを楽しみにしています。
+お会いできるのを楽しみにしております。
 
 合同会社flat.　坂本 達郎`;
 
@@ -55,7 +71,7 @@ export default function Supporters() {
   const [list, setList] = useState<Supporter[]>([]);
   const [account, setAccount] = useState<string | null>(null);
   const [csv, setCsv] = useState("");
-  const [tickets, setTickets] = useState(1);
+  const [ticketsOnly, setTicketsOnly] = useState(true);
   const [subject, setSubject] = useState(DEFAULT_SUBJECT);
   const [body, setBody] = useState(DEFAULT_BODY);
   const [msg, setMsg] = useState("");
@@ -83,14 +99,13 @@ export default function Supporters() {
       const res = await fetch("/api/supporters", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ csv, tickets }),
+        body: JSON.stringify({ csv, ticketsOnly }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "取り込み失敗");
       setMsg(
-        `${d.added}人を取り込みました。` +
-          (d.existing ? `${d.existing}人はすでに入っています。` : "") +
-          (d.skipped?.length ? `読めなかった行が${d.skipped.length}件あります。` : ""),
+        `${d.added}人を追加、${d.updated}人を更新しました。` +
+          (d.skippedNoTicket ? `チケットの無い支援${d.skippedNoTicket}件は取り込んでいません。` : ""),
       );
       setCsv("");
       await load();
@@ -182,17 +197,20 @@ export default function Supporters() {
           placeholder="名前,メールアドレス,リターン&#10;坂本 達郎,example@example.com,コーヒーチケット2枚コース"
           style={{ width: "100%", fontSize: 12, padding: 8 }}
         />
-        <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
-          <label style={{ fontSize: 12.5 }}>チケット枚数</label>
-          <input
-            type="number" min={1} value={tickets}
-            onChange={(e) => setTickets(Number(e.target.value) || 1)}
-            style={{ width: 70, fontSize: 12, padding: "4px 6px", flex: "0 0 auto" }}
-          />
+        <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
+          <label style={{ fontSize: 12.5, display: "flex", alignItems: "center", gap: 4 }}>
+            <input
+              type="checkbox" checked={ticketsOnly}
+              onChange={(e) => setTicketsOnly(e.target.checked)}
+              style={{ width: "auto", flex: "0 0 auto" }}
+            />
+            チケットのある人だけ取り込む
+          </label>
           <button onClick={doImport} disabled={busy || !csv.trim()}>取り込む</button>
         </div>
         <p className="hint" style={{ marginTop: 6 }}>
-          コースごとに枚数が違うときは、枚数を変えて分けて貼ってください。
+          リターン内容から杯数を読み取ります（5杯分・1杯分・ホットサンドセット5食分）。
+          複数口で支援した人は合算されます。取り込み直しても、送信済みとお渡し済みの記録は消えません。
         </p>
       </div>
 
@@ -210,8 +228,8 @@ export default function Supporters() {
           style={{ width: "100%", fontSize: 12.5, lineHeight: 1.8, padding: 8 }}
         />
         <p className="hint" style={{ marginTop: 6 }}>
-          <code>{"{name}"}</code> は名前、<code>{"{tickets}"}</code> は枚数、
-          <code>{"{course}"}</code> はコース名に置き換わります。
+          <code>{"{name}"}</code> は名前、<code>{"{rewards}"}</code> は「コーヒーチケット 5杯分」などの行、
+          <code>{"{notes}"}</code> はセットの人にだけ出る但し書きに置き換わります。
         </p>
         <div style={{ marginTop: 8 }}>
           <button
@@ -242,10 +260,23 @@ export default function Supporters() {
             opacity: s.redeemedAt ? 0.55 : 1,
           }}>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <b>{s.name}</b> <span style={{ color: "var(--muted)" }}>{s.tickets}枚</span>
+              <input
+                defaultValue={s.name}
+                onBlur={async (e) => {
+                  const v = e.target.value.trim();
+                  if (!v || v === s.name) return;
+                  await fetch("/api/supporters", {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ id: s.id, name: v }),
+                  });
+                  await load();
+                }}
+                style={{ fontSize: 12.5, fontWeight: 700, padding: "2px 4px", width: 150 }}
+              />
+              <span style={{ color: "var(--muted)", marginLeft: 6 }}>{rewardLabel(s)}</span>
               <div style={{ color: "var(--muted)", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis" }}>
                 {s.email}
-                {s.course ? `・${s.course}` : ""}
               </div>
               {s.sendError && <div style={{ color: "#c0392b", fontSize: 11 }}>送信失敗: {s.sendError}</div>}
             </div>

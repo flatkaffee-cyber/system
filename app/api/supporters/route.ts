@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
   try {
     const b = (await req.json()) as {
       csv?: string;
-      tickets?: number;
+      ticketsOnly?: boolean;
       action?: string;
       ids?: string[];
       subject?: string;
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
           { status: 400 },
         );
       }
-      const r = await importSupporters(rows, Math.max(1, Number(b.tickets) || 1));
+      const r = await importSupporters(rows, { ticketsOnly: b.ticketsOnly !== false });
       return NextResponse.json({ ok: true, ...r, skipped });
     }
 
@@ -108,6 +108,8 @@ export async function PATCH(req: NextRequest) {
       id?: string;
       redeemed?: boolean;
       tickets?: number;
+      sets?: number;
+      name?: string;
       note?: string;
     };
     if (!b.id) return NextResponse.json({ error: "id が必要です" }, { status: 400 });
@@ -116,6 +118,8 @@ export async function PATCH(req: NextRequest) {
       patch.redeemedAt = b.redeemed ? new Date().toISOString() : undefined;
     }
     if (b.tickets !== undefined) patch.tickets = Math.max(0, Number(b.tickets) || 0);
+    if (b.sets !== undefined) patch.sets = Math.max(0, Number(b.sets) || 0);
+    if (b.name !== undefined) patch.name = b.name.trim() || "ご支援者";
     if (b.note !== undefined) patch.note = b.note;
     const s = await updateSupporter(b.id, patch);
     if (!s) return NextResponse.json({ error: "見つかりません" }, { status: 404 });
