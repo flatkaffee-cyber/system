@@ -160,7 +160,9 @@ export function pickName(shimei: string, biko: string, user: string): string {
   if (b) return b;
   const u = user.trim();
   if (u && !isHandle(u)) return u;
-  return "ご支援者";
+  // 名前が分からないときは空のまま。文面側で宛名の行ごと落とす。
+  // 「ご支援者さま」と呼びかけるより、名前に触れないほうが自然に読める。
+  return "";
 }
 
 const findCol = (header: string[], words: string[]) =>
@@ -269,7 +271,11 @@ export function rewardNotes(s: Pick<Supporter, "sets">): string {
 /** 文面の差し込み */
 export function fillTemplate(text: string, s: Supporter): string {
   const notes = rewardNotes(s);
-  return text
+  // 名前が無い人は「{name} さま」の行を丸ごと落とす
+  const named = s.name.trim()
+    ? text
+    : text.replace(/^\{name\}[^\n]*\n+/, "");
+  return named
     // {notes} が空の人は、その行ごと消す（空行が残ると箇条書きが割れる）
     .replaceAll("{notes}\n", notes ? `${notes}\n` : "")
     .replaceAll("{notes}", notes)

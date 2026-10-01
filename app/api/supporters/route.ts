@@ -119,7 +119,7 @@ export async function PATCH(req: NextRequest) {
     }
     if (b.tickets !== undefined) patch.tickets = Math.max(0, Number(b.tickets) || 0);
     if (b.sets !== undefined) patch.sets = Math.max(0, Number(b.sets) || 0);
-    if (b.name !== undefined) patch.name = b.name.trim() || "ご支援者";
+    if (b.name !== undefined) patch.name = b.name.trim();
     if (b.note !== undefined) patch.note = b.note;
     const s = await updateSupporter(b.id, patch);
     if (!s) return NextResponse.json({ error: "見つかりません" }, { status: 404 });

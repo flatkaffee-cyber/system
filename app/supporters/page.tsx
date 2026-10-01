@@ -262,9 +262,10 @@ export default function Supporters() {
             <div style={{ flex: 1, minWidth: 0 }}>
               <input
                 defaultValue={s.name}
+                placeholder="（宛名なし）"
                 onBlur={async (e) => {
                   const v = e.target.value.trim();
-                  if (!v || v === s.name) return;
+                  if (v === s.name) return;
                   await fetch("/api/supporters", {
                     method: "PATCH",
                     headers: { "Content-Type": "application/json" },
