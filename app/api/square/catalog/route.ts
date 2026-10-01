@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listCategories, createCategory, createItem } from "@/lib/squareCatalog";
+import { listCategories, createCategory, createItem, updateVariations } from "@/lib/squareCatalog";
 
 export const runtime = "nodejs";
 
@@ -16,7 +16,8 @@ function hdrs() {
 
 // Squareのカタログに商品を追加する。
 // 注文画面は catalog_object_id で注文を作るので、Squareに無い商品は売れない。
-// POST { name, price, category?(名前), dryRun:false }  ※dryRunを明示しないと作らない
+// POST { name, price, category?(名前), variations?: [{name, price}], dryRun:false }  ※dryRunを明示しないと作らない
+// variations を渡すと種類つきの商品になる（注文画面で種類を選ばせる。選んだ種類は厨房の画面にメモで出る）
 // 既存の商品名や価格を直す。
 // Squareは差分更新ができないので、今のオブジェクトを取ってきて必要な所だけ書き換えて戻す。
 // PUT { id, name?, price? }
@@ -74,6 +75,7 @@ export async function POST(req: NextRequest) {
       price?: number;
       category?: string;
       description?: string;
+      variations?: { name: string; price: number }[];
       dryRun?: boolean;
     };
     if (!b.name || !b.price) {
@@ -92,6 +94,13 @@ export async function POST(req: NextRequest) {
       categoryId = found ? found.id : (await createCategory(name)).id;
     }
     const it = await createItem(b.name, Math.round(b.price), categoryId);
+    if (b.variations?.length) {
+      const variations = await updateVariations(
+        it.id,
+        b.variations.map((v) => ({ name: String(v.name), price: Math.round(Number(v.price)) })),
+      );
+      return NextResponse.json({ ok: true, ...it, variations, categoryId });
+    }
     return NextResponse.json({ ok: true, ...it, categoryId });
   } catch (e) {
     return NextResponse.json(
