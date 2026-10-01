@@ -17,7 +17,7 @@ type Recipe = {
   tips?: string[];
 };
 
-const FOOD_CATS = ["夜フード", "ホットサンド", "デザート"];
+const FOOD_CATS = ["夜フード", "ホットサンド", "スープ", "デザート"];
 const DRINK_CATS = ["ハイボール・サワー", "カクテル", "チューハイ・ワイン", "カフェ"];
 const groupOf = (c: string) =>
   FOOD_CATS.includes(c) ? "フード" : DRINK_CATS.includes(c) ? "ドリンク" : "その他";
