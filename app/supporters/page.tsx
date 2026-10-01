@@ -69,6 +69,7 @@ https://www.google.com/maps/search/?api=1&query=滋賀県彦根市京町二丁�
 export default function Supporters() {
   const [list, setList] = useState<Supporter[]>([]);
   const [account, setAccount] = useState<string | null>(null);
+  const [connected, setConnected] = useState(false);
   const [csv, setCsv] = useState("");
   const [ticketsOnly, setTicketsOnly] = useState(true);
   const [subject, setSubject] = useState(DEFAULT_SUBJECT);
@@ -85,6 +86,7 @@ export default function Supporters() {
       if (!res.ok) throw new Error(d.error || "取得失敗");
       setList(d.supporters || []);
       setAccount(d.account ?? null);
+      setConnected(!!d.connected);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "取得失敗");
     }
@@ -166,7 +168,11 @@ export default function Supporters() {
 
       <div className="card" style={{ padding: "12px 14px" }}>
         <div className="cat-title">送信に使うアカウント</div>
-        {account ? (
+        {!connected ? (
+          <p style={{ fontSize: 13, margin: 0, color: "#c0392b" }}>
+            Googleに接続されていません。<a href="/api/google/authorize">flat.kaffee@gmail.com で接続する</a>
+          </p>
+        ) : account ? (
           <p style={{ fontSize: 13, margin: 0 }}>
             <b>{account}</b> から送ります。
             {account !== "flat.kaffee@gmail.com" && (
@@ -177,8 +183,10 @@ export default function Supporters() {
             )}
           </p>
         ) : (
-          <p style={{ fontSize: 13, margin: 0, color: "#c0392b" }}>
-            Googleに接続されていません。<a href="/api/google/authorize">flat.kaffee@gmail.com で接続する</a>
+          <p style={{ fontSize: 13, margin: 0 }}>
+            接続はできていますが、<b>アカウント名を読み取れませんでした</b>。
+            送信はできます。心配なら
+            <a href="/api/google/authorize">繋ぎ直して</a>ください。
           </p>
         )}
       </div>
@@ -233,7 +241,7 @@ export default function Supporters() {
         <div style={{ marginTop: 8 }}>
           <button
             onClick={send}
-            disabled={busy || unsent.length === 0 || !account}
+            disabled={busy || unsent.length === 0 || !connected}
             style={{ background: "var(--accent)", color: "#fff", fontWeight: 700 }}
           >
             まだ送っていない{unsent.length}人に送る
