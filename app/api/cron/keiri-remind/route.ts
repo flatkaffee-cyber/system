@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { passAuth } from "@/lib/internalFetch";
 import { getStaffLineIds, pushLine } from "@/lib/staffLine";
 import { getBills, getPayments } from "@/lib/bills";
 import { paymentsIn } from "@/lib/loans";
@@ -29,7 +30,10 @@ export async function GET(req: NextRequest) {
     let txnLines: string[] = [];
     let txnCount = 0;
     try {
-      const res = await fetch(`${req.nextUrl.origin}/api/freee/unprocessed`, { cache: "no-store" });
+      const res = await fetch(`${req.nextUrl.origin}/api/freee/unprocessed`, {
+        cache: "no-store",
+        headers: passAuth(req),
+      });
       const d = await res.json();
       const txns: { date: string; amount: number; description: string }[] = d?.txns ?? [];
       txnCount = txns.length;

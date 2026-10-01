@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { passAuth } from "@/lib/internalFetch";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -12,7 +13,7 @@ export async function GET(req: NextRequest) {
     const origin = req.nextUrl.origin;
     const res = await fetch(`${origin}/api/freee/make-deal`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...passAuth(req) },
       body: JSON.stringify({
         match: "スクエア",
         category: "売掛金",

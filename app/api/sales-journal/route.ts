@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { passAuth } from "@/lib/internalFetch";
 import { FREEE_COMPANY_ID, freeeGet, freeePost, freeeDelete, isConnected } from "@/lib/freee";
 
 export const runtime = "nodejs";
@@ -50,8 +51,10 @@ async function accountId(name: string): Promise<number | null> {
 type Day = { date: string; cash: number; other: number; total: number; count: number };
 
 /** Squareの売上を日別・支払方法別に集計する。現金とそれ以外（カード/PayPay）に分ける */
-async function squareDays(origin: string, from: string, to: string): Promise<Day[]> {
-  const res = await fetch(`${origin}/api/square/sales?from=${from}&to=${to}`);
+async function squareDays(req: NextRequest, from: string, to: string): Promise<Day[]> {
+  const res = await fetch(`${req.nextUrl.origin}/api/square/sales?from=${from}&to=${to}`, {
+    headers: passAuth(req),
+  });
   if (!res.ok) throw new Error(`Square売上の取得に失敗(${res.status})`);
   const d = (await res.json()) as {
     orders?: {
@@ -95,7 +98,7 @@ export async function GET(req: NextRequest) {
     const to = sp.get("to") || today;
 
     const [days, done] = await Promise.all([
-      squareDays(req.nextUrl.origin, from, to),
+      squareDays(req, from, to),
       getDone(),
     ]);
     const rows = days.map((d) => ({ ...d, journalId: done[d.date] ?? null }));
@@ -159,7 +162,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const days = await squareDays(req.nextUrl.origin, from, to);
+    const days = await squareDays(req, from, to);
     const done = await getDone();
     const targets = days.filter(
       (d) =>

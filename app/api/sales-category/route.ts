@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { passAuth } from "@/lib/internalFetch";
 import { getOverrides, saveOverride, classifyWith, type SalesCategory } from "@/lib/salesCategory";
 
 export const runtime = "nodejs";
@@ -15,7 +16,7 @@ export async function GET(req: NextRequest) {
 
     const res = await fetch(
       `${req.nextUrl.origin}/api/square/sales?from=${from}&to=${to}`,
-      { cache: "no-store" },
+      { cache: "no-store", headers: passAuth(req) },
     );
     const d = await res.json();
     const products: { name: string; qty: number; amount: number }[] = d?.byProduct ?? [];

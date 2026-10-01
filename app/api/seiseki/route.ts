@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { passAuth } from "@/lib/internalFetch";
 import { getSettings, saveSettings, type Settings } from "@/lib/seiseki";
 import { paymentsIn } from "@/lib/loans";
 import { getOverrides, splitByCategory } from "@/lib/salesCategory";
@@ -22,7 +23,7 @@ export async function GET(req: NextRequest) {
     const settings = await getSettings();
     const res = await fetch(
       `${req.nextUrl.origin}/api/analytics?from=${from}&to=${to}&withEvents=1`,
-      { cache: "no-store" },
+      { cache: "no-store", headers: passAuth(req) },
     );
     // イベントの日も実際の売上なので含める（withEvents=1）
     const a = await res.json();

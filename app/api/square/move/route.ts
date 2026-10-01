@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { passAuth } from "@/lib/internalFetch";
 
 export const runtime = "nodejs";
 
@@ -54,7 +55,7 @@ export async function POST(req: NextRequest) {
     }));
     const createRes = await fetch(`${req.nextUrl.origin}/api/square/order`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...passAuth(req) },
       body: JSON.stringify({ table: to, items }),
     });
     const created = await createRes.json();

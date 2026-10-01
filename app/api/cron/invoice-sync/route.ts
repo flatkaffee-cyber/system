@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { passAuth } from "@/lib/internalFetch";
 import { gmailFetchPdfAttachments, isGoogleConnected } from "@/lib/google";
 
 export const runtime = "nodejs";
@@ -50,7 +51,7 @@ export async function GET(req: NextRequest) {
       // 書類APIに流して、解析＋原本保存までやってもらう
       const res = await fetch(`${origin}/api/docs`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...passAuth(req) },
         body: JSON.stringify({
           file: `data:application/pdf;base64,${a.base64}`,
           fileName: a.filename,

@@ -85,6 +85,12 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // 自動実行（Vercel cron）の中から別のAPIを呼ぶときは、cronの鍵を引き継いでくる。
+  // 鍵はVercelと環境変数にしかないので、外からは通れない。
+  if (req.nextUrl.pathname.startsWith("/api/") && isCronCall(req.headers.get("authorization"))) {
+    return NextResponse.next();
+  }
+
   // APIは画面に飛ばさず、そのまま断る（fetchが妙な挙動をしないように）
   if (req.nextUrl.pathname.startsWith("/api/")) {
     return NextResponse.json({ error: "合言葉が必要です" }, { status: 401 });

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { passAuth } from "@/lib/internalFetch";
 import { FREEE_COMPANY_ID, freeeGet, isConnected } from "@/lib/freee";
 import { getReceipts, receiptLines, type SavedReceipt } from "@/lib/receipts";
 import { CATEGORY_MAP, clampIssueDate, FISCAL_START } from "@/lib/freeeMap";
@@ -202,7 +203,7 @@ export async function POST(req: NextRequest) {
     try {
       const res = await fetch(`${origin}/api/receipts/register`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...passAuth(req) },
         body: JSON.stringify({ id: c.id }),
       });
       const d = await res.json();
