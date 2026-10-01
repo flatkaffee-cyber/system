@@ -199,7 +199,10 @@ export async function POST(req: NextRequest) {
     for (const li of data.order?.line_items || []) {
       const name = li.name || "";
       const qty = parseInt(li.quantity) || 1;
-      if (name) await decrementStock(name, qty).catch(() => {});
+      if (!name) continue;
+      const left = await decrementStock(name, qty).catch(() => -1);
+      // セット商品（ホットサンド＋スープセットなど）は、選んだ種類の名前がホットサンドの名前になっている
+      if (left === -1 && li.variation_name) await decrementStock(li.variation_name, qty).catch(() => {});
     }
 
     return NextResponse.json({

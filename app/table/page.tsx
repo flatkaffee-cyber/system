@@ -397,7 +397,10 @@ export default function TablePage() {
     // 以前は常に variations[0] を使っていたため、チョコ・抹茶を選んでも
     // プレーンの価格(¥400)とIDで登録されていた。
     // note は "Ice/ソイ" のように連結されることがあるので includes で判定する。
+    // 名前が完全に一致するものを先に探す。「エスプレッソトニック」を選んだのに
+    // 名前が含まれる「エスプレッソ」の種類で登録されてしまうのを防ぐため。
     const v =
+      (tempNote ? item.variations.find((x) => x.name === tempNote) : undefined) ||
       (tempNote ? item.variations.find((x) => x.name && tempNote.includes(x.name)) : undefined) ||
       item.variations[0];
     if (!v) return;
@@ -900,25 +903,12 @@ export default function TablePage() {
 
               {/* バリエーション選択 */}
               {variantPending && needsVariantPick(variantPending) && (
-                <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }} onClick={() => setVariantPending(null)}>
-                  <div className="card" style={{ width: 300, margin: 0 }} onClick={e => e.stopPropagation()}>
-                    <div style={{ textAlign: "center", fontWeight: 700, fontSize: 16, marginBottom: 12 }}>{variantPending.name}</div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                      {variantPending.variations.map((v) => {
-                        const st = variantStyle(v.name);
-                        return (
-                          <button key={v.id} onClick={() => selectVariant(v.name)} style={{
-                            padding: "12px 0", borderRadius: 10, border: `2px solid ${st.color}`, background: st.bg,
-                            color: st.color, fontSize: 15, fontWeight: 700, cursor: "pointer",
-                          }}>
-                            {v.name}
-                            {v.price != null && <span style={{ fontSize: 12, fontWeight: 600, marginLeft: 6 }}>¥{v.price.toLocaleString()}</span>}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
+                <VariantPicker
+                  item={variantPending}
+                  stock={stock}
+                  onPick={selectVariant}
+                  onClose={() => setVariantPending(null)}
+                />
               )}
 
               {/* Hot/Ice選択 */}
@@ -1724,39 +1714,12 @@ export default function TablePage() {
 
           {/* バリエーション選択 */}
           {variantPending && needsVariantPick(variantPending) && (
-            <div style={{
-              position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
-              display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100,
-            }} onClick={() => setVariantPending(null)}>
-              <div className="card" style={{ width: 300, margin: 0 }} onClick={e => e.stopPropagation()}>
-                <div style={{ textAlign: "center", fontWeight: 700, fontSize: 16, marginBottom: 12 }}>
-                  {variantPending.name}
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {variantPending.variations.map((v) => {
-                    const st = variantStyle(v.name);
-                    return (
-                      <button
-                        key={v.id}
-                        onClick={() => selectVariant(v.name)}
-                        style={{
-                          padding: "12px 0", borderRadius: 10,
-                          border: `2px solid ${st.color}`, background: st.bg,
-                          color: st.color, fontSize: 15, fontWeight: 700, cursor: "pointer",
-                        }}
-                      >
-                        {v.name}
-                        {v.price != null && (
-                          <span style={{ fontSize: 12, fontWeight: 600, marginLeft: 6 }}>
-                            ¥{v.price.toLocaleString()}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
+            <VariantPicker
+              item={variantPending}
+              stock={stock}
+              onPick={selectVariant}
+              onClose={() => setVariantPending(null)}
+            />
           )}
 
           {/* Hot/Ice選択 */}
@@ -1888,6 +1851,70 @@ export default function TablePage() {
  * 割引の行。「−50」「−100」を押すたびに値引きが足される。「金額」で任意の額。
  * Squareはマイナス価格の商品を受け付けないので、商品ではなく注文全体の値引きとして付く。
  */
+/**
+ * 種類（味・セットのホットサンド・セットドリンクなど）を選ぶ画面。
+ * 種類が多いと縦1列では画面からはみ出すので、7つ以上は2列にしてスクロールできるようにする。
+ * 仕込み在庫が0のホットサンドは選べない（セットの中身として選ぶ場合も含む）。
+ */
+function VariantPicker({
+  item,
+  stock,
+  onPick,
+  onClose,
+}: {
+  item: MenuItem;
+  stock: Record<string, number>;
+  onPick: (name: string) => void;
+  onClose: () => void;
+}) {
+  const many = item.variations.length > 6;
+  return (
+    <div
+      style={{
+        position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
+        display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 12,
+      }}
+      onClick={onClose}
+    >
+      <div
+        className="card"
+        style={{ width: many ? 380 : 300, maxWidth: "100%", maxHeight: "85vh", overflowY: "auto", margin: 0 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ textAlign: "center", fontWeight: 700, fontSize: 16, marginBottom: 12 }}>{item.name}</div>
+        <div style={{ display: "grid", gridTemplateColumns: many ? "1fr 1fr" : "1fr", gap: 8 }}>
+          {item.variations.map((v) => {
+            const st = variantStyle(v.name);
+            const soldOut = STOCK_MANAGED.has(v.name) && (stock[v.name] ?? 0) <= 0;
+            return (
+              <button
+                key={v.id}
+                onClick={() => !soldOut && onPick(v.name)}
+                disabled={soldOut}
+                style={{
+                  padding: many ? "10px 4px" : "12px 0", borderRadius: 10,
+                  border: `2px solid ${st.color}`, background: st.bg, color: st.color,
+                  fontSize: many ? 13 : 15, fontWeight: 700,
+                  cursor: soldOut ? "not-allowed" : "pointer", opacity: soldOut ? 0.4 : 1,
+                }}
+              >
+                {v.name}
+                {soldOut ? (
+                  <span style={{ fontSize: 11, marginLeft: 6 }}>売り切れ</span>
+                ) : (
+                  v.price != null && !many && (
+                    <span style={{ fontSize: 12, fontWeight: 600, marginLeft: 6 }}>¥{v.price.toLocaleString()}</span>
+                  )
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DiscountRow({
   current,
   onAdd,
