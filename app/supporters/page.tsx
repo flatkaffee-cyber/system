@@ -19,7 +19,7 @@ const rewardLabel = (s: Supporter) =>
 
 const DEFAULT_SUBJECT = "【flat.】ご支援ありがとうございました｜チケット引き換えのご案内";
 
-const DEFAULT_BODY = `{name} さま
+const DEFAULT_BODY = `ご支援者様
 
 この度は、flat.のクラウドファンディングにご支援いただき、本当にありがとうございました。
 たくさんの方に応援していただき、目標金額を達成することができました。皆さんからいただいた支援や言葉のひとつひとつが、flat.をつくる大きな力になりました。
@@ -40,7 +40,6 @@ flat.でお待ちしております。
 ご来店の際に、このメールをスタッフにお見せください。
 その場で紙の回数券とお引き換えします。
 
-・有効期間　2026年8月8日 〜 2027年8月8日
 ・現金へのお引き換えはできません。おつりは出ません
 {notes}
 ・スマートフォンの画面でも、印刷したものでも構いません
@@ -228,7 +227,7 @@ export default function Supporters() {
           style={{ width: "100%", fontSize: 12.5, lineHeight: 1.8, padding: 8 }}
         />
         <p className="hint" style={{ marginTop: 6 }}>
-          <code>{"{name}"}</code> は名前、<code>{"{rewards}"}</code> は「コーヒーチケット 5杯分」などの行、
+          <code>{"{rewards}"}</code> は「コーヒーチケット 5杯分」などの行、
           <code>{"{notes}"}</code> はセットの人にだけ出る但し書きに置き換わります。
         </p>
         <div style={{ marginTop: 8 }}>
