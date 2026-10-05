@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { defaultKeyword } from "@/lib/itemName";
+import { defaultKeyword, normalizeItemName } from "@/lib/itemName";
 
 // 仕入高の行に「品目」を付けるための小さなUI。
 // ビール（ハイネケン）/ 梅酒 のような粒度で分けたいが、品名はレシートのOCR結果で
@@ -45,6 +45,13 @@ export default function ItemPicker({
     );
   }
 
+  // キーワードがこの品名に含まれていないと、覚えさせてもこの行には品目が付かない。
+  // 読み取りの誤字（「豊熟」が「薫熟」になる等）で起きやすいので、その場で知らせる。
+  const k = keyword.trim();
+  const nk = normalizeItemName(k) || k;
+  const appliesHere =
+    !k || productName.includes(k) || normalizeItemName(productName).includes(nk);
+
   return (
     <div
       style={{
@@ -64,6 +71,12 @@ export default function ItemPicker({
         placeholder="キーワード（例: プレミアム）"
         style={{ width: "100%", marginBottom: 4 }}
       />
+      {!appliesHere && (
+        <div style={{ color: "#c0392b", marginBottom: 6, lineHeight: 1.5 }}>
+          この品名に「{k}」が含まれていないので、覚えさせてもこの行には付きません。
+          品名の読み取りまちがいなら品名を直すか、品名に入っている語をキーワードにしてください。
+        </div>
+      )}
       <input
         list="item-options"
         value={item}
