@@ -7,7 +7,7 @@
 // 表記ゆれのぶんだけ品目が増えて、かえって集計できなくなるため。
 
 import { FREEE_COMPANY_ID, freeeGet, freeePost } from "@/lib/freee";
-import { normalizeItemName } from "@/lib/itemName";
+import { matchOverride, normalizeItemName } from "@/lib/itemName";
 
 const OVERRIDE_KEY = "items:overrides";
 
@@ -85,14 +85,10 @@ export function resolveWithOverrides(
 ): string | null {
   const s = String(productName ?? "");
   if (!s) return null;
-  // 数量を落とした形でも見る。買った個数で品名が変わっても同じ商品と分かるように。
-  // 古い覚え方（キーワードに数量が入ったもの）も拾えるよう、キーも両方で試す。
+  // 数量表記・かなの種類・全角半角の違いは無視して照合する（lib/itemName の matchOverride）
+  const hit = matchOverride(s, overrides);
+  if (hit) return hit;
   const n = normalizeItemName(s);
-  const keys = Object.keys(overrides).sort((a, b) => b.length - a.length);
-  for (const k of keys) {
-    const nk = normalizeItemName(k) || k;
-    if (s.includes(k) || (n && (n.includes(k) || n.includes(nk)))) return overrides[k];
-  }
   return resolveItemName(s) ?? (n && n !== s ? resolveItemName(n) : null);
 }
 

@@ -41,3 +41,51 @@ export function defaultKeyword(productName: string): string {
   const n = normalizeItemName(productName);
   return n || String(productName ?? "").trim();
 }
+
+/**
+ * キーワードの照合用に、読み取りでブレやすい違いを消した形にする。
+ * OCRは「お酒にプラス」を「お酒ニプラス」と読むなど、ひらがな・カタカナや
+ * 全角・半角を取り違えるので、照合のときだけそろえる（表示や保存には使わない）。
+ */
+export function foldForMatch(raw: string): string {
+  return String(raw || "")
+    .normalize("NFKC")
+    .replace(/[ぁ-ゖ]/g, (c) => String.fromCharCode(c.charCodeAt(0) + 0x60))
+    .toLowerCase()
+    .replace(/\s+/g, "");
+}
+
+/** 数量表記だけを無視した照合（これまでどおりの当て方） */
+function exactMatches(productName: string, keyword: string): boolean {
+  const k = String(keyword || "").trim();
+  if (!k) return false;
+  const s = String(productName || "");
+  const n = normalizeItemName(s);
+  const nk = normalizeItemName(k) || k;
+  return s.includes(k) || (!!n && (n.includes(k) || n.includes(nk)));
+}
+
+/** 品名がこのキーワードに当たるか（数量表記・かなの種類・全角半角の違いは無視） */
+export function keywordMatches(productName: string, keyword: string): boolean {
+  const k = String(keyword || "").trim();
+  if (!k) return false;
+  const s = String(productName || "");
+  if (exactMatches(s, k)) return true;
+  const fs = foldForMatch(s);
+  const fn = foldForMatch(normalizeItemName(s));
+  const fk = foldForMatch(k);
+  const fnk = foldForMatch(normalizeItemName(k) || k);
+  return [fk, fnk].some((x) => !!x && (fs.includes(x) || (!!fn && fn.includes(x))));
+}
+
+/**
+ * 覚えさせた対応表から品目を引く。長いキーワードを優先する。
+ * まずこれまでどおりの当て方で探し、当たらないときだけ、かなの種類などの違いを無視して探す
+ * （ゆるい照合が、すでに当たっている品目を横取りしないように）。
+ */
+export function matchOverride(productName: string, overrides: Record<string, string>): string | null {
+  const keys = Object.keys(overrides).sort((a, b) => b.length - a.length);
+  for (const k of keys) if (exactMatches(productName, k)) return overrides[k];
+  for (const k of keys) if (keywordMatches(productName, k)) return overrides[k];
+  return null;
+}

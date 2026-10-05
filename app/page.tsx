@@ -6,6 +6,7 @@ import Nav from "@/components/Nav";
 import CopyField from "@/components/CopyField";
 import TagInput from "@/components/TagInput";
 import ItemPicker from "@/components/ItemPicker";
+import { matchOverride } from "@/lib/itemName";
 import { cardOf } from "@/lib/cards";
 
 const MEMBERS = ["坂本", "町田", "櫻井", "國仲"] as const;
@@ -246,9 +247,7 @@ export default function Home() {
 
   /** 品名から、いまの設定で決まる品目名（未設定なら空） */
   function itemOf(name: string) {
-    const keys = Object.keys(itemMap.overrides).sort((a, b) => b.length - a.length);
-    for (const k of keys) if (name.includes(k)) return itemMap.overrides[k];
-    return "";
+    return matchOverride(name, itemMap.overrides) ?? "";
   }
 
   /** 「プレミアム」→「ビール（その他）」のように覚えさせる */
