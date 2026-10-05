@@ -130,7 +130,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "不正なリクエスト" }, { status: 400 });
   }
   const amount = body.amount ?? 0;
-  const description = body.description ?? "";
+  // 銀行明細の摘要は「ＡＭＡＺＯＮ．ＣＯ．ＪＰ」のような全角で来るので、半角にそろえてから判定する。
+  // そろえないと下のAmazon判定（/AMAZON/）にかからず、注文メールとの突き合わせが動かない。
+  const description = (body.description ?? "").normalize("NFKC");
   const txnDate = body.date ?? "";
   const keyword = (body.keyword ?? "").trim();
 
