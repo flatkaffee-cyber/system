@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { saveReceipt, getReceipts, deleteReceipt, findDuplicate, updateReceiptItems, updateReceipt, type RLine } from "@/lib/receipts";
+import { saveReceipt, getReceipts, deleteReceipt, findDuplicate, updateReceiptItems, updateReceipt, getReceiptImage, saveReceiptImage, type RLine } from "@/lib/receipts";
 import { applyAssetThreshold } from "@/lib/receipt";
 import { updateCostsFromReceipt } from "@/lib/menu";
 import { getOverrides, resolveWithOverrides } from "@/lib/freeeItems";
@@ -38,6 +38,7 @@ export async function PATCH(req: NextRequest) {
     action?: "items" | "edit";
     lines?: RLine[];
     patch?: Record<string, unknown>;
+    image?: string | null;
   };
   try {
     body = await req.json();
@@ -52,6 +53,10 @@ export async function PATCH(req: NextRequest) {
     if (body.action === "edit" && body.patch) {
       const ok = await updateReceipt(body.id, body.patch as never);
       if (!ok) return NextResponse.json({ error: "更新対象がありません" }, { status: 404 });
+      // 登録済みの方に画像が無ければ、撮り直した画像を付け足す（上書きはしない）
+      if (body.image && !(await getReceiptImage(body.id))) {
+        await saveReceiptImage(body.id, body.image).catch(() => {});
+      }
       return NextResponse.json({ ok: true });
     }
     // 旧互換: lines確定

@@ -45,12 +45,16 @@ export default function Home() {
   const [cardHint, setCardHint] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [dup, setDup] = useState<
-    { vendor: string; date: string; total: number; registered: boolean } | null
+    { id?: string; vendor: string; date: string; total: number; registered: boolean } | null
   >(null);
   // サーバーが重複でブロックしたとき（承知で登録するか確認する）
   const [dupBlock, setDupBlock] = useState<
-    { vendor: string; date: string; total: number; registered: boolean } | null
+    { id?: string; vendor: string; date: string; total: number; registered: boolean } | null
   >(null);
+  // 登録済みの領収書を呼び出して編集しているとき、そのid。保存は新規ではなく上書きになる
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingRegistered, setEditingRegistered] = useState(false);
+  const [openingExisting, setOpeningExisting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -275,9 +279,91 @@ export default function Home() {
     setForm((f) => ({ ...f, lines: f.lines.length > 1 ? f.lines.filter((_, idx) => idx !== i) : f.lines }));
   }
 
+  // 二重登録の警告から、登録済みの内容をフォームに呼び出す。
+  // 警告に日付と金額しか出ないと、何が登録されているのか確かめようがないため。
+  async function openExisting(id: string) {
+    setOpeningExisting(true);
+    try {
+      const saved = await fetch("/api/receipts").then((x) => x.json());
+      const hit = (saved.receipts ?? []).find((x: { id: string }) => x.id === id);
+      if (!hit) {
+        setError("登録済みの領収書が見つかりませんでした。");
+        return;
+      }
+      setForm((f) => ({
+        ...f,
+        date: hit.date || f.date,
+        vendor: hit.vendor || "",
+        payer: hit.payer || f.payer,
+        memo: hit.memo || "",
+        expenseKind: hit.expenseKind || "company",
+        laborMember: hit.laborMember || f.laborMember,
+        lines:
+          (hit.lines ?? []).length > 0
+            ? hit.lines.map((l: Line) => ({
+                name: l.name ?? "",
+                amount: Number(l.amount) || 0,
+                category: l.category || "不明",
+                tags: l.tags ?? [],
+              }))
+            : [{ name: hit.summary || "", amount: hit.total || 0, category: hit.category || "不明", tags: hit.tags ?? [] }],
+      }));
+      // 登録済みの方に画像があればそれを見せる。無ければ今撮った画像を残し、保存時に付け足す
+      try {
+        const img = await fetch(`/api/receipts/image?id=${encodeURIComponent(id)}`).then((x) => x.json());
+        if (img?.image) setImage(img.image);
+      } catch {
+        /* 画像が取れなくても編集はできる */
+      }
+      setEditingId(id);
+      setEditingRegistered(!!hit.registered);
+      setDup(null);
+      setDupBlock(null);
+      setStatus("review");
+    } finally {
+      setOpeningExisting(false);
+    }
+  }
+
   async function save(force = false) {
     setSaving(true);
     setDupBlock(null);
+    if (editingId) {
+      // 呼び出した領収書の上書き保存。新しく作らないので二重登録にならない
+      try {
+        const res = await fetch("/api/receipts", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: editingId,
+            action: "edit",
+            image,
+            patch: {
+              date: form.date,
+              vendor: form.vendor,
+              payer: form.payer,
+              memo: form.memo,
+              expenseKind: form.expenseKind,
+              laborMember: form.expenseKind === "labor" ? form.laborMember : undefined,
+              lines: form.lines,
+            },
+          }),
+        });
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}));
+          setError(j.error || "上書き保存に失敗しました。");
+          setSaving(false);
+          return;
+        }
+      } catch {
+        setError("上書き保存に失敗しました。");
+        setSaving(false);
+        return;
+      }
+      setSaving(false);
+      setStatus("saved");
+      return;
+    }
     try {
       const res = await fetch("/api/receipts", {
         method: "POST",
@@ -384,7 +470,7 @@ export default function Home() {
         const hit = (saved.receipts ?? []).find(
           (x: { date: string; total: number }) => x.date === r.date && x.total === t,
         );
-        if (hit) setDup({ vendor: hit.vendor, date: hit.date, total: hit.total, registered: !!hit.registered });
+        if (hit) setDup({ id: hit.id, vendor: hit.vendor, date: hit.date, total: hit.total, registered: !!hit.registered });
       } catch {
         /* 重複チェック失敗は無視 */
       }
@@ -416,6 +502,8 @@ export default function Home() {
     setError(null);
     setDup(null);
     setDupBlock(null);
+    setEditingId(null);
+    setEditingRegistered(false);
     setConsultOpen(false);
     setConsult([]);
     setConsultInput("");
@@ -577,6 +665,29 @@ export default function Home() {
                 {dup.registered ? "freee登録済" : "保存済・未登録"}）
               </div>
               <div style={{ marginTop: 4 }}>二重計上に注意。別物なら確認してから登録してください。</div>
+              {dup.id && (
+                <button
+                  className="ghost"
+                  style={{ marginTop: 8 }}
+                  onClick={() => openExisting(dup.id!)}
+                  disabled={openingExisting}
+                >
+                  {openingExisting ? <span className="spinner" /> : "登録済みの内容を開く（直して上書きできる）"}
+                </button>
+              )}
+            </div>
+          )}
+
+          {editingId && (
+            <div className="dup-warn" style={{ borderColor: "#2980b9", background: "#eaf3fb" }}>
+              ✏️ <strong>登録済みの領収書を編集しています</strong>
+              <div style={{ marginTop: 4 }}>保存すると、この内容で上書きされます（新しくは増えません）。</div>
+              {editingRegistered && (
+                <div style={{ marginTop: 4, color: "#c0392b" }}>
+                  freeeに登録済みです。ここで金額や科目を変えても、freee側は自動では書き換わりません。
+                  変えた場合はfreeeも直してください。
+                </div>
+              )}
             </div>
           )}
 
@@ -825,6 +936,15 @@ export default function Home() {
                 <button className="ghost" onClick={reset} disabled={saving}>
                   やめる（登録しない）
                 </button>
+                {dupBlock.id && (
+                  <button
+                    className="ghost"
+                    onClick={() => openExisting(dupBlock.id!)}
+                    disabled={saving || openingExisting}
+                  >
+                    {openingExisting ? <span className="spinner" /> : "登録済みの内容を開いて直す"}
+                  </button>
+                )}
                 <button className="pay-btn" onClick={() => save(true)} disabled={saving}>
                   {saving ? <span className="spinner" /> : "別物なので承知で登録する"}
                 </button>
@@ -834,7 +954,13 @@ export default function Home() {
 
           <div style={{ marginTop: 18 }}>
             <button className="primary" onClick={() => save()} disabled={!form.date || total <= 0 || saving}>
-              {saving ? <span className="spinner" /> : "この内容で登録（保存＋freee貼付用を表示）"}
+              {saving ? (
+                <span className="spinner" />
+              ) : editingId ? (
+                "この内容で上書き保存"
+              ) : (
+                "この内容で登録（保存＋freee貼付用を表示）"
+              )}
             </button>
             <button className="ghost" onClick={reset}>
               ← やり直す

@@ -83,6 +83,12 @@ export async function saveReceipt(
   }
 }
 
+/** 保存済みの領収書に原本画像を付ける（後から撮り直したとき用） */
+export async function saveReceiptImage(id: string, imageDataUrl: string): Promise<void> {
+  if (!imageDataUrl || imageDataUrl.length >= 6_000_000) return;
+  await putFile(`receipt:file:${id}`, imageDataUrl);
+}
+
 export async function getReceiptImage(id: string): Promise<string | null> {
   const store = await kv();
   if (!store) return null;
