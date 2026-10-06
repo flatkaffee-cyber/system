@@ -26,7 +26,8 @@ export async function GET(req: NextRequest) {
       headers: passAuth(req),
       cache: "no-store",
     });
-    const a = res.ok ? await res.json() : null;
+    // 取れなくても（保護されたプレビュー環境など）freee側のレポートは出す
+    const a = res.ok ? await res.json().catch(() => null) : null;
     const evSales: { label: string; sales: number; reason: string }[] = a?.excludedEvents?.sales ?? [];
     const data = await buildMonthly(
       month,
