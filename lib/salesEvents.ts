@@ -27,6 +27,13 @@ export const EXCLUDE_WINDOWS: ExcludeWindow[] = [
     label: "店内休業・テイクアウトのみ",
     reason: "特殊営業",
   },
+  {
+    // 火曜（定休日）に開いたDJイベント。終日イベント扱い
+    date: "2026-09-22",
+    fromHour: 0,
+    label: "DJイベント（蓮くん）",
+    reason: "イベント",
+  },
 ];
 
 /**

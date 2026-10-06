@@ -60,6 +60,7 @@ const GROUPS: Group[] = [
     label: "数字を見る",
     tabs: [
       { href: "/seiseki", label: "🏅 今月の成績" },
+      { href: "/monthly", label: "🗓 月次レポート" },
       { href: "/sales", label: "📈 売上" },
       { href: "/bunseki", label: "🔍 分析" },
       { href: "/accounting", label: "📊 経営" },
