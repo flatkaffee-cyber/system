@@ -273,7 +273,7 @@ export const DEFAULT_MENU: MenuItem[] = [
   },
   {
     id: "gin-tonic", name: "ジントニック", category: "🍸 Bar / Cocktail",
-    cost: 121, price: 550,
+    cost: 121, price: 600,
     ingredients: [
       { name: "ドライジン（GORDON'S）", unit: "ml", capacity: 700, purchasePrice: 1264, usage: 30, cost: 54 },
       { name: "トニックウォーター（神戸居留地185ml缶）", unit: "本", capacity: 1, purchasePrice: 67, usage: 1, cost: 67 },
@@ -281,7 +281,7 @@ export const DEFAULT_MENU: MenuItem[] = [
   },
   {
     id: "gin-buck", name: "ジンバック", category: "🍸 Bar / Cocktail",
-    cost: 132, price: 550,
+    cost: 132, price: 600,
     ingredients: [
       { name: "ドライジン（GORDON'S）", unit: "ml", capacity: 700, purchasePrice: 1264, usage: 30, cost: 54 },
       { name: "レモンジュース（お酒にプラス）", unit: "ml", capacity: 540, purchasePrice: 597, usage: 20, cost: 22 },
