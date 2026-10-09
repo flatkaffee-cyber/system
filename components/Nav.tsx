@@ -67,15 +67,22 @@ const GROUPS: Group[] = [
     ],
   },
   {
+    key: "event",
+    label: "イベント",
+    tabs: [
+      { href: "/shutten", label: "🎪 出店準備" },
+      { href: "/event/kanri", label: "🎧 イベント申込" },
+      { href: "/natsumatsuri/kanri", label: "🎆 夏祭り申込" },
+    ],
+  },
+  {
     key: "sonota",
     label: "その他",
     tabs: [
       { href: "/soudan", label: "💬 相談" },
       { href: "/knowledge", label: "📚 ナレッジ" },
       { href: "/meishi", label: "🪪 名刺" },
-      { href: "/event/kanri", label: "🎧 イベント申込" },
       { href: "/supporters", label: "☕ 支援者チケット" },
-      { href: "/natsumatsuri/kanri", label: "🎆 夏祭り申込" },
       { href: "/help", label: "❓ 使い方" },
     ],
   },
