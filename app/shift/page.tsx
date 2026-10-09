@@ -38,6 +38,8 @@ type Data = {
 };
 
 const WD = ["日", "月", "火", "水", "木", "金", "土"];
+// カレンダーの並び。週は月曜始まり（WD は getUTCDay の番号で引くのでそのまま）
+const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
 // タイムラインの描画範囲。開店前の仕込み(9:00)から閉店(24:30)まで
 const T0 = 9 * 60;
 const T1 = 24 * 60 + 30;
@@ -551,15 +553,15 @@ export default function Shift() {
       {/* ── カレンダー ───────────────────────── */}
       <div className="card" style={{ padding: 12 }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 4 }}>
-          {WD.map((w, i) => (
-            <div key={w} style={{
+          {WEEK_ORDER.map((i) => (
+            <div key={i} style={{
               textAlign: "center", fontSize: 11, fontWeight: 700, padding: "2px 0",
               color: i === 0 ? "#c0392b" : i === 6 ? "#2d6a9f" : "var(--muted)",
-            }}>{w}</div>
+            }}>{WD[i]}</div>
           ))}
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
-          {Array.from({ length: wdOf(dates[0]) }, (_, i) => <div key={`b${i}`} />)}
+          {Array.from({ length: (wdOf(dates[0]) + 6) % 7 }, (_, i) => <div key={`b${i}`} />)}
           {dates.map((date) => {
             const wd = wdOf(date);
             const day = dayMap[date];
@@ -707,10 +709,12 @@ export default function Shift() {
         </button>
         {(() => {
           // 文言を手で書くと、パターンを足したときにずれる。定義から作る
-          const tpl = data?.templates ?? [];
+          const tpl = [...(data?.templates ?? [])].sort(
+            (a, b) => WEEK_ORDER.indexOf(a.weekday) - WEEK_ORDER.indexOf(b.weekday),
+          );
           const filled = tpl.filter((t) => t.blocks.length > 0).map((t) => WD[t.weekday]);
           const closed = tpl.filter((t) => t.blocks.length === 0).map((t) => WD[t.weekday]);
-          const none = [0, 1, 2, 3, 4, 5, 6]
+          const none = WEEK_ORDER
             .filter((w) => !tpl.some((t) => t.weekday === w))
             .map((w) => WD[w]);
           return (

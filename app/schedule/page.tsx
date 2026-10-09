@@ -22,7 +22,8 @@ const COLOR = {
   店舗: { bg: "#fdf0e6", border: "#c87f36", text: "#9c5f22" },
 } as const;
 
-const WDAY = ["日", "月", "火", "水", "木", "金", "土"];
+// 週は月曜始まり（店の週の数え方に合わせる）
+const WDAY = ["月", "火", "水", "木", "金", "土", "日"];
 
 const ymd = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -164,7 +165,7 @@ export default function SchedulePage() {
       {!loading && today && monthsToShow(events, today).map(({ y, m }) => {
         const first = new Date(y, m - 1, 1);
         const lastDay = new Date(y, m, 0).getDate();
-        const lead = first.getDay();
+        const lead = (first.getDay() + 6) % 7; // 月曜始まりの空きマス
         const cells: (string | null)[] = [
           ...Array(lead).fill(null),
           ...Array.from({ length: lastDay }, (_, i) => `${y}-${String(m).padStart(2, "0")}-${String(i + 1).padStart(2, "0")}`),
@@ -185,7 +186,7 @@ export default function SchedulePage() {
               {WDAY.map((w, i) => (
                 <div key={w} style={{
                   textAlign: "center", fontSize: 11, fontWeight: 700, padding: "2px 0",
-                  color: i === 0 ? "#c0392b" : i === 6 ? "#2980b9" : "var(--muted)",
+                  color: i === 6 ? "#c0392b" : i === 5 ? "#2980b9" : "var(--muted)",
                 }}>{w}</div>
               ))}
               {cells.map((d, i) => {

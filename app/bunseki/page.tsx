@@ -274,7 +274,8 @@ export default function Bunseki() {
               {data.sales.byWeekday.length === 0 ? (
                 <p style={{ color: "var(--muted)", fontSize: 13 }}>データがありません。</p>
               ) : (
-                data.sales.byWeekday.map((w) => {
+                // 週は月曜始まりで並べる
+                [...data.sales.byWeekday].sort((a, b) => ((a.weekday + 6) % 7) - ((b.weekday + 6) % 7)).map((w) => {
                   const max = Math.max(...data.sales.byWeekday.map((x) => x.avgSales), 1);
                   const color = w.weekday === 0 ? "#c0392b" : w.weekday === 6 ? "#2980b9" : "var(--ink)";
                   return (
