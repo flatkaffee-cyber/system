@@ -144,12 +144,15 @@ export default function Home() {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     if (!video || !canvas) return;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    // カメラの解像度のままだと数MBになり、サーバーの受け取り上限（4.5MB）を超えて失敗する。
+    // アップロードと同じ大きさに縮めてから送る
+    const { width, height } = fitWithin(video.videoWidth, video.videoHeight);
+    canvas.width = width;
+    canvas.height = height;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    ctx.drawImage(video, 0, 0);
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+    ctx.drawImage(video, 0, 0, width, height);
+    const dataUrl = encodeJpeg(canvas);
     stopScan();
     // handleFileと同じ流れでAI解析に投入
     setImage(dataUrl);
@@ -396,27 +399,23 @@ export default function Home() {
     setStatus("saved");
   }
 
-  // 画像を最大1600pxにリサイズしてデータURLを返す（PDFはそのまま）
-  function compressImage(dataUrl: string): Promise<string> {
+  // 画像を最大1600pxにリサイズしてデータURLを返す（PDFはそのまま）。
+  // ブラウザが読めない画像（パソコンで選んだiPhoneのHEICなど）は null を返す。
+  // 以前は元のまま送っていたが、大きすぎるか非対応の形式でサーバー側で必ず失敗していた
+  function compressImage(dataUrl: string): Promise<string | null> {
     if (dataUrl.startsWith("data:application/pdf")) return Promise.resolve(dataUrl);
     return new Promise((resolve) => {
       const img = new Image();
       img.onload = () => {
-        const MAX = 1600;
-        let { width, height } = img;
-        if (width > MAX || height > MAX) {
-          const ratio = Math.min(MAX / width, MAX / height);
-          width = Math.round(width * ratio);
-          height = Math.round(height * ratio);
-        }
+        const { width, height } = fitWithin(img.width, img.height);
         const canvas = document.createElement("canvas");
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext("2d")!;
         ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL("image/jpeg", 0.85));
+        resolve(encodeJpeg(canvas));
       };
-      img.onerror = () => resolve(dataUrl); // 失敗時は元のまま
+      img.onerror = () => resolve(null);
       img.src = dataUrl;
     });
   }
@@ -489,6 +488,10 @@ export default function Home() {
       r.readAsDataURL(file);
     });
     const dataUrl = await compressImage(rawDataUrl);
+    if (!dataUrl) {
+      setError("この画像は読み込めませんでした（iPhoneのHEIC形式など）。カメラでスキャンするか、JPEG・PNGの画像を選んでください。");
+      return;
+    }
     setImage(dataUrl);
     setStatus("extracting");
     setCardHint(null);
@@ -997,4 +1000,19 @@ export default function Home() {
       )}
     </div>
   );
+}
+
+/** 領収書の画像はこの長辺まで縮めて送る。読み取りの精度はこれで十分 */
+const MAX_EDGE = 1600;
+
+function fitWithin(width: number, height: number): { width: number; height: number } {
+  if (width <= MAX_EDGE && height <= MAX_EDGE) return { width, height };
+  const ratio = Math.min(MAX_EDGE / width, MAX_EDGE / height);
+  return { width: Math.round(width * ratio), height: Math.round(height * ratio) };
+}
+
+/** JPEGにする。まれに大きくなりすぎたら画質を落としてもう一度（サーバーの上限 4.5MB に余裕を持たせる） */
+function encodeJpeg(canvas: HTMLCanvasElement): string {
+  const first = canvas.toDataURL("image/jpeg", 0.85);
+  return first.length > 3_500_000 ? canvas.toDataURL("image/jpeg", 0.7) : first;
 }
