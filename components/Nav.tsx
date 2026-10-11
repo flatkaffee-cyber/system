@@ -70,6 +70,7 @@ const GROUPS: Group[] = [
     key: "event",
     label: "イベント",
     tabs: [
+      { href: "/shutten/reji", label: "🧮 出店レジ" },
       { href: "/shutten", label: "🎪 出店準備" },
       { href: "/event/kanri", label: "🎧 イベント申込" },
       { href: "/natsumatsuri/kanri", label: "🎆 夏祭り申込" },
