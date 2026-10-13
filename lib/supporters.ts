@@ -35,7 +35,21 @@ export type Supporter = {
   redeemedAt?: string;
   note?: string;
   createdAt: string;
+  /**
+   * どの送り先の集まりか。最初はコーヒーチケットの案内だけだったので、
+   * 空ならチケット扱い。同じ人が別のグループに入ってもよい（メールの中身が違うため）
+   */
+  group?: string;
 };
+
+export const GROUPS = {
+  ticket: "コーヒーチケット",
+  thanks: "お礼の動画",
+} as const;
+export type GroupId = keyof typeof GROUPS;
+
+export const groupOf = (s: Pick<Supporter, "group">): GroupId =>
+  s.group === "thanks" ? "thanks" : "ticket";
 
 export async function getSupporters(): Promise<Supporter[]> {
   const store = await kv();
@@ -215,12 +229,18 @@ export function parseCsv(text: string): { rows: ParsedRow[]; skipped: number } {
  */
 export async function importSupporters(
   rows: ParsedRow[],
-  opts: { ticketsOnly: boolean },
+  opts: { ticketsOnly: boolean; group?: GroupId; onlyCourse?: string },
 ): Promise<{ added: number; updated: number; skippedNoTicket: number }> {
+  const group: GroupId = opts.group ?? "ticket";
   const merged = new Map<string, ParsedRow>();
   let skippedNoTicket = 0;
   for (const r of rows) {
     if (opts.ticketsOnly && r.cups === 0 && r.sets === 0) {
+      skippedNoTicket++;
+      continue;
+    }
+    // リターン名が分かるときだけ絞る。名前とメールだけの表なら全員を入れる
+    if (opts.onlyCourse && r.course && !r.course.includes(opts.onlyCourse)) {
       skippedNoTicket++;
       continue;
     }
@@ -240,7 +260,7 @@ export async function importSupporters(
   let added = 0;
   let updated = 0;
   for (const r of merged.values()) {
-    const i = list.findIndex((s) => s.email === r.email);
+    const i = list.findIndex((s) => s.email === r.email && groupOf(s) === group);
     if (i >= 0) {
       list[i] = { ...list[i], name: r.name || list[i].name, course: r.course, tickets: r.cups, sets: r.sets };
       updated++;
@@ -253,6 +273,7 @@ export async function importSupporters(
         tickets: r.cups,
         sets: r.sets,
         createdAt: new Date().toISOString(),
+        ...(group === "ticket" ? {} : { group }),
       });
       added++;
     }

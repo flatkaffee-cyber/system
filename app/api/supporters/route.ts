@@ -6,6 +6,7 @@ import {
   importSupporters,
   parseCsv,
   fillTemplate,
+  type GroupId,
 } from "@/lib/supporters";
 import { gmailProfile, gmailSend, googleErrorPayload, isGoogleConnected } from "@/lib/google";
 
@@ -48,6 +49,7 @@ export async function POST(req: NextRequest) {
     const b = (await req.json()) as {
       csv?: string;
       ticketsOnly?: boolean;
+      group?: GroupId;
       action?: string;
       ids?: string[];
       subject?: string;
@@ -62,7 +64,13 @@ export async function POST(req: NextRequest) {
           { status: 400 },
         );
       }
-      const r = await importSupporters(rows, { ticketsOnly: b.ticketsOnly !== false });
+      // お礼の動画は「お礼のメッセージ」のリターンの人だけ。チケットの有無は見ない
+      const group: GroupId = b.group === "thanks" ? "thanks" : "ticket";
+      const r = await importSupporters(rows, {
+        group,
+        ticketsOnly: group === "ticket" && b.ticketsOnly !== false,
+        onlyCourse: group === "thanks" ? "お礼のメッセージ" : undefined,
+      });
       return NextResponse.json({ ok: true, ...r, skipped });
     }
 

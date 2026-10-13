@@ -10,7 +10,11 @@ type Supporter = {
   id: string; name: string; email: string; course?: string;
   tickets: number; sets: number;
   sentAt?: string; sendError?: string; redeemedAt?: string; note?: string;
+  group?: string;
 };
+
+type Group = "ticket" | "thanks";
+const groupOf = (s: Supporter): Group => (s.group === "thanks" ? "thanks" : "ticket");
 
 const rewardLabel = (s: Supporter) =>
   [s.tickets > 0 ? `コーヒー${s.tickets}杯` : "", s.sets > 0 ? `セット${s.sets}食` : ""]
@@ -66,8 +70,45 @@ https://www.google.com/maps/search/?api=1&query=滋賀県彦根市京町二丁�
 
 合同会社flat.　坂本 達郎`;
 
+const THANKS_SUBJECT = "【flat.】ご支援ありがとうございました｜お礼の動画をお届けします";
+
+const THANKS_BODY = `{name}
+
+この度は、flat.のクラウドファンディングにご支援いただき、本当にありがとうございました。
+たくさんの方に応援していただき、目標金額を達成することができました。
+
+リターンの「お礼のメッセージ」として、flat.の4人から動画をお送りします。
+お届けが予定の10月1日より遅くなってしまい、申し訳ありません。
+
+▶ 動画はこちら（約2分半）
+https://youtu.be/ZIFWqe_R27M
+
+誰かがふらっと立ち寄って、誰かと出会って、気づけば少し長居している。
+そんな小さなきっかけが生まれる「彦根のまちのリビング」を、
+これから皆さんと一緒につくっていきたいと思っています。
+
+彦根にお越しの際は、ぜひflat.にもお立ち寄りください。
+
+────────────────
+flat.
+滋賀県彦根市京町二丁目3-1
+0749-46-5355
+カフェ 10:00〜18:00 ／ バー 19:00〜24:30（ラストオーダー 23:30）
+火曜定休
+Instagram：@flat.hikone
+────────────────
+
+flat.　まちしょう・あん・たつろー・かんきち`;
+
+const PRESET: Record<Group, { label: string; subject: string; body: string }> = {
+  ticket: { label: "コーヒーチケット", subject: DEFAULT_SUBJECT, body: DEFAULT_BODY },
+  thanks: { label: "お礼の動画", subject: THANKS_SUBJECT, body: THANKS_BODY },
+};
+
 export default function Supporters() {
-  const [list, setList] = useState<Supporter[]>([]);
+  const [all, setAll] = useState<Supporter[]>([]);
+  // いま扱っている送り先。取り込み・文面・送信・一覧がすべてこれで切り替わる
+  const [group, setGroup] = useState<Group>("ticket");
   const [account, setAccount] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const [csv, setCsv] = useState("");
@@ -84,7 +125,7 @@ export default function Supporters() {
       const res = await fetch("/api/supporters");
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "取得失敗");
-      setList(d.supporters || []);
+      setAll(d.supporters || []);
       setAccount(d.account ?? null);
       setConnected(!!d.connected);
     } catch (e) {
@@ -100,13 +141,13 @@ export default function Supporters() {
       const res = await fetch("/api/supporters", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ csv, ticketsOnly }),
+        body: JSON.stringify({ csv, ticketsOnly, group }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "取り込み失敗");
       setMsg(
         `${d.added}人を追加、${d.updated}人を更新しました。` +
-          (d.skippedNoTicket ? `チケットの無い支援${d.skippedNoTicket}件は取り込んでいません。` : ""),
+          (d.skippedNoTicket ? `対象外の支援${d.skippedNoTicket}件は取り込んでいません。` : ""),
       );
       setCsv("");
       await load();
@@ -115,11 +156,23 @@ export default function Supporters() {
     } finally { setBusy(false); }
   };
 
+  const list = all.filter((s) => groupOf(s) === group);
   const unsent = list.filter((s) => !s.sentAt);
+
+  const switchGroup = (g: Group) => {
+    setGroup(g);
+    setSubject(PRESET[g].subject);
+    setBody(PRESET[g].body);
+    setMsg(""); setErr(""); setQ("");
+  };
 
   const send = async () => {
     if (unsent.length === 0) return;
-    if (!confirm(`まだ送っていない${unsent.length}人に、${account ?? "連携中のアカウント"} から送ります。取り消せません。`)) return;
+    if (body.includes("【動画のリンク】")) {
+      setErr("本文の【動画のリンク】を、YouTubeのリンクに差し替えてから送ってください。");
+      return;
+    }
+    if (!confirm(`「${PRESET[group].label}」のまだ送っていない${unsent.length}人に、${account ?? "連携中のアカウント"} から送ります。取り消せません。`)) return;
     setBusy(true); setErr(""); setMsg("");
     try {
       const res = await fetch("/api/supporters", {
@@ -163,6 +216,26 @@ export default function Supporters() {
       </header>
       <Nav />
 
+      <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
+        {(Object.keys(PRESET) as Group[]).map((g) => {
+          const n = all.filter((s) => groupOf(s) === g).length;
+          return (
+            <button
+              key={g}
+              onClick={() => switchGroup(g)}
+              style={{
+                padding: "7px 13px", borderRadius: 8, cursor: "pointer", fontSize: 12.5, fontWeight: 700,
+                border: group === g ? "2px solid var(--accent)" : "1px solid var(--line)",
+                background: group === g ? "var(--accent)" : "#fff",
+                color: group === g ? "#fff" : "var(--ink)",
+              }}
+            >
+              {PRESET[g].label}（{n}人）
+            </button>
+          );
+        })}
+      </div>
+
       {err && <p className="err">{err}</p>}
       {msg && <p className="hint">{msg}</p>}
 
@@ -192,7 +265,7 @@ export default function Supporters() {
       </div>
 
       <div className="card" style={{ padding: "12px 14px" }}>
-        <div className="cat-title">1. 支援者を取り込む</div>
+        <div className="cat-title">1. 「{PRESET[group].label}」の送り先を取り込む</div>
         <p className="hint" style={{ marginBottom: 6 }}>
           CAMPFIREのCSVをそのまま貼ってください。名前とメールアドレスの列を自動で探します。
           同じメールアドレスの人は二重に入りません。
@@ -205,19 +278,23 @@ export default function Supporters() {
           style={{ width: "100%", fontSize: 12, padding: 8 }}
         />
         <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
-          <label style={{ fontSize: 12.5, display: "flex", alignItems: "center", gap: 4 }}>
-            <input
-              type="checkbox" checked={ticketsOnly}
-              onChange={(e) => setTicketsOnly(e.target.checked)}
-              style={{ width: "auto", flex: "0 0 auto" }}
-            />
-            チケットのある人だけ取り込む
-          </label>
+          {group === "ticket" && (
+            <label style={{ fontSize: 12.5, display: "flex", alignItems: "center", gap: 4 }}>
+              <input
+                type="checkbox" checked={ticketsOnly}
+                onChange={(e) => setTicketsOnly(e.target.checked)}
+                style={{ width: "auto", flex: "0 0 auto" }}
+              />
+              チケットのある人だけ取り込む
+            </label>
+          )}
           <button onClick={doImport} disabled={busy || !csv.trim()}>取り込む</button>
         </div>
         <p className="hint" style={{ marginTop: 6 }}>
-          リターン内容から杯数を読み取ります（5杯分・1杯分・ホットサンドセット5食分）。
-          複数口で支援した人は合算されます。取り込み直しても、送信済みとお渡し済みの記録は消えません。
+          {group === "ticket"
+            ? "リターン内容から杯数を読み取ります（5杯分・1杯分・ホットサンドセット5食分）。複数口で支援した人は合算されます。"
+            : "CAMPFIREのCSVを貼ると「お礼のメッセージ」のリターンの人だけが入ります。名前は取り込んだあと一覧で直せます。"}
+          取り込み直しても、送信済みの記録は消えません。
         </p>
       </div>
 
@@ -251,7 +328,9 @@ export default function Supporters() {
 
       <div className="card" style={{ padding: "12px 14px" }}>
         <div className="cat-title">
-          3. 来店したら渡す（{list.filter((s) => s.redeemedAt).length}/{list.length}人）
+          {group === "ticket"
+            ? `3. 来店したら渡す（${list.filter((s) => s.redeemedAt).length}/${list.length}人）`
+            : `3. 送り先（${list.filter((s) => s.sentAt).length}/${list.length}人に送信済み）`}
         </div>
         <input
           value={q}
@@ -291,18 +370,20 @@ export default function Supporters() {
             <span style={{ flex: "0 0 auto", fontSize: 11, color: s.sentAt ? "var(--ok)" : "#c0392b" }}>
               {s.sentAt ? "送信済" : "未送信"}
             </span>
-            <button
-              onClick={() => toggleRedeemed(s)}
-              disabled={busy}
-              style={{
-                fontSize: 11, padding: "3px 10px", flex: "0 0 auto",
-                background: s.redeemedAt ? "var(--card)" : "var(--accent)",
-                color: s.redeemedAt ? "var(--ink)" : "#fff",
-                fontWeight: 700,
-              }}
-            >
-              {s.redeemedAt ? "渡し済み" : "渡した"}
-            </button>
+            {group === "ticket" && (
+              <button
+                onClick={() => toggleRedeemed(s)}
+                disabled={busy}
+                style={{
+                  fontSize: 11, padding: "3px 10px", flex: "0 0 auto",
+                  background: s.redeemedAt ? "var(--card)" : "var(--accent)",
+                  color: s.redeemedAt ? "var(--ink)" : "#fff",
+                  fontWeight: 700,
+                }}
+              >
+                {s.redeemedAt ? "渡し済み" : "渡した"}
+              </button>
+            )}
           </div>
         ))}
         <p className="hint" style={{ marginTop: 8 }}>
