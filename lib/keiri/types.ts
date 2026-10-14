@@ -64,3 +64,37 @@ export type PlView = {
   netIncome: number;
   upToDate: boolean;
 };
+
+export type PayTag = "card" | "bank" | "cash" | "tatekae";
+export type ReceiptStatus = "attached" | "amazon" | "missing" | "missing-recorded" | "n/a";
+export type CashRow = {
+  key: string;
+  date: string;
+  amount: number;
+  title: string; // 店名・振込先など
+  detail: string; // 科目と摘要
+  kind: "sales" | "other" | "expense" | "move"; // move = 口座⇄現金の移動（合計に入れない）
+  tag?: PayTag; // 出金だけ
+  processed: boolean; // freeeで処理済みか
+  partner?: string;
+  dealId?: number;
+  journalId?: number;
+  walletTxnId?: number;
+  receipt?: { id: string; vendor: string };
+  amazonOrderId?: string;
+  receiptStatus?: ReceiptStatus;
+};
+export type CashTotals = { in: number; out: number; net: number; missingReceipts: number; unprocessed: number };
+export type CashView = { inflows: CashRow[]; outflows: CashRow[]; totals: CashTotals };
+export type CashInput = {
+  month: { from: string; to: string };
+  bankWalletableId: number;
+  cashWalletableId: number;
+  squareOtherWalletableId: number;
+  walletTxns: WalletTxn[]; // 普通預金のその月の明細
+  deals: FreeeDeal[]; // 支払日がその月にある取引（計上日が前の月の取引も含めて渡す）
+  journals: FreeeJournal[]; // その月の振替伝票
+  transfers: FreeeTransfer[]; // その月の口座振替
+  accountNames: Map<number, string>;
+  partnerNames: Map<number, string>;
+};
