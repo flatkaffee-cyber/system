@@ -45,7 +45,6 @@ export async function GET(req: NextRequest) {
     const pending = await openOrders();
     const choices = await getChoices(date);
     // 前日の昼に「翌日仕込む」を押していたら、今日の朝に仕込みを出す
-    const yChoices = await getChoices(yesterdayOf(date));
     const daily = await dailyState(date);
     const [shifts, kin] = await Promise.all([getShifts(), getKintai()]);
     // 夜に足りなかったものは、翌朝の手当てとして持ち越す。
@@ -72,23 +71,8 @@ export async function GET(req: NextRequest) {
           return { ...t, done: done.includes(t.id), due: pending.length > 0 };
         }
         if (t.hotsand) {
-          const prepTomorrow = choices["hotsand-check"] === "翌日仕込む";
-          const checked = !!choices["hotsand-check"];
-          const due =
-            t.hotsand === "fridge" ? true
-            : t.hotsand === "check" ? true
-            : t.hotsand === "breadOrder" ? prepTomorrow
-            : t.hotsand === "prep" ? yChoices["hotsand-check"] === "翌日仕込む"
-            // 確認できなかった日は、タネだけ作って明日に備える
-            // 翌日仕込むと決めた日は、前の晩にタネまで作っておく。
-            // 確認できなかった日も、明日いつでも焼けるようにタネだけ作る
-            : /* tane */ prepTomorrow || !checked;
-          return {
-            ...t,
-            done: done.includes(t.id),
-            due,
-            ...(t.choices ? { answer: choices[t.id] ?? null } : {}),
-          };
+          // 冷蔵庫への補充は毎日
+          return { ...t, done: done.includes(t.id), due: true };
         }
         if (t.kintai) {
           // シフトに載っている全員の勤怠がある日は、もう出さない
@@ -121,7 +105,8 @@ export async function GET(req: NextRequest) {
         if (t.weekday !== undefined) {
           // 曜日が決まっている作業。その曜日以外は「今日はなし」
           const wd = new Date(`${date}T00:00:00Z`).getUTCDay();
-          return { ...t, done: done.includes(t.id), due: wd === t.weekday };
+          const wds = Array.isArray(t.weekday) ? t.weekday : [t.weekday];
+          return { ...t, done: done.includes(t.id), due: wds.includes(wd) };
         }
         if (!t.everyDays) return { ...t, done: done.includes(t.id) };
         // 何日おきの作業は、前回からの経過で今日やるべきか判断する

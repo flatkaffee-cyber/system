@@ -13,14 +13,14 @@ type Task = {
   name: string;
   detail?: string;
   everyDays?: number;
-  weekday?: number;
+  weekday?: number | number[];
   waffleCount?: boolean;
   waffleMorning?: boolean;
   orderList?: boolean;
   pendingOrder?: boolean;
   choices?: [string, string];
   answer?: string | null;
-  hotsand?: "fridge" | "check" | "breadOrder" | "prep" | "tane";
+  hotsand?: "fridge";
   daily?: "morning" | "afternoon" | "evening";
   dailyAction?: "buy" | "prep" | "refill";
   wafflePrep?: boolean;
@@ -327,7 +327,7 @@ export default function OpeningPage() {
                 background: t.due ? "#fdf0e6" : "#eef1f4",
                 color: t.due ? "#9c5f22" : "var(--muted)",
               }}>
-                毎週{["日","月","火","水","木","金","土"][t.weekday]}曜{t.due ? "・今日やる" : "・今日はなし"}
+                毎週{(Array.isArray(t.weekday) ? t.weekday : [t.weekday]).map((w) => ["日","月","火","水","木","金","土"][w]).join("・")}曜{t.due ? "・今日やる" : "・今日はなし"}
               </span>
             )}
             {t.everyDays && (
