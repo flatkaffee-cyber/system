@@ -18,7 +18,7 @@
 - 人件費 = 給料手当・雑給・法定福利費。役員報酬は別に出す。どちらも販管費に含まれ、利益の計算で二重に引かない
 - 支払い方法のタグは「カード」「銀行」「現金」「立替」の4つ
 - ATM の出金・入金（普通預金⇄現金の口座振替）は、入金・出金の合計に入れない
-- 既存ページの URL は変えない。既存の「月次レポート」「経営」ページは触らない
+- 既存ページの URL は変えない（例外: トップ `/` の領収書撮影ページだけ `/ryoshusho` に移し、`/` は `/table` に飛ばす）。既存の「月次レポート」「経営」ページは触らない
 - 新しい npm 依存は入れない。dev server は立てない（確認は `npm run build` と本番）
 - `lib/keiri/` の純粋な関数は、実行時に他のファイルを import しない（型だけ `import type`）。テストから `.ts` 拡張子付きで読み込むため
 - コミットは `sync` ブランチ。本番（`main` → fork リモート → Vercel）への反映は、坂本さんが「mainに反映」と言ってから
@@ -48,6 +48,9 @@
 | `app/api/keiri/monthly/route.ts` | freee・KV から取って組み立てて返す |
 | `components/KeiriNav.tsx` | 経理用ナビと `KEIRI_TABS` |
 | `components/Nav.tsx` | 経理グループを外し、「経理 →」を足し、経理ページでは `KeiriNav` を出す |
+| `app/ryoshusho/page.tsx` | 今の `app/page.tsx`（領収書の撮影）をそのまま移す |
+| `app/page.tsx` | `/table` へ飛ばすだけ |
+| `lib/systemGuide.ts` | 使い方ガイドの「トップ＝領収書」の記述を直す |
 | `app/keiri/page.tsx` | 月次ページ（Suspense で包むだけ） |
 | `components/keiri/KeiriMonthly.tsx` | 月の移動・見方の切り替え・読み込み |
 | `components/keiri/CashTable.tsx` | 経理で見る |
@@ -1399,7 +1402,7 @@ import Link from "next/link";
 // 経理画面のナビ。店舗側のナビとは別に出す（components/Nav.tsx が出し分ける）。
 export const KEIRI_TABS = [
   { href: "/keiri", label: "📅 月次" },
-  { href: "/", label: "🧾 領収書" },
+  { href: "/ryoshusho", label: "🧾 領収書" },
   { href: "/meisai", label: "🏦 明細" },
   { href: "/pending", label: "⏳ 処理待ち" },
   { href: "/kariire", label: "💴 立替" },
@@ -1514,16 +1517,47 @@ export default function Nav() {
         .groups :global(.keiri-link:hover) { text-decoration: underline; }
 ```
 
-- [ ] **Step 3: ビルドが通ることを確かめる**
+- [ ] **Step 3: トップを注文ページにする（2026-10-15 坂本さんの指示）**
 
-Run: `npm run build`
-Expected: 成功（`/keiri` はまだ無いのでリンク先は 404 のまま。Task 7 で作る）
+サイトのトップ（`/`）は今「🧾 領収書」（レシート撮影）。経理を別画面にしたので、トップは店舗側の「🛎️ 注文」（`/table`）にする。
 
-- [ ] **Step 4: コミット**
+1. 領収書の撮影ページを移す:
 
 ```bash
-git add components/KeiriNav.tsx components/Nav.tsx
-git commit -m "経理を店舗側のナビから切り離し、経理用のナビを出し分ける"
+mkdir -p app/ryoshusho
+git mv app/page.tsx app/ryoshusho/page.tsx
+```
+
+（`app/page.tsx` は `@/` の絶対パスでしか import していないので、移しても中身は変えなくてよい。`npm run build` で確かめる）
+
+2. 新しい `app/page.tsx`:
+
+```tsx
+import { redirect } from "next/navigation";
+
+// トップは店舗側の注文ページ。領収書の撮影は経理画面の /ryoshusho に移した（2026-10-15）
+export default function Home() {
+  redirect("/table");
+}
+```
+
+3. `KEIRI_TABS` の「🧾 領収書」が `/ryoshusho` を指していることを確かめる（Step 1 のコードのとおり）。
+
+4. `lib/systemGuide.ts` の案内文を直す:
+   - `- **/（トップ・領収書）**:` → `- **/ryoshusho（領収書）**:`
+   - `1. レシートを撮る → トップで読み取り → 保存` → `1. レシートを撮る → 経理の「領収書」で読み取り → 保存`
+   - トップの説明が他にあれば「トップ（/）は注文ページ（/table）に飛ぶ」に合わせる（`grep -n "トップ" lib/systemGuide.ts` で確認）
+
+- [ ] **Step 4: ビルドが通ることを確かめる**
+
+Run: `npm run build`
+Expected: 成功。ルート一覧に `/ryoshusho` が出る（`/keiri` はまだ無いのでリンク先は 404 のまま。Task 7 で作る）
+
+- [ ] **Step 5: コミット**
+
+```bash
+git add components/KeiriNav.tsx components/Nav.tsx app/page.tsx app/ryoshusho/page.tsx lib/systemGuide.ts
+git commit -m "経理を店舗側のナビから切り離し、トップを注文ページにする"
 ```
 
 ---
@@ -2018,6 +2052,8 @@ git checkout sync
 
 - [ ] **Step 4: ナビを確かめる**
 
+- `https://flat-keihi.vercel.app/` を開くと「🛎️ 注文」（`/table`）に飛ぶ
+- 経理ナビの「🧾 領収書」で `/ryoshusho` が開き、レシートを撮って読み取れる
 - 店舗側のページ（例 `/table`）に「経理」グループが無く、右端に「経理 →」がある
 - 「経理 →」で `/keiri` が開き、黒い帯の経理ナビが出る。「← 店舗へ」で戻れる
 - 経理ナビの「🏦 明細」など既存ページを開いても経理ナビのまま
