@@ -1,0 +1,1018 @@
+"use client";
+
+import { useRef, useState, useEffect } from "react";
+import { CATEGORIES, type Receipt } from "@/lib/receipt";
+import Nav from "@/components/Nav";
+import CopyField from "@/components/CopyField";
+import TagInput from "@/components/TagInput";
+import ItemPicker from "@/components/ItemPicker";
+import { matchOverride } from "@/lib/itemName";
+import { cardOf } from "@/lib/cards";
+
+const MEMBERS = ["坂本", "町田", "櫻井", "國仲"] as const;
+
+type Line = { name: string; amount: number; category: string; tags: string[] };
+type Status = "idle" | "extracting" | "review" | "saved";
+
+type Form = {
+  date: string;
+  vendor: string;
+  confidence: "high" | "medium" | "low";
+  payer: string;
+  memo: string;
+  expenseKind: "company" | "card" | "labor" | "cash";
+  laborMember: string;
+  lines: Line[];
+};
+
+const emptyLine = (): Line => ({ name: "", amount: 0, category: "不明", tags: [] });
+
+export default function Home() {
+  const [status, setStatus] = useState<Status>("idle");
+  const [image, setImage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [form, setForm] = useState<Form>({
+    date: "",
+    vendor: "",
+    confidence: "medium",
+    payer: MEMBERS[0],
+    memo: "",
+    expenseKind: "company",
+    laborMember: MEMBERS[0],
+    lines: [emptyLine()],
+  });
+  const [over, setOver] = useState(false);
+  // 読み取ったカードが何のカードだったか。判定を目に見えるようにする
+  const [cardHint, setCardHint] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [dup, setDup] = useState<
+    { id?: string; vendor: string; date: string; total: number; registered: boolean } | null
+  >(null);
+  // サーバーが重複でブロックしたとき（承知で登録するか確認する）
+  const [dupBlock, setDupBlock] = useState<
+    { id?: string; vendor: string; date: string; total: number; registered: boolean } | null
+  >(null);
+  // 登録済みの領収書を呼び出して編集しているとき、そのid。保存は新規ではなく上書きになる
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingRegistered, setEditingRegistered] = useState(false);
+  const [openingExisting, setOpeningExisting] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [scanning, setScanning] = useState(false);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  // カメラが使えなかった理由。分かるように出す（黙ってファイル選択に落ちると
+  // 「起動したりしなかったり」に見えてしまう）
+  function cameraReason(e: unknown): string {
+    const name = e instanceof Error ? e.name : "";
+    // ホーム画面から開いたアプリではカメラが使えない端末がある。
+    // Safariから開いたときだけ動く＝「起動したりしなかったり」の正体になりやすい
+    const standalone =
+      typeof navigator !== "undefined" &&
+      ((navigator as unknown as { standalone?: boolean }).standalone === true ||
+        window.matchMedia?.("(display-mode: standalone)").matches === true);
+    const homeScreenNote = standalone
+      ? "ホーム画面のアイコンから開いています。カメラが使えないことがあるので、Safari・Chromeで開き直してみてください。"
+      : "";
+
+    if (name === "NotAllowedError")
+      return `カメラの使用が許可されていません。アドレスバーの🔒からカメラを「許可」にしてください。${homeScreenNote}`;
+    if (name === "NotFoundError" || name === "OverconstrainedError")
+      return "使えるカメラが見つかりませんでした。";
+    if (name === "NotReadableError")
+      return "カメラを他のアプリが使っています。カメラアプリなどを閉じてから、もう一度お試しください。";
+    return `カメラを起動できませんでした（${name || "原因不明"}）。${homeScreenNote}`;
+  }
+
+  async function startScan() {
+    setError(null);
+    // 前のカメラが掴まれたままだと次が開けない端末があるので、必ず閉じてから始める
+    stopScan();
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError("この端末・ブラウザではカメラを使えません。下の「画像を選んでアップロード」をお使いください。");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+        },
+      });
+      streamRef.current = stream;
+      // 映像の取り付けは、videoが実際に描画されてから（下のuseEffect）。
+      // requestAnimationFrameで待つとReactの描画に間に合わないことがあり、
+      // カメラは点いているのに真っ黒、という状態になる。
+      setScanning(true);
+    } catch (e) {
+      // ここで黙ってファイル選択を開くと、カメラが出たり出なかったりに見えてしまう。
+      // 理由を出して、下のアップロードを選んでもらう。
+      setError(`${cameraReason(e)} 下の「画像を選んでアップロード」からも登録できます。`);
+    }
+  }
+
+  function stopScan() {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    setScanning(false);
+  }
+
+  // videoが描画されてから映像を流し込む
+  useEffect(() => {
+    if (!scanning) return;
+    const v = videoRef.current;
+    const stream = streamRef.current;
+    if (!v || !stream) return;
+    v.srcObject = stream;
+    // play()は拒否されることがある。放置すると未処理の例外になる
+    v.play().catch(() => {
+      setError("映像を再生できませんでした。画面をタップするか、もう一度スキャンを押してください。");
+    });
+  }, [scanning]);
+
+  // 画面を離れるときにカメラを必ず止める。掴んだままだと次に開けなくなる
+  useEffect(() => {
+    return () => {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    };
+  }, []);
+
+  function captureAndProcess() {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas) return;
+    // カメラの解像度のままだと数MBになり、サーバーの受け取り上限（4.5MB）を超えて失敗する。
+    // アップロードと同じ大きさに縮めてから送る
+    const { width, height } = fitWithin(video.videoWidth, video.videoHeight);
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0, width, height);
+    const dataUrl = encodeJpeg(canvas);
+    stopScan();
+    // handleFileと同じ流れでAI解析に投入
+    setImage(dataUrl);
+    setStatus("extracting");
+    setCardHint(null);
+    extractFromImage(dataUrl);
+  }
+
+  // この領収書についてのAI相談（確認画面内）
+  type Msg = { role: "user" | "assistant"; content: string };
+  const [consultOpen, setConsultOpen] = useState(false);
+  const [consult, setConsult] = useState<Msg[]>([]);
+  const [consultInput, setConsultInput] = useState("");
+  const [consulting, setConsulting] = useState(false);
+
+  const total = form.lines.reduce((s, l) => s + (Number(l.amount) || 0), 0);
+
+  // いま確認中の領収書を、AIに渡す文脈テキストにする
+  function receiptContext(): string {
+    const linesText = form.lines
+      .map((l) => `- ${l.name || "（品目なし）"} ¥${(Number(l.amount) || 0).toLocaleString()}（${l.category}）${l.tags.length ? ` [用途: ${l.tags.join(", ")}]` : ""}`)
+      .join("\n");
+    const kind =
+      form.expenseKind === "labor"
+        ? `労働枠から使う（${form.laborMember}の枠）`
+        : form.expenseKind === "card"
+          ? "会社カード支出（デビットカード）"
+          : form.expenseKind === "cash"
+            ? "現金支出（店のレジ・小口現金から）"
+            : "立替経費";
+    return [
+      `日付：${form.date || "未入力"}`,
+      `店名・支払先：${form.vendor || "未入力"}`,
+      `内訳：\n${linesText}`,
+      `合計：¥${total.toLocaleString()}`,
+      `立替えた人：${form.payer}`,
+      `区分：${kind}`,
+      form.memo ? `メモ：${form.memo}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  async function askAi(text: string) {
+    const q = text.trim();
+    if (!q || consulting) return;
+    const next: Msg[] = [...consult, { role: "user", content: q }];
+    setConsult([...next, { role: "assistant", content: "" }]);
+    setConsultInput("");
+    setConsulting(true);
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: next, receiptContext: receiptContext() }),
+      });
+      if (!res.ok || !res.body) throw new Error(await res.text());
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let acc = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        acc += decoder.decode(value, { stream: true });
+        setConsult((m) => {
+          const copy = [...m];
+          copy[copy.length - 1] = { role: "assistant", content: acc };
+          return copy;
+        });
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "エラー";
+      setConsult((m) => {
+        const copy = [...m];
+        copy[copy.length - 1] = { role: "assistant", content: `すみません、エラーが出ました（${msg}）。` };
+        return copy;
+      });
+    } finally {
+      setConsulting(false);
+    }
+  }
+
+  // 品目（ビール（ハイネケン）など）の対応表。仕入高の行に、その場で品目を付けられる。
+  const [itemMap, setItemMap] = useState<{ items: string[]; overrides: Record<string, string> }>({
+    items: [],
+    overrides: {},
+  });
+
+  useEffect(() => {
+    fetch("/api/items-map")
+      .then((r) => r.json())
+      .then((d) => d.items && setItemMap({ items: d.items, overrides: d.overrides ?? {} }))
+      .catch(() => {});
+  }, []);
+
+  /** 品名から、いまの設定で決まる品目名（未設定なら空） */
+  function itemOf(name: string) {
+    return matchOverride(name, itemMap.overrides) ?? "";
+  }
+
+  /** 「プレミアム」→「ビール（その他）」のように覚えさせる */
+  async function learnItem(keyword: string, item: string) {
+    const k = keyword.trim();
+    if (!k) return;
+    const res = await fetch("/api/items-map", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ keyword: k, item }),
+    });
+    const d = await res.json();
+    if (d.overrides) {
+      setItemMap((m) => ({
+        items: [...new Set([...m.items, ...(item ? [item] : [])])].sort(),
+        overrides: d.overrides,
+      }));
+    }
+  }
+
+  function setLine(i: number, patch: Partial<Line>) {
+    setForm((f) => ({ ...f, lines: f.lines.map((l, idx) => (idx === i ? { ...l, ...patch } : l)) }));
+  }
+  function addLine() {
+    setForm((f) => ({ ...f, lines: [...f.lines, emptyLine()] }));
+  }
+  function removeLine(i: number) {
+    setForm((f) => ({ ...f, lines: f.lines.length > 1 ? f.lines.filter((_, idx) => idx !== i) : f.lines }));
+  }
+
+  // 二重登録の警告から、登録済みの内容をフォームに呼び出す。
+  // 警告に日付と金額しか出ないと、何が登録されているのか確かめようがないため。
+  async function openExisting(id: string) {
+    setOpeningExisting(true);
+    try {
+      const saved = await fetch("/api/receipts").then((x) => x.json());
+      const hit = (saved.receipts ?? []).find((x: { id: string }) => x.id === id);
+      if (!hit) {
+        setError("登録済みの領収書が見つかりませんでした。");
+        return;
+      }
+      setForm((f) => ({
+        ...f,
+        date: hit.date || f.date,
+        vendor: hit.vendor || "",
+        payer: hit.payer || f.payer,
+        memo: hit.memo || "",
+        expenseKind: hit.expenseKind || "company",
+        laborMember: hit.laborMember || f.laborMember,
+        lines:
+          (hit.lines ?? []).length > 0
+            ? hit.lines.map((l: Line) => ({
+                name: l.name ?? "",
+                amount: Number(l.amount) || 0,
+                category: l.category || "不明",
+                tags: l.tags ?? [],
+              }))
+            : [{ name: hit.summary || "", amount: hit.total || 0, category: hit.category || "不明", tags: hit.tags ?? [] }],
+      }));
+      // 登録済みの方に画像があればそれを見せる。無ければ今撮った画像を残し、保存時に付け足す
+      try {
+        const img = await fetch(`/api/receipts/image?id=${encodeURIComponent(id)}`).then((x) => x.json());
+        if (img?.image) setImage(img.image);
+      } catch {
+        /* 画像が取れなくても編集はできる */
+      }
+      setEditingId(id);
+      setEditingRegistered(!!hit.registered);
+      setDup(null);
+      setDupBlock(null);
+      setStatus("review");
+    } finally {
+      setOpeningExisting(false);
+    }
+  }
+
+  async function save(force = false) {
+    setSaving(true);
+    setDupBlock(null);
+    if (editingId) {
+      // 呼び出した領収書の上書き保存。新しく作らないので二重登録にならない
+      try {
+        const res = await fetch("/api/receipts", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: editingId,
+            action: "edit",
+            image,
+            patch: {
+              date: form.date,
+              vendor: form.vendor,
+              payer: form.payer,
+              memo: form.memo,
+              expenseKind: form.expenseKind,
+              laborMember: form.expenseKind === "labor" ? form.laborMember : undefined,
+              lines: form.lines,
+            },
+          }),
+        });
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}));
+          setError(j.error || "上書き保存に失敗しました。");
+          setSaving(false);
+          return;
+        }
+      } catch {
+        setError("上書き保存に失敗しました。");
+        setSaving(false);
+        return;
+      }
+      setSaving(false);
+      setStatus("saved");
+      return;
+    }
+    try {
+      const res = await fetch("/api/receipts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: form.date,
+          vendor: form.vendor,
+          total,
+          payer: form.payer,
+          memo: form.memo,
+          expenseKind: form.expenseKind,
+          laborMember: form.expenseKind === "labor" ? form.laborMember : undefined,
+          lines: form.lines,
+          image,
+          force,
+        }),
+      });
+      // サーバーが重複でブロック（409）。承知で登録するか確認してもらう。
+      if (res.status === 409) {
+        const j = await res.json().catch(() => ({}));
+        if (j.duplicate) {
+          setDupBlock(j.duplicate);
+          setSaving(false);
+          return;
+        }
+      }
+    } catch {
+      // 保存に失敗しても確認内容は表示する
+    }
+    setSaving(false);
+    setStatus("saved");
+  }
+
+  // 画像を最大1600pxにリサイズしてデータURLを返す（PDFはそのまま）。
+  // ブラウザが読めない画像（パソコンで選んだiPhoneのHEICなど）は null を返す。
+  // 以前は元のまま送っていたが、大きすぎるか非対応の形式でサーバー側で必ず失敗していた
+  function compressImage(dataUrl: string): Promise<string | null> {
+    if (dataUrl.startsWith("data:application/pdf")) return Promise.resolve(dataUrl);
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const { width, height } = fitWithin(img.width, img.height);
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d")!;
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(encodeJpeg(canvas));
+      };
+      img.onerror = () => resolve(null);
+      img.src = dataUrl;
+    });
+  }
+
+  async function extractFromImage(dataUrl: string) {
+    try {
+      const res = await fetch("/api/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: dataUrl }),
+      });
+      let json;
+      try {
+        json = await res.json();
+      } catch {
+        throw new Error("サーバーエラーが発生しました。画像が大きすぎる可能性があります。");
+      }
+      if (!res.ok) throw new Error(json.error ?? "抽出に失敗しました。");
+      const r = json.receipt as Receipt;
+      const lines: Line[] =
+        r.lines && r.lines.length > 0
+          ? r.lines.map((l) => ({ name: l.name, amount: l.amount, category: l.category, tags: l.tags ?? [] }))
+          : [emptyLine()];
+      // カード下4桁で、支出の区分と立替えた人を自動判定（lib/cards.ts の対応表）
+      const card = cardOf(r.cardLast4);
+      const autoKind = card ? card.kind : ("company" as const);
+      setCardHint(
+        card
+          ? `カード下4桁 ${card.last4} → ${card.label}`
+          : r.cardLast4
+            ? `カード下4桁 ${r.cardLast4} は未登録のカードです。区分と立替えた人を確認してください`
+            : null,
+      );
+      setForm((f) => ({
+        ...f,
+        date: r.date,
+        vendor: r.vendor,
+        confidence: r.confidence,
+        lines,
+        expenseKind: autoKind,
+        // 立替のときだけ、カードの持ち主を立替えた人にする
+        payer: card?.payer ?? f.payer,
+      }));
+
+      // 重複チェック：同じ日付・合計金額の領収書が既に保存済みなら警告
+      setDup(null);
+      const t = lines.reduce((s, l) => s + (l.amount || 0), 0);
+      try {
+        const saved = await fetch("/api/receipts").then((x) => x.json());
+        const hit = (saved.receipts ?? []).find(
+          (x: { date: string; total: number }) => x.date === r.date && x.total === t,
+        );
+        if (hit) setDup({ id: hit.id, vendor: hit.vendor, date: hit.date, total: hit.total, registered: !!hit.registered });
+      } catch {
+        /* 重複チェック失敗は無視 */
+      }
+      setStatus("review");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "抽出に失敗しました。");
+      setStatus("idle");
+    }
+  }
+
+  async function handleFile(file: File) {
+    setError(null);
+    const rawDataUrl = await new Promise<string>((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result as string);
+      r.onerror = reject;
+      r.readAsDataURL(file);
+    });
+    const dataUrl = await compressImage(rawDataUrl);
+    if (!dataUrl) {
+      setError("この画像は読み込めませんでした（iPhoneのHEIC形式など）。カメラでスキャンするか、JPEG・PNGの画像を選んでください。");
+      return;
+    }
+    setImage(dataUrl);
+    setStatus("extracting");
+    setCardHint(null);
+    extractFromImage(dataUrl);
+  }
+
+  function reset() {
+    setStatus("idle");
+    setImage(null);
+    setError(null);
+    setDup(null);
+    setDupBlock(null);
+    setEditingId(null);
+    setEditingRegistered(false);
+    setConsultOpen(false);
+    setConsult([]);
+    setConsultInput("");
+    setForm((f) => ({ ...f, lines: [emptyLine()], memo: "", expenseKind: "company" }));
+  }
+
+  const isPdf = image?.startsWith("data:application/pdf") ?? false;
+  const multi = form.lines.length > 1;
+  // freee転記パネルの表示。区分ごとに貸方科目と取引先が変わる。
+  const kindPanel =
+    form.expenseKind === "card"
+      ? { title: "会社カード支出", credit: "普通預金", partnerLabel: "取引先", partnerValue: form.vendor, partnerHint: "支払先",
+          note: `貸方は「普通預金 ¥${total.toLocaleString()}」。デビットカードで直接支払い → 銀行明細と金額が一致するはず。` }
+      : form.expenseKind === "cash"
+        ? { title: "現金支出", credit: "現金", partnerLabel: "取引先", partnerValue: form.vendor, partnerHint: "支払先",
+            note: `貸方は「現金 ¥${total.toLocaleString()}」。店のレジ・小口から出ているので、誰かに返す必要はありません。／ 📥保存済みタブの「freeeに登録」ボタンなら自動で書き込めます。` }
+        : { title: "立替", credit: "役員借入金", partnerLabel: "取引先", partnerValue: form.payer, partnerHint: "立替えた人",
+            note: `貸方は「役員借入金 ¥${total.toLocaleString()}（取引先＝${form.payer}）」。／ 📥保存済みタブの「freeeに登録」ボタンなら自動で書き込めます。` };
+
+  return (
+    <div className="wrap">
+      <header>
+        <h1>☕ flat. 経費管理</h1>
+        <p>領収書を撮ってアップ → AIが日付・金額・科目・用途を自動判定（立替・会社カード支出に対応）</p>
+      </header>
+      <Nav />
+
+      {status === "idle" && !scanning && (
+        <>
+          {/* スキャンボタン（カメラ直接起動） */}
+          <button
+            className="primary"
+            onClick={startScan}
+            style={{ marginBottom: 12, fontSize: 16, padding: "16px 20px" }}
+          >
+            📷 領収書をスキャン
+          </button>
+
+          <div
+            className={`drop ${over ? "over" : ""}`}
+            onClick={() => inputRef.current?.click()}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setOver(true);
+            }}
+            onDragLeave={() => setOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setOver(false);
+              const f = e.dataTransfer.files?.[0];
+              if (f) handleFile(f);
+            }}
+          >
+            <strong>画像を選んでアップロード</strong>
+            <small>タップして選択 / ドラッグ＆ドロップ（png・jpeg・webp・PDF）</small>
+          </div>
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,application/pdf"
+            style={{ display: "none" }}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleFile(f);
+            }}
+          />
+          {error && <p className="err">{error}</p>}
+          <a
+            href="/receipts"
+            className="rc-toggle"
+            style={{ display: "block", textAlign: "center", marginTop: 12, textDecoration: "none" }}
+          >
+            📥 保存済み領収書を見る・freeeに登録する →
+          </a>
+        </>
+      )}
+
+      {/* カメラスキャンモード */}
+      {scanning && (
+        <div style={{ position: "relative" }}>
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            style={{
+              width: "100%",
+              borderRadius: 14,
+              border: "2px solid var(--accent)",
+              background: "#000",
+            }}
+          />
+          <canvas ref={canvasRef} style={{ display: "none" }} />
+          <div style={{
+            position: "absolute",
+            top: 12, left: 0, right: 0,
+            textAlign: "center",
+            color: "#fff",
+            textShadow: "0 1px 4px rgba(0,0,0,0.7)",
+            fontSize: 14,
+            fontWeight: 600,
+          }}>
+            領収書を枠内に合わせてください
+          </div>
+          <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+            <button
+              className="primary"
+              style={{ flex: 2, fontSize: 16, padding: 14 }}
+              onClick={captureAndProcess}
+            >
+              シャッター
+            </button>
+            <button
+              className="ghost"
+              style={{ flex: 1, border: "1px solid var(--line)", borderRadius: 10 }}
+              onClick={stopScan}
+            >
+              キャンセル
+            </button>
+          </div>
+        </div>
+      )}
+
+      {status === "extracting" && (
+        <div className="card" style={{ textAlign: "center" }}>
+          {image &&
+            (isPdf ? (
+              <div className="preview pdf-preview">📄 PDF を読み取ります</div>
+            ) : (
+              <img src={image} alt="領収書" className="preview" />
+            ))}
+          <p style={{ marginTop: 16, color: "var(--muted)" }}>
+            <span className="spinner" style={{ borderColor: "#e4e1da", borderTopColor: "var(--accent)" }} />
+            AIが読み取り中…
+          </p>
+        </div>
+      )}
+
+      {status === "review" && (
+        <div className="card">
+          {image &&
+            (isPdf ? (
+              <div className="preview pdf-preview">📄 PDF を読み取ります</div>
+            ) : (
+              <img src={image} alt="領収書" className="preview" />
+            ))}
+          <p style={{ marginTop: 12, marginBottom: 0, fontSize: 13 }}>
+            AIの読み取り結果
+            <span className={`badge ${form.confidence}`}>自信度 {form.confidence}</span>
+            {multi && <span className="hint-chip">用途が違うので{form.lines.length}行に分割</span>}
+          </p>
+          <p className="hint">内容を確認・修正してから登録してください。</p>
+
+          {dup && (
+            <div className="dup-warn">
+              ⚠️ <strong>同じ日付・金額の領収書が既にあります</strong>
+              <div>
+                （{dup.date}／{dup.vendor || "店名なし"}／¥{dup.total.toLocaleString()}／
+                {dup.registered ? "freee登録済" : "保存済・未登録"}）
+              </div>
+              <div style={{ marginTop: 4 }}>二重計上に注意。別物なら確認してから登録してください。</div>
+              {dup.id && (
+                <button
+                  className="ghost"
+                  style={{ marginTop: 8 }}
+                  onClick={() => openExisting(dup.id!)}
+                  disabled={openingExisting}
+                >
+                  {openingExisting ? <span className="spinner" /> : "登録済みの内容を開く（直して上書きできる）"}
+                </button>
+              )}
+            </div>
+          )}
+
+          {editingId && (
+            <div className="dup-warn" style={{ borderColor: "#2980b9", background: "#eaf3fb" }}>
+              ✏️ <strong>登録済みの領収書を編集しています</strong>
+              <div style={{ marginTop: 4 }}>保存すると、この内容で上書きされます（新しくは増えません）。</div>
+              {editingRegistered && (
+                <div style={{ marginTop: 4, color: "#c0392b" }}>
+                  freeeに登録済みです。ここで金額や科目を変えても、freee側は自動では書き換わりません。
+                  変えた場合はfreeeも直してください。
+                </div>
+              )}
+            </div>
+          )}
+
+          <label>日付</label>
+          <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
+
+          <label>店名・支払先</label>
+          <input value={form.vendor} onChange={(e) => setForm({ ...form, vendor: e.target.value })} />
+
+          <label>内訳（用途・科目が違うものは行を分ける）</label>
+          {form.lines.map((l, i) => (
+            <div key={i} className="rline">
+              <div className="rline-top">
+                <input
+                  className="rline-name"
+                  value={l.name}
+                  placeholder="品目（例: 木材）"
+                  onChange={(e) => setLine(i, { name: e.target.value })}
+                />
+                <input
+                  className="rline-amt"
+                  type="number"
+                  value={l.amount || ""}
+                  placeholder="金額"
+                  onChange={(e) => setLine(i, { amount: Number(e.target.value) })}
+                />
+                {form.lines.length > 1 && (
+                  <button type="button" className="rline-del" onClick={() => removeLine(i)}>
+                    ×
+                  </button>
+                )}
+              </div>
+              <select value={l.category} onChange={(e) => setLine(i, { category: e.target.value })}>
+                {CATEGORIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+              <TagInput tags={l.tags} onChange={(t) => setLine(i, { tags: t })} />
+              {l.name.trim() !== "" && (
+                <ItemPicker
+                  productName={l.name}
+                  current={itemOf(l.name)}
+                  items={itemMap.items}
+                  onLearn={learnItem}
+                />
+              )}
+            </div>
+          ))}
+          <button type="button" className="rc-toggle" onClick={addLine} style={{ marginTop: 4 }}>
+            ＋ 行を追加（別の用途）
+          </button>
+          <div className="rline-total">合計 ¥{total.toLocaleString()}</div>
+
+          {form.expenseKind !== "card" && form.expenseKind !== "cash" && (
+            <div className="row" style={{ marginTop: 8 }}>
+              <div>
+                <label>立替えた人</label>
+                <select value={form.payer} onChange={(e) => setForm({ ...form, payer: e.target.value })}>
+                  {MEMBERS.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+
+          <label>メモ（なぜ払ったか・freeeの備考になります）</label>
+          <textarea
+            rows={2}
+            value={form.memo}
+            placeholder="例：オープン準備 など"
+            onChange={(e) => setForm({ ...form, memo: e.target.value })}
+          />
+
+          <label>この経費の区分</label>
+          {cardHint && (
+            <p className="hint" style={{ marginTop: 0 }}>
+              💳 {cardHint}
+            </p>
+          )}
+          <div className="kind-toggle">
+            <button
+              type="button"
+              className={`kind-btn ${form.expenseKind === "company" ? "active" : ""}`}
+              onClick={() => setForm({ ...form, expenseKind: "company" })}
+            >
+              立替
+            </button>
+            <button
+              type="button"
+              className={`kind-btn ${form.expenseKind === "card" ? "active" : ""}`}
+              onClick={() => setForm({ ...form, expenseKind: "card" })}
+            >
+              会社カード
+            </button>
+            <button
+              type="button"
+              className={`kind-btn ${form.expenseKind === "labor" ? "active" : ""}`}
+              onClick={() => setForm({ ...form, expenseKind: "labor" })}
+            >
+              労働枠
+            </button>
+            <button
+              type="button"
+              className={`kind-btn ${form.expenseKind === "cash" ? "active" : ""}`}
+              onClick={() => setForm({ ...form, expenseKind: "cash" })}
+            >
+              現金
+            </button>
+          </div>
+          {form.expenseKind === "cash" && (
+            <p className="hint">
+              💴 店の現金（レジ・小口）から払った経費。貸方は「現金」になり、誰かに返す必要はありません。
+            </p>
+          )}
+          {form.expenseKind === "card" && (
+            <p className="hint">
+              💳 会社デビットカードで支払った経費。銀行口座の出金と自動マッチングされます。
+            </p>
+          )}
+          {form.expenseKind === "labor" && (
+            <>
+              <label>誰の労働枠から引く？</label>
+              <select value={form.laborMember} onChange={(e) => setForm({ ...form, laborMember: e.target.value })}>
+                {MEMBERS.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+              <p className="hint">
+                ※ この ¥{total.toLocaleString()} が {form.laborMember} の労働枠から差し引かれます。
+              </p>
+            </>
+          )}
+
+          <button
+            type="button"
+            className="rc-toggle"
+            onClick={() => setConsultOpen((v) => !v)}
+            style={{ marginTop: 14 }}
+          >
+            🤖 {consultOpen ? "AI相談を閉じる" : "この領収書についてAIに相談する（科目・立替の扱いなど）"}
+          </button>
+
+          {consultOpen && (
+            <div className="card" style={{ marginTop: 8, background: "var(--bg, #faf9f7)" }}>
+              {consult.length === 0 && (
+                <div>
+                  <p className="hint" style={{ marginTop: 0 }}>
+                    いま入力中の内容を踏まえて答えます。例えば👇
+                  </p>
+                  {[
+                    "この科目で合ってる？",
+                    "これは経費？それとも固定資産？",
+                    "立替だとfreeeにどう登録する？",
+                    "用途が違う品目、分けるべき？",
+                  ].map((s) => (
+                    <button key={s} type="button" className="suggestion" onClick={() => askAi(s)}>
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {consult.map((m, i) => {
+                // AIの応答から提案ブロックをパース
+                const proposalMatch = m.role === "assistant" && m.content
+                  ? m.content.match(/---提案---\n科目[：:]\s*(.+)\nタグ[：:]\s*(.*)\n---提案終---/)
+                  : null;
+                const displayContent = m.content
+                  ? m.content.replace(/---提案---[\s\S]*?---提案終---/, "").trim()
+                  : consulting && i === consult.length - 1 ? "…" : "";
+                // 旧形式もパース
+                const oldMatch = !proposalMatch && m.role === "assistant" && m.content
+                  ? m.content.match(/おすすめ科目[：:]\s*(.+)/)
+                  : null;
+                const suggestedCategory = proposalMatch?.[1]?.trim() || oldMatch?.[1]?.trim();
+                const suggestedTags = proposalMatch?.[2]?.trim().split(/[,、]/).map(t => t.trim()).filter(Boolean) || [];
+
+                return (
+                  <div key={i}>
+                    <div className={`bubble ${m.role}`}>{displayContent}</div>
+                    {suggestedCategory && (
+                      <button
+                        type="button"
+                        className="rc-apply"
+                        style={{ marginTop: 6, marginBottom: 6 }}
+                        onClick={() => {
+                          setForm((f) => ({
+                            ...f,
+                            lines: f.lines.map((l) => ({
+                              ...l,
+                              category: suggestedCategory,
+                              tags: suggestedTags.length > 0
+                                ? [...new Set([...l.tags, ...suggestedTags])]
+                                : l.tags,
+                            })),
+                          }));
+                        }}
+                      >
+                        ✓ 提案を反映（{suggestedCategory}{suggestedTags.length > 0 ? ` + ${suggestedTags.join(", ")}` : ""}）
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+              <form
+                className="composer"
+                style={{ marginTop: 8 }}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  askAi(consultInput);
+                }}
+              >
+                <textarea
+                  value={consultInput}
+                  placeholder="この領収書について質問する"
+                  rows={2}
+                  onChange={(e) => setConsultInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                      e.preventDefault();
+                      askAi(consultInput);
+                    }
+                  }}
+                />
+                <button className="primary" type="submit" disabled={consulting || !consultInput.trim()}>
+                  {consulting ? <span className="spinner" /> : "送信"}
+                </button>
+              </form>
+            </div>
+          )}
+
+          {dupBlock && (
+            <div className="dup-warn" style={{ borderColor: "#c0392b", background: "#fdecea" }}>
+              🚫 <strong>二重登録の可能性があるため止めました</strong>
+              <div>
+                （{dupBlock.date}／{dupBlock.vendor || "店名なし"}／¥{dupBlock.total.toLocaleString()}／
+                {dupBlock.registered ? "freee登録済" : "保存済・未登録"}）
+              </div>
+              <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button className="ghost" onClick={reset} disabled={saving}>
+                  やめる（登録しない）
+                </button>
+                {dupBlock.id && (
+                  <button
+                    className="ghost"
+                    onClick={() => openExisting(dupBlock.id!)}
+                    disabled={saving || openingExisting}
+                  >
+                    {openingExisting ? <span className="spinner" /> : "登録済みの内容を開いて直す"}
+                  </button>
+                )}
+                <button className="pay-btn" onClick={() => save(true)} disabled={saving}>
+                  {saving ? <span className="spinner" /> : "別物なので承知で登録する"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div style={{ marginTop: 18 }}>
+            <button className="primary" onClick={() => save()} disabled={!form.date || total <= 0 || saving}>
+              {saving ? (
+                <span className="spinner" />
+              ) : editingId ? (
+                "この内容で上書き保存"
+              ) : (
+                "この内容で登録（保存＋freee貼付用を表示）"
+              )}
+            </button>
+            <button className="ghost" onClick={reset}>
+              ← やり直す
+            </button>
+          </div>
+        </div>
+      )}
+
+      {status === "saved" && (
+        <div className="card">
+          <div className="saved">✅ 読み取り＆確認 OK（{kindPanel.title}）</div>
+          <div className="freee-panel" style={{ marginTop: 12 }}>
+            <div className="freee-panel-title">
+              📋 freee登録用（{kindPanel.title}＝借)科目／貸){kindPanel.credit}）
+            </div>
+            <CopyField label="発生日" value={form.date} />
+            <CopyField label={kindPanel.partnerLabel} value={kindPanel.partnerValue} hint={kindPanel.partnerHint} />
+            {form.lines.map((l, i) => (
+              <div key={i} className="freee-line-block">
+                <div className="freee-line-no">
+                  借方 {i + 1}
+                  {multi ? "（freeeで「＋行を追加」）" : ""}
+                </div>
+                <CopyField label="勘定科目" value={l.category} />
+                <CopyField label="金額" value={String(l.amount)} />
+                {l.name ? <CopyField label="備考" value={l.name} /> : null}
+              </div>
+            ))}
+            <div className="freee-note">{kindPanel.note}</div>
+          </div>
+          <button className="primary" onClick={reset} style={{ marginTop: 12 }}>
+            次の領収書を登録
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 領収書の画像はこの長辺まで縮めて送る。読み取りの精度はこれで十分 */
+const MAX_EDGE = 1600;
+
+function fitWithin(width: number, height: number): { width: number; height: number } {
+  if (width <= MAX_EDGE && height <= MAX_EDGE) return { width, height };
+  const ratio = Math.min(MAX_EDGE / width, MAX_EDGE / height);
+  return { width: Math.round(width * ratio), height: Math.round(height * ratio) };
+}
+
+/** JPEGにする。まれに大きくなりすぎたら画質を落としてもう一度（サーバーの上限 4.5MB に余裕を持たせる） */
+function encodeJpeg(canvas: HTMLCanvasElement): string {
+  const first = canvas.toDataURL("image/jpeg", 0.85);
+  return first.length > 3_500_000 ? canvas.toDataURL("image/jpeg", 0.7) : first;
+}

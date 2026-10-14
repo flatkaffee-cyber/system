@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
+import KeiriNav, { KEIRI_TABS } from "@/components/KeiriNav";
 
 // 画面が増えて一覧から探せなくなったので、分野で分ける。
 // いま開いているページが属する分野を最初に開き、
@@ -11,25 +12,6 @@ import { useState, useEffect } from "react";
 type Group = { key: string; label: string; tabs: { href: string; label: string }[] };
 
 const GROUPS: Group[] = [
-  {
-    key: "keiri",
-    label: "経理",
-    tabs: [
-      { href: "/", label: "🧾 領収書" },
-      { href: "/meisai", label: "🏦 明細" },
-      { href: "/pending", label: "⏳ 処理待ち" },
-      { href: "/kariire", label: "💴 立替" },
-      { href: "/payables", label: "💰 払うもの" },
-      { href: "/bills", label: "🔁 定期請求" },
-      { href: "/loans", label: "🏦 借入返済" },
-      { href: "/items", label: "🧺 品目台帳" },
-      { href: "/report", label: "📊 用途別" },
-      { href: "/shorui", label: "📄 書類" },
-      { href: "/contracts", label: "📜 契約書" },
-      { href: "/company", label: "🏢 会社書類" },
-      { href: "/zeirishi", label: "🧑‍💼 税理士" },
-    ],
-  },
   {
     key: "tenpo",
     label: "店舗運営",
@@ -93,9 +75,10 @@ const STORE_KEY = "nav:group";
 
 export default function Nav() {
   const path = usePathname();
+  const inKeiri = KEIRI_TABS.some((t) => t.href === path);
   // いま開いているページがある分野。無ければ最後に選んだ分野。
   const owner = GROUPS.find((g) => g.tabs.some((t) => t.href === path));
-  const [group, setGroup] = useState<string>(owner?.key ?? "keiri");
+  const [group, setGroup] = useState<string>(owner?.key ?? "tenpo");
 
   useEffect(() => {
     if (owner) {
@@ -104,10 +87,13 @@ export default function Nav() {
       return;
     }
     try {
+      // 以前「経理」を選んで保存していた端末は、GROUPSに無いので店舗運営のまま
       const saved = localStorage.getItem(STORE_KEY);
       if (saved && GROUPS.some((g) => g.key === saved)) setGroup(saved);
     } catch { /* 保存できなくても動く */ }
   }, [owner]);
+
+  if (inKeiri) return <KeiriNav path={path} />;
 
   const current = GROUPS.find((g) => g.key === group) ?? GROUPS[0];
 
@@ -127,6 +113,7 @@ export default function Nav() {
             {g.label}
           </button>
         ))}
+        <Link href="/keiri" className="keiri-link">経理 →</Link>
       </div>
       <div className="tabs">
         {current.tabs.map((t) => (
@@ -166,6 +153,16 @@ export default function Nav() {
           color: var(--accent, #a4622a);
           border-bottom-color: var(--accent, #a4622a);
         }
+        .groups :global(.keiri-link) {
+          margin-left: auto;
+          padding: 9px 14px;
+          font-size: 14px;
+          font-weight: 700;
+          color: var(--accent, #a4622a);
+          text-decoration: none;
+          white-space: nowrap;
+        }
+        .groups :global(.keiri-link:hover) { text-decoration: underline; }
         .group:focus-visible {
           outline: 2px solid var(--accent, #a4622a);
           outline-offset: -2px;
