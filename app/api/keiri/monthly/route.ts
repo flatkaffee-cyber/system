@@ -3,7 +3,7 @@ import { FREEE_COMPANY_ID, freeeGet, isConnected } from "@/lib/freee";
 import { fetchAll } from "@/lib/monthlyReport";
 import { getReceipts } from "@/lib/receipts";
 import { getPendingExpenses } from "@/lib/pending-expenses";
-import { isMonth, jstMonth, periodOf, shiftMonth } from "@/lib/keiri/period";
+import { isMissingPeriodError, isMonth, jstMonth, periodOf, shiftMonth } from "@/lib/keiri/period";
 import { buildPl } from "@/lib/keiri/pl";
 import { buildCash, summarize } from "@/lib/keiri/cashflow";
 import { attachReceipts } from "@/lib/keiri/linkReceipts";
@@ -26,6 +26,7 @@ export type KeiriMonthlyResponse = {
   next: string | null;
   view: "cash" | "pl";
   future: boolean;
+  noData?: boolean; // freeeにその会計期間が無い（1期目より前など）
   cash?: CashView;
   pl?: PlView;
   warnings: string[];
@@ -34,10 +35,14 @@ export type KeiriMonthlyResponse = {
 type Walletable = { id: number; name: string; type: string };
 const Q = { company_id: FREEE_COMPANY_ID };
 
-async function accountNames(): Promise<Map<number, string>> {
-  const r = await freeeGet<{ account_items: { id: number; name: string }[] }>("/api/1/account_items", Q);
-  return new Map((r.account_items ?? []).map((a) => [a.id, a.name]));
+type AccountItem = { id: number; name: string; walletable_id?: number | null };
+
+async function accountItems(): Promise<AccountItem[]> {
+  const r = await freeeGet<{ account_items: AccountItem[] }>("/api/1/account_items", Q);
+  return r.account_items ?? [];
 }
+
+const namesOf = (items: AccountItem[]) => new Map(items.map((a) => [a.id, a.name]));
 
 // GET /api/keiri/monthly?month=2026-10&view=cash|pl
 //   経理画面の月次ページ用。cash = お金の出入り（日付順）、pl = 損益計算書
@@ -62,19 +67,26 @@ export async function GET(req: NextRequest) {
   const p = periodOf(month);
   try {
     if (view === "pl") {
-      const [trial, deals, journals, names] = await Promise.all([
-        freeeGet<{ trial_pl: { balances: TrialPlBalance[] }; up_to_date: boolean }>("/api/1/reports/trial_pl", {
+      let trial: { trial_pl: { balances: TrialPlBalance[] }; up_to_date: boolean };
+      try {
+        trial = await freeeGet<{ trial_pl: { balances: TrialPlBalance[] }; up_to_date: boolean }>("/api/1/reports/trial_pl", {
           ...Q,
           fiscal_year: String(p.fiscalYear),
           start_month: String(p.calendarMonth),
           end_month: String(p.calendarMonth),
           account_item_display_type: "account_item",
-        }),
+        });
+      } catch (e) {
+        // 1期目より前の月などは freee が「会計期間がありません」を返す → データが無い月として扱う
+        if (e instanceof Error && isMissingPeriodError(e.message)) return NextResponse.json({ ...res, noData: true });
+        throw e;
+      }
+      const [deals, journals, items] = await Promise.all([
         fetchAll<FreeeDeal>("/api/1/deals", "deals", { ...Q, start_issue_date: p.from, end_issue_date: p.to }),
         fetchAll<FreeeJournal>("/api/1/manual_journals", "manual_journals", { ...Q, start_issue_date: p.from, end_issue_date: p.to }),
-        accountNames(),
+        accountItems(),
       ]);
-      res.pl = buildPl({ balances: trial.trial_pl.balances, upToDate: trial.up_to_date, deals, journals, accountNames: names });
+      res.pl = buildPl({ balances: trial.trial_pl.balances, upToDate: trial.up_to_date, deals, journals, accountNames: namesOf(items) });
       if (!trial.up_to_date) res.warnings.push("freeeの集計が更新中です。少し待って開き直すと最新になります。");
       return NextResponse.json(res);
     }
@@ -88,7 +100,7 @@ export async function GET(req: NextRequest) {
     }
     // 前の月に計上して今月払った取引も拾うため、計上日は3か月前から取る
     const dealFrom = `${shiftMonth(month, -3)}-01`;
-    const [walletTxns, deals, journals, transfers, partners, names] = await Promise.all([
+    const [walletTxns, deals, journals, transfers, partners, items] = await Promise.all([
       fetchAll<WalletTxn>("/api/1/wallet_txns", "wallet_txns", {
         ...Q,
         walletable_type: "bank_account",
@@ -100,18 +112,19 @@ export async function GET(req: NextRequest) {
       fetchAll<FreeeJournal>("/api/1/manual_journals", "manual_journals", { ...Q, start_issue_date: p.from, end_issue_date: p.to }),
       fetchAll<FreeeTransfer>("/api/1/transfers", "transfers", { ...Q, start_date: p.from, end_date: p.to }),
       fetchAll<{ id: number; name: string }>("/api/1/partners", "partners", Q),
-      accountNames(),
+      accountItems(),
     ]);
     const built = buildCash({
       month: { from: p.from, to: p.to },
       bankWalletableId: bank.id,
       cashWalletableId: cash.id,
       squareOtherWalletableId: sqOther.id,
+      bankAccountItemId: items.find((a) => a.walletable_id === bank.id)?.id,
       walletTxns,
       deals,
       journals,
       transfers,
-      accountNames: names,
+      accountNames: namesOf(items),
       partnerNames: new Map(partners.map((x) => [x.id, x.name])),
     });
 

@@ -40,3 +40,8 @@ export function shiftMonth(month: string, delta: number): string {
 export function jstMonth(now: number = Date.now()): string {
   return new Date(now + 9 * 3600_000).toISOString().slice(0, 7);
 }
+
+/** freeeが「その会計期間がない」（1期目より前など）と返したエラーか */
+export function isMissingPeriodError(message: string): boolean {
+  return /会計期間がありません/.test(message);
+}

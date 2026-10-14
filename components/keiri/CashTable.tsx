@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { CashRow, CashView } from "@/lib/keiri/types";
 import ReceiptPreview from "./ReceiptPreview";
 import { md, TAG_LABEL, yen } from "./format";
+import { inflowLabel } from "@/lib/keiri/nav";
 
 function ReceiptCell({ row, open, onToggle }: { row: CashRow; open: boolean; onToggle: () => void }) {
   switch (row.receiptStatus) {
@@ -40,6 +41,7 @@ function Rows({ rows, out }: { rows: CashRow[]; out: boolean }) {
           <button type="button" className="line" onClick={() => setOpenKey(openKey === r.key ? null : r.key)} aria-expanded={openKey === r.key}>
             <span className="date">{md(r.date)}</span>
             {out && r.tag && <span className={`tag ${r.tag}`}>{TAG_LABEL[r.tag]}</span>}
+            {!out && <span className={`tag in-${r.kind}`}>{inflowLabel(r.kind)}</span>}
             <span className="title">{r.partner ?? r.title}</span>
             <span className="amt">{yen(r.amount)}</span>
           </button>
@@ -115,6 +117,9 @@ export default function CashTable({ data }: { data: CashView }) {
         :global(.rows .tag.bank) { background: #e8eef7; color: #2f5d9b; }
         :global(.rows .tag.cash) { background: #e8f3e9; color: #2e7d32; }
         :global(.rows .tag.tatekae) { background: #f6e8f3; color: #8e3a7d; }
+        :global(.rows .tag.in-sales) { background: #e8f3e9; color: #2e7d32; }
+        :global(.rows .tag.in-other) { background: #efede8; color: var(--muted); }
+        :global(.rows .tag.in-move) { background: #efede8; color: var(--muted); }
         :global(.rows .sub) { display: flex; justify-content: space-between; gap: 8px; padding-left: 52px; font-size: 12px; color: var(--muted); }
         :global(.rows .detail) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         :global(.rows .rc) { white-space: nowrap; font-size: 12px; border: 0; background: none; padding: 0; cursor: pointer; text-decoration: none; font: inherit; }

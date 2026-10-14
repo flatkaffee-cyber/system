@@ -7,11 +7,16 @@ import type { KeiriMonthlyResponse } from "@/app/api/keiri/monthly/route";
 import CashTable from "./CashTable";
 import PlTable from "./PlTable";
 import { monthLabel } from "./format";
+import { isMonth, jstMonth, shiftMonth } from "@/lib/keiri/period";
 
 export default function KeiriMonthly() {
   const router = useRouter();
   const sp = useSearchParams();
-  const month = sp.get("month") ?? "";
+  const raw = sp.get("month") ?? "";
+  const thisMonth = jstMonth();
+  const month = isMonth(raw) ? raw : thisMonth;
+  const prev = shiftMonth(month, -1);
+  const next = month < thisMonth ? shiftMonth(month, 1) : null;
   const view = sp.get("view") === "pl" ? "pl" : "cash";
   const [data, setData] = useState<KeiriMonthlyResponse | null>(null);
   const [error, setError] = useState("");
@@ -26,6 +31,7 @@ export default function KeiriMonthly() {
     let alive = true;
     setLoading(true);
     setError("");
+    setData(null); // 前の月の数字が残らないように
     fetch(`/api/keiri/monthly?month=${encodeURIComponent(month)}&view=${view}`, { cache: "no-store" })
       .then(async (r) => {
         const j = await r.json();
@@ -38,20 +44,18 @@ export default function KeiriMonthly() {
     return () => { alive = false; };
   }, [month, view]);
 
-  const shown = data?.month ?? month;
-
   return (
     <main>
       <Nav />
       <div className="head">
         <div className="months">
-          <button type="button" disabled={!data} onClick={() => data && go(data.prev, view)} aria-label="前の月">‹</button>
-          <h1>{shown ? monthLabel(shown) : "　"}</h1>
-          <button type="button" disabled={!data?.next} onClick={() => data?.next && go(data.next, view)} aria-label="次の月">›</button>
+          <button type="button" onClick={() => go(prev, view)} aria-label="前の月">‹</button>
+          <h1>{monthLabel(month)}</h1>
+          <button type="button" disabled={!next} onClick={() => next && go(next, view)} aria-label="次の月">›</button>
         </div>
         <div className="views" role="tablist" aria-label="見方">
-          <button type="button" role="tab" aria-selected={view === "cash"} className={view === "cash" ? "on" : ""} onClick={() => go(shown, "cash")}>経理で見る</button>
-          <button type="button" role="tab" aria-selected={view === "pl"} className={view === "pl" ? "on" : ""} onClick={() => go(shown, "pl")}>会計で見る</button>
+          <button type="button" role="tab" aria-selected={view === "cash"} className={view === "cash" ? "on" : ""} onClick={() => go(month, "cash")}>経理で見る</button>
+          <button type="button" role="tab" aria-selected={view === "pl"} className={view === "pl" ? "on" : ""} onClick={() => go(month, "pl")}>会計で見る</button>
         </div>
       </div>
 
@@ -63,7 +67,7 @@ export default function KeiriMonthly() {
       )}
       {loading && !error && <p className="hint">freeeから読み込んでいます…</p>}
       {!loading && data?.warnings.map((w) => <p key={w} className="warn">{w}</p>)}
-      {!loading && data?.future && <section className="card"><p>まだデータがありません。</p></section>}
+      {!loading && (data?.future || data?.noData) && <section className="card"><p>まだデータがありません。</p></section>}
       {!loading && data?.cash && view === "cash" && <CashTable data={data.cash} />}
       {!loading && data?.pl && view === "pl" && <PlTable data={data.pl} />}
 

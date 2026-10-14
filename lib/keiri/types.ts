@@ -25,6 +25,8 @@ export type FreeeDeal = {
   issue_date: string;
   type: "income" | "expense";
   partner_id?: number | null;
+  status?: "settled" | "unsettled";
+  amount?: number;
   details: FreeeDetail[];
   payments?: FreeePayment[];
 };
@@ -91,6 +93,7 @@ export type CashInput = {
   bankWalletableId: number;
   cashWalletableId: number;
   squareOtherWalletableId: number;
+  bankAccountItemId?: number; // 普通預金の勘定科目ID（account_items の walletable_id が銀行口座のもの）
   walletTxns: WalletTxn[]; // 普通預金のその月の明細
   deals: FreeeDeal[]; // 支払日がその月にある取引（計上日が前の月の取引も含めて渡す）
   journals: FreeeJournal[]; // その月の振替伝票

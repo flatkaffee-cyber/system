@@ -3,22 +3,9 @@
 import Link from "next/link";
 
 // 経理画面のナビ。店舗側のナビとは別に出す（components/Nav.tsx が出し分ける）。
-export const KEIRI_TABS = [
-  { href: "/keiri", label: "📅 月次" },
-  { href: "/ryoshusho", label: "🧾 領収書" },
-  { href: "/meisai", label: "🏦 明細" },
-  { href: "/pending", label: "⏳ 処理待ち" },
-  { href: "/kariire", label: "💴 立替" },
-  { href: "/payables", label: "💰 払うもの" },
-  { href: "/bills", label: "🔁 定期請求" },
-  { href: "/loans", label: "🏦 借入返済" },
-  { href: "/items", label: "🧺 品目台帳" },
-  { href: "/report", label: "📊 用途別" },
-  { href: "/shorui", label: "📄 書類" },
-  { href: "/contracts", label: "📜 契約書" },
-  { href: "/company", label: "🏢 会社書類" },
-  { href: "/zeirishi", label: "🧑‍💼 税理士" },
-];
+import { KEIRI_TABS } from "@/lib/keiri/nav";
+
+export { KEIRI_TABS };
 
 export default function KeiriNav({ path }: { path: string }) {
   return (

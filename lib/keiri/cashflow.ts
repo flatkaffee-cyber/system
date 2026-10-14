@@ -70,11 +70,24 @@ export function buildCash(input: CashInput): CashView {
     return i < 0 ? undefined : transfers.splice(i, 1)[0];
   };
 
+  // 支払いのない未決済の取引（UIで消込する前の状態）。計上日と金額で明細に当てる
+  const unsettled = input.deals.filter((d) => d.status !== "settled" && (d.payments ?? []).length === 0);
+  const takeUnsettled = (date: string, amount: number, side: "income" | "expense") => {
+    const i = unsettled.findIndex(
+      (d) => d.type === side && d.issue_date === date && (d.amount ?? d.details.reduce((s, x) => s + x.amount, 0)) === amount,
+    );
+    return i < 0 ? undefined : unsettled.splice(i, 1)[0];
+  };
+
   const inflows: CashRow[] = [];
   const outflows: CashRow[] = [];
 
-  for (const t of input.walletTxns) {
-    if (!inMonth(t.date, month)) continue;
+  // 処理済みの明細から先に突き合わせる（同じ日・同じ金額で片方だけ消込済みのとき、取引を取り違えないため）
+  const txns = input.walletTxns
+    .filter((t) => inMonth(t.date, month))
+    .sort((a, b) => Number(a.status === 1) - Number(b.status === 1));
+
+  for (const t of txns) {
     const base = {
       key: `w${t.id}`,
       date: t.date,
@@ -85,20 +98,21 @@ export function buildCash(input: CashInput): CashView {
     };
     const tag: PayTag = isCard(t.description) ? "card" : "bank";
 
-    const ref = pays.get(`${input.bankWalletableId}|${t.date}|${t.amount}`)?.shift();
-    if (ref) {
-      const s = dealText(ref.deal, names);
-      const partner = ref.deal.partner_id ? input.partnerNames.get(ref.deal.partner_id) : undefined;
+    const pushDeal = (deal: FreeeDeal, suffix = "") => {
+      const s = dealText(deal, names);
+      const detail = s.text + suffix;
+      const partner = deal.partner_id ? input.partnerNames.get(deal.partner_id) : undefined;
       if (t.entry_side === "income") {
         const kind = s.accounts.some((a) => SALES_ACCOUNTS.includes(a)) ? "sales" : "other";
-        inflows.push({ ...base, detail: s.text, kind, partner, dealId: ref.deal.id });
+        inflows.push({ ...base, detail, kind, partner, dealId: deal.id });
       } else {
-        outflows.push({ ...base, detail: s.text, kind: "expense", tag, partner, dealId: ref.deal.id });
+        outflows.push({ ...base, detail, kind: "expense", tag, partner, dealId: deal.id });
       }
-      continue;
-    }
+    };
+    const takePay = () => pays.get(`${input.bankWalletableId}|${t.date}|${t.amount}`)?.shift();
 
-    const tr = takeTransfer(t.date, t.amount, t.entry_side);
+    // カード払いは取引とだけ照合する。カード以外（ATM・振込）は口座振替を先に試す
+    const tr = tag === "card" ? undefined : takeTransfer(t.date, t.amount, t.entry_side);
     if (tr) {
       if (t.entry_side === "income") {
         if (tr.from_walletable_id === input.squareOtherWalletableId) {
@@ -112,6 +126,18 @@ export function buildCash(input: CashInput): CashView {
         const toCash = tr.to_walletable_id === input.cashWalletableId;
         outflows.push({ ...base, detail: toCash ? "現金へ移動" : "口座振替", kind: toCash ? "move" : "expense", tag: "bank" });
       }
+      continue;
+    }
+
+    const ref = takePay();
+    if (ref) {
+      pushDeal(ref.deal);
+      continue;
+    }
+
+    const waiting = t.status === 1 ? takeUnsettled(t.date, t.amount, t.entry_side) : undefined;
+    if (waiting) {
+      pushDeal(waiting, "（freeeで消込待ち）");
       continue;
     }
 
@@ -157,14 +183,36 @@ export function buildCash(input: CashInput): CashView {
     });
   }
 
-  // 振替伝票: 貸方が現金 → 現金払い、役員借入金 → 立替。普通預金への預け入れは出費ではないので除く
+  // 振替伝票: 銀行が出てくる伝票は明細の側で数えるので除く。
+  // 借方が現金 → 現金が入ってくる（貸方が売上高なら売上金）。貸方が現金 → 現金払い、役員借入金 → 立替
+  const isBank = (id: number) => input.bankAccountItemId !== undefined && id === input.bankAccountItemId;
   for (const j of input.journals) {
     if (!inMonth(j.issue_date, month)) continue;
+    if (j.details.some((d) => isBank(d.account_item_id))) continue;
     const debits = j.details.filter((d) => d.entry_side === "debit");
-    const accounts = [...new Set(debits.map((d) => names.get(d.account_item_id) ?? "不明"))];
-    if (accounts.includes("普通預金")) continue;
-    for (const c of j.details.filter((d) => d.entry_side === "credit")) {
-      const credit = names.get(c.account_item_id);
+    const credits = j.details.filter((d) => d.entry_side === "credit");
+    const nameOf = (id: number) => names.get(id) ?? "不明";
+    const firstDesc = j.details.map((d) => d.description).find((x) => !!x) ?? "";
+
+    const cashIn = debits.filter((d) => nameOf(d.account_item_id) === "現金");
+    if (cashIn.length > 0) {
+      const from = [...new Set(credits.map((c) => nameOf(c.account_item_id)))];
+      inflows.push({
+        key: `j${j.id}-in`,
+        date: j.issue_date,
+        amount: cashIn.reduce((s, d) => s + d.amount, 0),
+        title: firstDesc || from.join("・"),
+        detail: from.join("・"),
+        kind: from.some((a) => SALES_ACCOUNTS.includes(a)) ? "sales" : "other",
+        processed: true,
+        journalId: j.id,
+      });
+      continue;
+    }
+
+    const accounts = [...new Set(debits.map((d) => nameOf(d.account_item_id)))];
+    for (const c of credits) {
+      const credit = nameOf(c.account_item_id);
       const tag: PayTag | undefined = credit === "現金" ? "cash" : credit === "役員借入金" ? "tatekae" : undefined;
       if (!tag) continue;
       const desc = c.description || debits.map((d) => d.description).find((x) => !!x) || "";

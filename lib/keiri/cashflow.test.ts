@@ -16,7 +16,7 @@ const names = new Map<number, string>([
   [6, "消耗品費"],
   [7, "現金"],
   [8, "役員借入金"],
-  [9, "普通預金"],
+  [9, "GMOあおぞらネット銀行（法人）フリー支店 125 フリー支店 普通預金（有利息） ***5680"],
 ]);
 
 const base = (over: Partial<CashInput>): CashInput => ({
@@ -24,6 +24,7 @@ const base = (over: Partial<CashInput>): CashInput => ({
   bankWalletableId: BANK,
   cashWalletableId: CASH,
   squareOtherWalletableId: SQ_OTHER,
+  bankAccountItemId: 9,
   walletTxns: [],
   deals: [],
   journals: [],
@@ -188,4 +189,64 @@ test("出金・入金は日付順", () => {
     ],
   }));
   assert.deepEqual(v.outflows.map((r) => r.date), ["2026-10-02", "2026-10-20"]);
+});
+
+test("消込待ちの未決済取引は計上日と金額で紐づけ、『消込待ち』と出す", () => {
+  const v = buildCash(base({
+    walletTxns: [txn(13, "2026-10-01", 30380, "Visaデビット利用 AMAZON CO JP 承認番号：1", "expense", 1)],
+    deals: [{
+      id: 70, issue_date: "2026-10-01", type: "expense", status: "unsettled", amount: 30380,
+      details: [{ account_item_id: 6, amount: 30380, description: "手すり（Amazon 注文250-1506470-9347845）", entry_side: "debit" }],
+      payments: [],
+    }],
+  }));
+  assert.equal(v.outflows[0].dealId, 70);
+  assert.match(v.outflows[0].detail, /消込待ち/);
+  assert.doesNotMatch(v.outflows[0].detail, /まだ登録していない/);
+});
+
+test("現金が入ってくる振替伝票は入金。売上高なら売上金", () => {
+  const v = buildCash(base({
+    journals: [
+      { id: 80, issue_date: "2026-10-22", details: [
+        { account_item_id: 7, amount: 20350, description: "DJイベント 現金受取", entry_side: "debit" },
+        { account_item_id: 1, amount: 20350, description: "DJイベント 現金受取", entry_side: "credit" },
+      ] },
+      { id: 81, issue_date: "2026-10-29", details: [
+        { account_item_id: 7, amount: 5000, description: "小口現金入金", entry_side: "debit" },
+        { account_item_id: 8, amount: 5000, description: "小口現金入金", entry_side: "credit" },
+      ] },
+    ],
+  }));
+  assert.equal(v.outflows.length, 0);
+  assert.deepEqual(v.inflows.map((r) => [r.journalId, r.kind, r.amount]), [[80, "sales", 20350], [81, "other", 5000]]);
+});
+
+test("同じ日・同じ金額で片方だけ消込済みなら、消込済みの明細に取引を割り当てる", () => {
+  const v = buildCash(base({
+    // freeeはIDの降順で返すので、未処理（新しいID）が先に来る
+    walletTxns: [
+      txn(21, "2026-08-25", 5030, "Visaデビット利用 AMAZON 承認番号：2", "expense", 1),
+      txn(20, "2026-08-25", 5030, "Visaデビット利用 AMAZON 承認番号：1", "expense", 2),
+    ],
+    deals: [expenseDeal(90, "2026-08-25", "2026-08-25", 5030, 6, "ココア")],
+    month: { from: "2026-08-01", to: "2026-08-31" },
+  }));
+  const done = v.outflows.find((r) => r.walletTxnId === 20);
+  const todo = v.outflows.find((r) => r.walletTxnId === 21);
+  assert.equal(done?.dealId, 90);
+  assert.equal(todo?.dealId, undefined);
+});
+
+test("同じ日のカード払いとATM出金が同じ金額でも取り違えない", () => {
+  const v = buildCash(base({
+    walletTxns: [
+      txn(31, "2026-10-12", 9000, "ATM セブン銀行", "expense"),
+      txn(30, "2026-10-12", 9000, "Visaデビット利用 SU-PAY APP 承認番号：1", "expense"),
+    ],
+    deals: [expenseDeal(91, "2026-10-12", "2026-10-12", 9000, 6, "SU-PAY")],
+    transfers: [{ id: 9, date: "2026-10-12", amount: 9000, from_walletable_id: BANK, to_walletable_id: CASH }],
+  }));
+  assert.equal(v.outflows.find((r) => r.walletTxnId === 30)?.dealId, 91);
+  assert.equal(v.outflows.find((r) => r.walletTxnId === 31)?.kind, "move");
 });
