@@ -154,7 +154,7 @@ export type Line = {
   reason: string;
 };
 
-async function fetchAll<T>(path: string, key: string, query: Record<string, string>): Promise<T[]> {
+export async function fetchAll<T>(path: string, key: string, query: Record<string, string>): Promise<T[]> {
   const out: T[] = [];
   for (let offset = 0; ; offset += 100) {
     const page =
