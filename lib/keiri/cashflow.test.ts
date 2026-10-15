@@ -77,7 +77,8 @@ test("前の月に計上して今月払った取引も今月の出金に出る",
   assert.equal(v.outflows.length, 1);
   assert.equal(v.outflows[0].dealId, 13);
   assert.equal(v.outflows[0].tag, "bank");
-  assert.match(v.outflows[0].detail, /旅費交通費/);
+  assert.equal(v.outflows[0].account, "旅費交通費");
+  assert.equal(v.outflows[0].description, "航空券");
 });
 
 test("ATMの出金と現金の預け入れは合計に入れない", () => {
@@ -130,6 +131,7 @@ test("現金売上は日ごとにまとめる", () => {
     v.inflows.map((r) => [r.date, r.amount, r.kind, r.title]),
     [["2026-10-03", 5000, "sales", "現金売上（レジ）"], ["2026-10-04", 500, "sales", "現金売上（レジ）"]],
   );
+  assert.ok(v.inflows.every((r) => r.account === "売上高" && r.status === "done"));
 });
 
 test("現金払い・立替の振替伝票は出金に出す。普通預金への預け入れは除く", () => {
@@ -162,7 +164,8 @@ test("未処理の明細は未処理として数える", () => {
   const v = buildCash(base({
     walletTxns: [txn(9, "2026-10-13", 17057, "Visaデビット利用 AMAZON CO JP 承認番号：1", "expense", 1)],
   }));
-  assert.equal(v.outflows[0].processed, false);
+  assert.equal(v.outflows[0].status, "todo");
+  assert.equal(v.outflows[0].description, "");
   assert.equal(v.outflows[0].tag, "card");
   assert.equal(v.totals.unprocessed, 1);
   assert.equal(v.totals.out, 17057);
@@ -201,8 +204,10 @@ test("消込待ちの未決済取引は計上日と金額で紐づけ、『消�
     }],
   }));
   assert.equal(v.outflows[0].dealId, 70);
-  assert.match(v.outflows[0].detail, /消込待ち/);
-  assert.doesNotMatch(v.outflows[0].detail, /まだ登録していない/);
+  assert.equal(v.outflows[0].status, "waiting");
+  assert.equal(v.outflows[0].account, "消耗品費");
+  assert.equal(v.outflows[0].description, "手すり（Amazon 注文250-1506470-9347845）");
+  assert.equal(v.totals.unprocessed, 1);
 });
 
 test("現金が入ってくる振替伝票は入金。売上高なら売上金", () => {
@@ -251,7 +256,7 @@ test("同じ日のカード払いとATM出金が同じ金額でも取り違え�
   assert.equal(v.outflows.find((r) => r.walletTxnId === 31)?.kind, "move");
 });
 
-test("未処理の明細は、どの行でも詳細に「未処理」を1回だけ出す（画面では足さない）", () => {
+test("未処理の明細は、取引や口座振替と突き合っても状態は todo。科目・摘要に状態の文字を入れない", () => {
   const v = buildCash(base({
     walletTxns: [
       txn(40, "2026-10-13", 17057, "Visaデビット利用 AMAZON CO JP 承認番号：1", "expense", 1),
@@ -263,9 +268,13 @@ test("未処理の明細は、どの行でも詳細に「未処理」を1回だ�
   }));
   for (const id of [40, 41, 42]) {
     const row = v.outflows.find((r) => r.walletTxnId === id);
-    assert.equal(row?.processed, false);
-    assert.equal(row?.detail.match(/未処理/g)?.length, 1, `明細${id}: ${row?.detail}`);
+    assert.equal(row?.status, "todo", `明細${id}`);
+    assert.doesNotMatch(`${row?.account}${row?.description}`, /未処理|消込待ち/, `明細${id}`);
   }
+  const deal = v.outflows.find((r) => r.walletTxnId === 41);
+  assert.deepEqual([deal?.account, deal?.description], ["消耗品費", "棚"]);
+  const atm = v.outflows.find((r) => r.walletTxnId === 42);
+  assert.deepEqual([atm?.account, atm?.description, atm?.kind], ["", "現金へ移動", "move"]);
 });
 
 test("貸方が普通預金の振替伝票は、日付と金額で口座明細に紐づける", () => {
@@ -283,8 +292,9 @@ test("貸方が普通預金の振替伝票は、日付と金額で口座明細�
   assert.equal(row.walletTxnId, 50);
   assert.equal(row.journalId, 3743184556);
   assert.equal(row.tag, "card");
-  assert.equal(row.processed, true);
-  assert.equal(row.detail, "消耗品費／シンプルストレージ 2コ×単100");
+  assert.equal(row.status, "done");
+  assert.equal(row.account, "消耗品費");
+  assert.equal(row.description, "シンプルストレージ 2コ×単100");
   assert.equal(v.totals.unprocessed, 0);
 });
 
@@ -299,7 +309,7 @@ test("普通預金の振替伝票は、金額が違えば紐づけない", () =>
   }));
   assert.equal(v.outflows.length, 1);
   assert.equal(v.outflows[0].journalId, undefined);
-  assert.equal(v.outflows[0].processed, false);
+  assert.equal(v.outflows[0].status, "todo");
 });
 
 test("同じ金額の行が1つの伝票・取引に2つあっても、行のkeyは重ならない", () => {
@@ -343,6 +353,28 @@ test("現金売上（レジ）は売上高の明細がある取引だけ。そ�
   assert.equal(other?.amount, 10000);
   assert.equal(other?.kind, "other");
   assert.equal(other?.partner, "町田創");
-  assert.match(other?.detail ?? "", /役員貸付金/);
+  assert.equal(other?.account, "役員貸付金");
+  assert.equal(other?.description, "返済（現金）");
   assert.equal(v.totals.in, 13000);
+});
+
+test("freeeで処理済みだが、どの取引とも突き合わない明細は、処理済みで摘要に理由を書く", () => {
+  const v = buildCash(base({
+    walletTxns: [txn(60, "2026-10-16", 4400, "Visaデビット利用 ナゾノミセ 承認番号：1", "expense", 2)],
+  }));
+  assert.equal(v.outflows[0].status, "done");
+  assert.equal(v.outflows[0].account, "");
+  assert.equal(v.outflows[0].description, "freeeの取引と突き合わせできませんでした");
+  assert.equal(v.totals.unprocessed, 0);
+});
+
+test("口座振替の入金は科目なし、摘要に種類", () => {
+  const v = buildCash(base({
+    walletTxns: [txn(61, "2026-10-02", 140669, "振込 PAYPAY", "income")],
+    transfers: [{ id: 11, date: "2026-10-02", amount: 140669, from_walletable_id: SQ_OTHER, to_walletable_id: BANK }],
+  }));
+  assert.deepEqual(
+    [v.inflows[0].account, v.inflows[0].description, v.inflows[0].kind, v.inflows[0].status],
+    ["", "売上金（PayPayなど・Square経由）", "sales", "done"],
+  );
 });

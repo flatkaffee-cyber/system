@@ -69,15 +69,18 @@ export type PlView = {
 
 export type PayTag = "card" | "bank" | "cash" | "tatekae";
 export type ReceiptStatus = "attached" | "amazon" | "missing" | "missing-recorded" | "n/a";
+/** freeeでの状態。done = 処理済み、todo = 明細が未処理、waiting = 未決済の取引に当たったが消込前 */
+export type RowStatus = "done" | "todo" | "waiting";
 export type CashRow = {
   key: string;
   date: string;
   amount: number;
-  title: string; // 店名・振込先など
-  detail: string; // 科目と摘要
+  title: string; // 明細の文字・店名・振込先など
+  account: string; // 科目（複数は「・」）。無ければ ""
+  description: string; // 摘要。口座振替などは「現金へ移動」のような種類。無ければ ""
   kind: "sales" | "other" | "expense" | "move"; // move = 口座⇄現金の移動（合計に入れない）
   tag?: PayTag; // 出金だけ
-  processed: boolean; // freeeで処理済みか
+  status: RowStatus;
   partner?: string;
   dealId?: number;
   journalId?: number;

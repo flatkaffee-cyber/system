@@ -25,7 +25,7 @@ export function attachReceipts(rows: CashRow[], receipts: ReceiptRef[], pending:
     const hit = id ? byJournal.get(id) : undefined;
     if (hit) return { ...row, receiptStatus: "attached", receipt: { id: hit.id, vendor: hit.vendor } };
 
-    const order = AMAZON_ORDER.exec(row.detail);
+    const order = AMAZON_ORDER.exec(row.description);
     if (order) return { ...row, receiptStatus: "amazon", amazonOrderId: order[1] };
 
     if (row.tag === "bank") return { ...row, receiptStatus: "n/a" };

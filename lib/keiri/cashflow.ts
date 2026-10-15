@@ -1,6 +1,7 @@
 // 「経理で見る」の行を作る。普通預金の明細を起点に、freeeの取引・口座振替と突き合わせ、
 // 現金売上（Squareの現金分）と、現金払い・立替の振替伝票を足して、日付順に並べる。
 // freeeのAPIは明細と取引の対応を返さないので、取引の支払い（口座・日付・金額）で突き合わせる。
+// 科目・摘要・freeeでの状態は別々の項目で返す（表の列に分けて出す。状態を文字にするのは画面の役目）。
 import type {
   CashInput,
   CashRow,
@@ -11,6 +12,7 @@ import type {
   FreeePayment,
   FreeeTransfer,
   PayTag,
+  RowStatus,
 } from "./types";
 
 const SALES_ACCOUNTS = ["売上高", "売掛金"];
@@ -27,17 +29,19 @@ const inMonth = (d: string, m: { from: string; to: string }) => d >= m.from && d
 const isCard = (desc: string) => desc.startsWith("Visaデビット");
 const byDate = (a: CashRow, b: CashRow) => a.date.localeCompare(b.date) || a.key.localeCompare(b.key);
 
-function dealText(deal: FreeeDeal, names: Map<number, string>): { accounts: string[]; text: string } {
+type Parts = { accounts: string[]; account: string; description: string };
+
+function dealParts(deal: FreeeDeal, names: Map<number, string>): Parts {
   const accounts = [...new Set(deal.details.map((d) => names.get(d.account_item_id) ?? "不明"))];
-  const desc = deal.details.map((d) => d.description).find((x) => !!x) ?? "";
-  return { accounts, text: desc ? `${accounts.join("・")}／${desc}` : accounts.join("・") };
+  const description = deal.details.map((d) => d.description).find((x) => !!x) ?? "";
+  return { accounts, account: accounts.join("・"), description };
 }
 
-function journalText(j: FreeeJournal, names: Map<number, string>): string {
+function journalParts(j: FreeeJournal, names: Map<number, string>): Parts {
   const debits = j.details.filter((d) => d.entry_side === "debit");
   const accounts = [...new Set(debits.map((d) => names.get(d.account_item_id) ?? "不明"))];
-  const desc = [...debits, ...j.details].map((d) => d.description).find((x) => !!x) ?? "";
-  return desc ? `${accounts.join("・")}／${desc}` : accounts.join("・");
+  const description = [...debits, ...j.details].map((d) => d.description).find((x) => !!x) ?? "";
+  return { accounts, account: accounts.join("・"), description };
 }
 
 export function summarize(inflows: CashRow[], outflows: CashRow[]): CashTotals {
@@ -49,7 +53,7 @@ export function summarize(inflows: CashRow[], outflows: CashRow[]): CashTotals {
     out: outSum,
     net: inSum - outSum,
     missingReceipts: outflows.filter((r) => r.receiptStatus === "missing" || r.receiptStatus === "missing-recorded").length,
-    unprocessed: [...inflows, ...outflows].filter((r) => !r.processed).length,
+    unprocessed: [...inflows, ...outflows].filter((r) => r.status !== "done").length,
   };
 }
 
@@ -106,27 +110,27 @@ export function buildCash(input: CashInput): CashView {
     .sort((a, b) => Number(a.status === 1) - Number(b.status === 1));
 
   for (const t of txns) {
+    const status: RowStatus = t.status === 1 ? "todo" : "done";
     const base = {
       key: `w${t.id}`,
       date: t.date,
       amount: t.amount,
       title: cleanBankText(t.description),
       walletTxnId: t.id,
-      processed: t.status !== 1,
+      status,
     };
     const tag: PayTag = isCard(t.description) ? "card" : "bank";
-    // 取引・振替と突き合わせできても、freeeの明細がまだ未処理ならそう出す（画面は detail をそのまま出す）
-    const todo = t.status === 1 ? "（未処理）" : "";
+    // 取引に紐づかない行（口座振替など）。科目は無く、摘要に種類を書く
+    const plain = (description: string) => ({ ...base, account: "", description });
 
-    const pushDeal = (deal: FreeeDeal, suffix = todo) => {
-      const s = dealText(deal, names);
-      const detail = s.text + suffix;
+    const pushDeal = (deal: FreeeDeal, rowStatus: RowStatus = status) => {
+      const parts = dealParts(deal, names);
       const partner = deal.partner_id ? input.partnerNames.get(deal.partner_id) : undefined;
+      const row = { ...base, account: parts.account, description: parts.description, status: rowStatus, partner, dealId: deal.id };
       if (t.entry_side === "income") {
-        const kind = s.accounts.some((a) => SALES_ACCOUNTS.includes(a)) ? "sales" : "other";
-        inflows.push({ ...base, detail, kind, partner, dealId: deal.id });
+        inflows.push({ ...row, kind: parts.accounts.some((a) => SALES_ACCOUNTS.includes(a)) ? "sales" : "other" });
       } else {
-        outflows.push({ ...base, detail, kind: "expense", tag, partner, dealId: deal.id });
+        outflows.push({ ...row, kind: "expense", tag });
       }
     };
     const takePay = () => pays.get(`${input.bankWalletableId}|${t.date}|${t.amount}`)?.shift();
@@ -136,15 +140,15 @@ export function buildCash(input: CashInput): CashView {
     if (tr) {
       if (t.entry_side === "income") {
         if (tr.from_walletable_id === input.squareOtherWalletableId) {
-          inflows.push({ ...base, detail: "売上金（PayPayなど・Square経由）" + todo, kind: "sales" });
+          inflows.push({ ...plain("売上金（PayPayなど・Square経由）"), kind: "sales" });
         } else if (tr.from_walletable_id === input.cashWalletableId) {
-          inflows.push({ ...base, detail: "現金の預け入れ" + todo, kind: "move" });
+          inflows.push({ ...plain("現金の預け入れ"), kind: "move" });
         } else {
-          inflows.push({ ...base, detail: "口座振替" + todo, kind: "other" });
+          inflows.push({ ...plain("口座振替"), kind: "other" });
         }
       } else {
         const toCash = tr.to_walletable_id === input.cashWalletableId;
-        outflows.push({ ...base, detail: (toCash ? "現金へ移動" : "口座振替") + todo, kind: toCash ? "move" : "expense", tag: "bank" });
+        outflows.push({ ...plain(toCash ? "現金へ移動" : "口座振替"), kind: toCash ? "move" : "expense", tag: "bank" });
       }
       continue;
     }
@@ -158,19 +162,21 @@ export function buildCash(input: CashInput): CashView {
     // 振替伝票で帳簿に載っているので、freeeの明細が未処理のままでも処理済みとして扱う
     const bj = t.entry_side === "expense" ? takeBankJournal(t.date, t.amount) : undefined;
     if (bj) {
-      outflows.push({ ...base, detail: journalText(bj, names), kind: "expense", tag, processed: true, journalId: bj.id });
+      const parts = journalParts(bj, names);
+      outflows.push({ ...base, account: parts.account, description: parts.description, kind: "expense", tag, status: "done", journalId: bj.id });
       continue;
     }
 
     const waiting = t.status === 1 ? takeUnsettled(t.date, t.amount, t.entry_side) : undefined;
     if (waiting) {
-      pushDeal(waiting, "（freeeで消込待ち）");
+      pushDeal(waiting, "waiting");
       continue;
     }
 
-    const detail = t.status === 1 ? "未処理（freeeでまだ登録していない）" : "freeeの取引と突き合わせできませんでした";
-    if (t.entry_side === "income") inflows.push({ ...base, detail, kind: "other" });
-    else outflows.push({ ...base, detail, kind: "expense", tag });
+    // どの取引とも突き合わない。未処理なら状態で分かるので摘要は空、処理済みなら理由を書く
+    const row = plain(t.status === 1 ? "" : "freeeの取引と突き合わせできませんでした");
+    if (t.entry_side === "income") inflows.push({ ...row, kind: "other" });
+    else outflows.push({ ...row, kind: "expense", tag });
   }
 
   // 現金の動き: Square連携の売上取引（売上高の明細がある取引）の現金分は日ごとに合計。
@@ -178,26 +184,27 @@ export function buildCash(input: CashInput): CashView {
   const cashSales = new Map<string, number>();
   for (const deal of input.deals) {
     const squareSale = deal.type === "income" && deal.details.some((d) => names.get(d.account_item_id) === "売上高");
-    for (const [pi, p] of (deal.payments ?? []).entries()) {
-      if (p.from_walletable_id !== input.cashWalletableId || !inMonth(p.date, month)) continue;
+    for (const [pi, pay] of (deal.payments ?? []).entries()) {
+      if (pay.from_walletable_id !== input.cashWalletableId || !inMonth(pay.date, month)) continue;
       if (squareSale) {
-        cashSales.set(p.date, (cashSales.get(p.date) ?? 0) + p.amount);
+        cashSales.set(pay.date, (cashSales.get(pay.date) ?? 0) + pay.amount);
         continue;
       }
-      const s = dealText(deal, names);
+      const parts = dealParts(deal, names);
       const partner = deal.partner_id ? input.partnerNames.get(deal.partner_id) : undefined;
       const row = {
         key: `d${deal.id}-p${pi}`,
-        date: p.date,
-        amount: p.amount,
-        title: partner ?? s.text,
-        detail: s.text,
-        processed: true,
+        date: pay.date,
+        amount: pay.amount,
+        title: partner ?? (parts.description || parts.account),
+        account: parts.account,
+        description: parts.description,
+        status: "done" as const,
         partner,
         dealId: deal.id,
       };
       if (deal.type === "income") {
-        inflows.push({ ...row, kind: s.accounts.some((a) => SALES_ACCOUNTS.includes(a)) ? "sales" : "other" });
+        inflows.push({ ...row, kind: parts.accounts.some((a) => SALES_ACCOUNTS.includes(a)) ? "sales" : "other" });
       } else {
         outflows.push({ ...row, kind: "expense", tag: "cash" });
       }
@@ -209,9 +216,10 @@ export function buildCash(input: CashInput): CashView {
       date,
       amount,
       title: "現金売上（レジ）",
-      detail: "Square連携の売上のうち現金で受け取った分",
+      account: "売上高",
+      description: "Square連携の売上のうち現金で受け取った分",
       kind: "sales",
-      processed: true,
+      status: "done",
     });
   }
 
@@ -233,9 +241,10 @@ export function buildCash(input: CashInput): CashView {
         date: j.issue_date,
         amount: cashIn.reduce((s, d) => s + d.amount, 0),
         title: firstDesc || from.join("・"),
-        detail: from.join("・"),
+        account: from.join("・"),
+        description: firstDesc,
         kind: from.some((a) => SALES_ACCOUNTS.includes(a)) ? "sales" : "other",
-        processed: true,
+        status: "done",
         journalId: j.id,
       });
       continue;
@@ -252,10 +261,11 @@ export function buildCash(input: CashInput): CashView {
         date: j.issue_date,
         amount: c.amount,
         title: desc || accounts.join("・"),
-        detail: accounts.join("・"),
+        account: accounts.join("・"),
+        description: desc,
         kind: "expense",
         tag,
-        processed: true,
+        status: "done",
         journalId: j.id,
       });
     }

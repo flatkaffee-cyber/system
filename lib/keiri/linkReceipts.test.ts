@@ -4,7 +4,7 @@ import { attachReceipts } from "./linkReceipts.ts";
 import type { CashRow } from "./types.ts";
 
 const row = (over: Partial<CashRow>): CashRow => ({
-  key: "k", date: "2026-10-11", amount: 1000, title: "t", detail: "消耗品費", kind: "expense", tag: "card", processed: true, ...over,
+  key: "k", date: "2026-10-11", amount: 1000, title: "t", account: "消耗品費", description: "", kind: "expense", tag: "card", status: "done", ...over,
 });
 
 test("取引IDで領収書を紐づける", () => {
@@ -19,7 +19,7 @@ test("振替伝票IDでも紐づける（現金払い）", () => {
 });
 
 test("Amazonは注文番号で確認する", () => {
-  const [r] = attachReceipts([row({ dealId: 9, detail: "消耗品費／手すり（Amazon 注文250-1506470-9347845）" })], [], []);
+  const [r] = attachReceipts([row({ dealId: 9, description: "手すり（Amazon 注文250-1506470-9347845）" })], [], []);
   assert.equal(r.receiptStatus, "amazon");
   assert.equal(r.amazonOrderId, "250-1506470-9347845");
 });

@@ -37,7 +37,7 @@ function Rows({ rows, out }: { rows: CashRow[]; out: boolean }) {
   return (
     <ul className="rows">
       {rows.map((r) => (
-        <li key={r.key} className={`${r.kind === "move" ? "move" : ""} ${r.processed ? "" : "todo"}`}>
+        <li key={r.key} className={`${r.kind === "move" ? "move" : ""} ${r.status === "done" ? "" : "todo"}`}>
           <button type="button" className="line" onClick={() => setOpenKey(openKey === r.key ? null : r.key)} aria-expanded={openKey === r.key}>
             <span className="date">{md(r.date)}</span>
             {out && r.tag && <span className={`tag ${r.tag}`}>{TAG_LABEL[r.tag]}</span>}
@@ -46,7 +46,10 @@ function Rows({ rows, out }: { rows: CashRow[]; out: boolean }) {
             <span className="amt">{yen(r.amount)}</span>
           </button>
           <div className="sub">
-            <span className="detail">{r.detail}</span>
+            <span className="detail">
+              {[r.account, r.description].filter(Boolean).join("／")}
+              {r.status === "todo" ? "（未処理）" : r.status === "waiting" ? "（freeeで消込待ち）" : ""}
+            </span>
             {out && (
               <ReceiptCell
                 row={r}
