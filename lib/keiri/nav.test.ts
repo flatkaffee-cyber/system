@@ -1,13 +1,32 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { freeeLinks, inflowLabel, isKeiriPath, KEIRI_TABS } from "./nav.ts";
+import { freeeLinks, inflowLabel, isKeiriPath, KEIRI_TABS, keiriMenu, keiriPageLabel } from "./nav.ts";
 
-test("経理ナビを出すページ", () => {
+test("経理のレイアウトで出すページ", () => {
   assert.equal(isKeiriPath("/keiri"), true);
   assert.equal(isKeiriPath("/ryoshusho"), true);
-  assert.equal(isKeiriPath("/receipts"), true); // 保存済み領収書はタブに無いが経理画面
+  assert.equal(isKeiriPath("/receipts"), true);
   assert.equal(isKeiriPath("/table"), false);
-  assert.equal(KEIRI_TABS.some((t) => t.href === "/receipts"), false);
+  assert.equal(KEIRI_TABS.length, 15);
+});
+
+test("サイドバーの分野と並び", () => {
+  const menu = keiriMenu();
+  assert.deepEqual(menu.map((g) => g.label), ["", "記録する", "支払い", "集計", "書類"]);
+  assert.deepEqual(menu.map((g) => g.tabs.map((t) => t.href)), [
+    ["/keiri"],
+    ["/ryoshusho", "/receipts", "/meisai", "/pending"],
+    ["/kariire", "/payables", "/bills", "/loans"],
+    ["/items", "/report"],
+    ["/shorui", "/contracts", "/company", "/zeirishi"],
+  ]);
+});
+
+test("スマホの帯に出すページ名は絵文字を除く", () => {
+  assert.equal(keiriPageLabel("/keiri"), "月次");
+  assert.equal(keiriPageLabel("/receipts"), "保存済み領収書");
+  assert.equal(keiriPageLabel("/zeirishi"), "税理士");
+  assert.equal(keiriPageLabel("/table"), undefined);
 });
 
 test("入金の区分の表示名", () => {

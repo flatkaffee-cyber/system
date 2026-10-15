@@ -1,28 +1,42 @@
-// 経理画面のナビに出すページ。components/KeiriNav.tsx と components/Nav.tsx が使う（JSXを含まないのでテストできる）。
+// 経理のページの一覧と、サイドバーでの分野。components/keiri/KeiriShell.tsx・components/HelpWidget.tsx が使う（JSXを含まないのでテストできる）。
 import type { CashRow } from "./types";
 
-export const KEIRI_TABS = [
-  { href: "/keiri", label: "📅 月次" },
-  { href: "/ryoshusho", label: "🧾 領収書" },
-  { href: "/meisai", label: "🏦 明細" },
-  { href: "/pending", label: "⏳ 処理待ち" },
-  { href: "/kariire", label: "💴 立替" },
-  { href: "/payables", label: "💰 払うもの" },
-  { href: "/bills", label: "🔁 定期請求" },
-  { href: "/loans", label: "🏦 借入返済" },
-  { href: "/items", label: "🧺 品目台帳" },
-  { href: "/report", label: "📊 用途別" },
-  { href: "/shorui", label: "📄 書類" },
-  { href: "/contracts", label: "📜 契約書" },
-  { href: "/company", label: "🏢 会社書類" },
-  { href: "/zeirishi", label: "🧑‍💼 税理士" },
+export type KeiriGroup = "top" | "kiroku" | "shiharai" | "shukei" | "shorui";
+export type KeiriTab = { href: string; label: string; group: KeiriGroup };
+
+const GROUP_ORDER: KeiriGroup[] = ["top", "kiroku", "shiharai", "shukei", "shorui"];
+const GROUP_LABEL: Record<KeiriGroup, string> = { top: "", kiroku: "記録する", shiharai: "支払い", shukei: "集計", shorui: "書類" };
+
+export const KEIRI_TABS: KeiriTab[] = [
+  { href: "/keiri", label: "📅 月次", group: "top" },
+  { href: "/ryoshusho", label: "🧾 領収書", group: "kiroku" },
+  { href: "/receipts", label: "🗂 保存済み領収書", group: "kiroku" },
+  { href: "/meisai", label: "🏦 明細", group: "kiroku" },
+  { href: "/pending", label: "⏳ 処理待ち", group: "kiroku" },
+  { href: "/kariire", label: "💴 立替", group: "shiharai" },
+  { href: "/payables", label: "💰 払うもの", group: "shiharai" },
+  { href: "/bills", label: "🔁 定期請求", group: "shiharai" },
+  { href: "/loans", label: "🏦 借入返済", group: "shiharai" },
+  { href: "/items", label: "🧺 品目台帳", group: "shukei" },
+  { href: "/report", label: "📊 用途別", group: "shukei" },
+  { href: "/shorui", label: "📄 書類", group: "shorui" },
+  { href: "/contracts", label: "📜 契約書", group: "shorui" },
+  { href: "/company", label: "🏢 会社書類", group: "shorui" },
+  { href: "/zeirishi", label: "🧑‍💼 税理士", group: "shorui" },
 ];
 
-/** タブには並べないが、経理画面として経理ナビを出すページ */
-const KEIRI_EXTRA_PATHS = ["/receipts"];
-
 export function isKeiriPath(path: string): boolean {
-  return KEIRI_TABS.some((t) => t.href === path) || KEIRI_EXTRA_PATHS.includes(path);
+  return KEIRI_TABS.some((t) => t.href === path);
+}
+
+/** サイドバーの並び。分野の順に、その分野のページ */
+export function keiriMenu(): { key: KeiriGroup; label: string; tabs: KeiriTab[] }[] {
+  return GROUP_ORDER.map((key) => ({ key, label: GROUP_LABEL[key], tabs: KEIRI_TABS.filter((t) => t.group === key) }));
+}
+
+/** スマホの帯に出すページ名（先頭の絵文字を除く）。経理のページでなければ undefined */
+export function keiriPageLabel(path: string): string | undefined {
+  return KEIRI_TABS.find((t) => t.href === path)?.label.replace(/^\S+\s/, "");
 }
 
 export function inflowLabel(kind: "sales" | "other" | "expense" | "move"): string {
