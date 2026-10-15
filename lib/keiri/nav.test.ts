@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { freeeLinks, inflowLabel, isKeiriPath, KEIRI_TABS, keiriMenu, keiriPageLabel } from "./nav.ts";
+import { freeeLinks, isKeiriPath, KEIRI_TABS, keiriMenu, keiriPageLabel } from "./nav.ts";
 
 test("経理のレイアウトで出すページ", () => {
   assert.equal(isKeiriPath("/keiri"), true);
@@ -27,12 +27,6 @@ test("スマホの帯に出すページ名は絵文字を除く", () => {
   assert.equal(keiriPageLabel("/receipts"), "保存済み領収書");
   assert.equal(keiriPageLabel("/zeirishi"), "税理士");
   assert.equal(keiriPageLabel("/table"), undefined);
-});
-
-test("入金の区分の表示名", () => {
-  assert.equal(inflowLabel("sales"), "売上金");
-  assert.equal(inflowLabel("other"), "その他");
-  assert.equal(inflowLabel("move"), "移動");
 });
 
 test("行から開ける freee の画面（2026-10-15 に開けることを確かめたURL）", () => {

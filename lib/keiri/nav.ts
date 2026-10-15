@@ -39,10 +39,6 @@ export function keiriPageLabel(path: string): string | undefined {
   return KEIRI_TABS.find((t) => t.href === path)?.label.replace(/^\S+\s/, "");
 }
 
-export function inflowLabel(kind: "sales" | "other" | "expense" | "move"): string {
-  return kind === "sales" ? "売上金" : kind === "move" ? "移動" : "その他";
-}
-
 const FREEE = "https://secure.freee.co.jp";
 
 /**
