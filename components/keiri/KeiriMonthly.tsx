@@ -9,6 +9,7 @@ import { monthLabel, yen } from "./format";
 import { isMonth, jstMonth } from "@/lib/keiri/period";
 import { buildSheet, monthTabs, NO_FILTER, type SheetFilter, type SheetRow } from "@/lib/keiri/sheet";
 import RowMarkMenu from "./RowMarkMenu";
+import MemoBoard from "./MemoBoard";
 import type { RowMarks } from "@/lib/keiri/notes";
 
 // 月次ページ。上から 月のタブ → 数字のカード → 道具の帯 → 表（経理で見る）または損益計算書（会計で見る）。
@@ -130,6 +131,8 @@ export default function KeiriMonthly() {
           <div><span className="cap">未処理</span><b className={t.unprocessed ? "r" : ""}>{t.unprocessed}件</b></div>
         </section>
       )}
+
+      {!data?.future && <MemoBoard month={month} />}
 
       <div className="tools">
         {view === "cash" && (
