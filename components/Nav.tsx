@@ -3,8 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
-import KeiriNav from "@/components/KeiriNav";
-import { isKeiriPath } from "@/lib/keiri/nav";
 
 // 画面が増えて一覧から探せなくなったので、分野で分ける。
 // いま開いているページが属する分野を最初に開き、
@@ -76,7 +74,6 @@ const STORE_KEY = "nav:group";
 
 export default function Nav() {
   const path = usePathname();
-  const inKeiri = isKeiriPath(path);
   // いま開いているページがある分野。無ければ最後に選んだ分野。
   const owner = GROUPS.find((g) => g.tabs.some((t) => t.href === path));
   const [group, setGroup] = useState<string>(owner?.key ?? "tenpo");
@@ -93,8 +90,6 @@ export default function Nav() {
       if (saved && GROUPS.some((g) => g.key === saved)) setGroup(saved);
     } catch { /* 保存できなくても動く */ }
   }, [owner]);
-
-  if (inKeiri) return <KeiriNav path={path} />;
 
   const current = GROUPS.find((g) => g.key === group) ?? GROUPS[0];
 

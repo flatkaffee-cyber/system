@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import Nav from "@/components/Nav";
 
 const CATEGORIES = [
   "仕入高", "消耗品費", "家賃", "水道光熱費", "通信費",
@@ -111,7 +110,6 @@ export default function PendingPage() {
 
   return (
     <div className="wrap">
-      <Nav />
       <header>
         <h1>⏳ 経理処理待ち</h1>
         <p>銀行明細等で見つかったレシートなし経費</p>

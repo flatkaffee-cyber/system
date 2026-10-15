@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Nav from "@/components/Nav";
 
 type Doc = {
   id: string;
@@ -60,7 +59,6 @@ export default function Shorui() {
         <h1>📄 書類の保管庫</h1>
         <p>請求書・契約書・明細書を貯めておくと、口座明細と自動で照合します</p>
       </header>
-      <Nav />
 
       <div className="card">
         <button

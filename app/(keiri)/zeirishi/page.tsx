@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Nav from "@/components/Nav";
 
 type Review = {
   id: string;
@@ -43,7 +42,6 @@ export default function Zeirishi() {
         <h1>🧑‍💼 税理士に相談リスト</h1>
         <p>いったん処理しつつ、後で税理士と一緒に確認したい論点を保管</p>
       </header>
-      <Nav />
 
       {reviews === null && (
         <div className="card" style={{ textAlign: "center", color: "var(--muted)" }}>

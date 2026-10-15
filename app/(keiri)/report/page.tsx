@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Nav from "@/components/Nav";
 
 type Item = { date: string; name: string; amount: number; source: string };
 type TagAgg = { tag: string; total: number; count: number; items: Item[] };
@@ -25,7 +24,6 @@ export default function Report() {
         <h1>📊 用途別レポート</h1>
         <p>用途タグごとに「何にいくら使ったか」を集計（勘定科目とは別の目的別内訳）</p>
       </header>
-      <Nav />
 
       {tags === null && (
         <div className="card" style={{ textAlign: "center", color: "var(--muted)" }}>

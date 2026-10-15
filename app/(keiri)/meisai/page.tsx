@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Nav from "@/components/Nav";
 import MeisaiItem, { type Txn } from "@/components/MeisaiItem";
 
 type CardCandidate = {
@@ -79,7 +78,6 @@ export default function Meisai() {
         <h1>🧾 未処理の明細</h1>
         <p>freeeでまだ仕訳していない明細を、AIと相談して決めます</p>
       </header>
-      <Nav />
 
       {error && <p className="err">{error}</p>}
 

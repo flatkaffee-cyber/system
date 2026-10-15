@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import Nav from "@/components/Nav";
 
 // 品目別の購入台帳。仕訳とは別に「何を何回いくらで買ったか」を積み上げて見る。
 
@@ -89,7 +88,6 @@ export default function ItemsPage() {
         <h1>🧺 品目台帳</h1>
         <p>仕訳とは別に、何を何回いくらで買ったかを積み上げています</p>
       </header>
-      <Nav />
 
       {err && <p className="err">{err}</p>}
 

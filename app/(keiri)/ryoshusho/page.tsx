@@ -2,7 +2,6 @@
 
 import { useRef, useState, useEffect } from "react";
 import { CATEGORIES, type Receipt } from "@/lib/receipt";
-import Nav from "@/components/Nav";
 import CopyField from "@/components/CopyField";
 import TagInput from "@/components/TagInput";
 import ItemPicker from "@/components/ItemPicker";
@@ -531,7 +530,6 @@ export default function Home() {
         <h1>☕ flat. 経費管理</h1>
         <p>領収書を撮ってアップ → AIが日付・金額・科目・用途を自動判定（立替・会社カード支出に対応）</p>
       </header>
-      <Nav />
 
       {status === "idle" && !scanning && (
         <>

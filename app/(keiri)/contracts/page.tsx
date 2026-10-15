@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import Nav from "@/components/Nav";
 import { CONTRACT_KINDS } from "@/lib/contracts";
 
 // 契約書。中身より「いつまでに動くか」が大事なので、
@@ -88,7 +87,6 @@ export default function Contracts() {
 
   return (
     <main>
-      <Nav />
       <h1>📜 契約書</h1>
       <p className="lead">
         いま生きている約束をまとめる場所です。大事なのは中身より期限で、

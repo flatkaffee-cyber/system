@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import Nav from "@/components/Nav";
 
 // 借入金の返済予定。元金は費用にならないが現金は出ていくので、
 // 利益とは別に「毎月いくら要るか」をここで見る。
@@ -44,7 +43,6 @@ export default function Loans() {
 
   return (
     <main>
-      <Nav />
       <h1>🏦 借入金の返済</h1>
       <p className="lead">
         元金の返済は経費になりません（借金が減るだけ）。経費になるのは利息だけです。

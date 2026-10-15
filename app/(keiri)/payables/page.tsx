@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Nav from "@/components/Nav";
 import type { PayablesResult } from "@/lib/payables";
 
 export default function Payables() {
@@ -45,7 +44,6 @@ export default function Payables() {
         <h1>💰 払うものリスト</h1>
         <p>freeeに登録済みで、まだ支払っていない立替・未払いの一覧</p>
       </header>
-      <Nav />
 
       {error && <p className="err">{error}</p>}
       {!data && !error && (

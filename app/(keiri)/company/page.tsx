@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import Nav from "@/components/Nav";
 import { COMPANY_DOC_KINDS } from "@/lib/companyDocs";
 
 // 会社書類。定款・登記・印鑑証明など、会社そのものを証明する書類。
@@ -71,7 +70,6 @@ export default function Company() {
 
   return (
     <main>
-      <Nav />
       <h1>🏢 会社書類</h1>
       <p className="lead">
         定款・登記・印鑑証明など、会社そのものを証明する書類の置き場です。

@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { usePathname } from "next/navigation";
+import { isKeiriPath } from "@/lib/keiri/nav";
 
 // 画面の隅に常駐する使い方チャット。どの画面からでも開ける。
 // いまどの画面にいるかを一緒に送るので、「これは何？」のように主語がなくても答えられる。
@@ -59,6 +60,9 @@ export default function HelpWidget() {
       setStreaming(false);
     }
   };
+
+  // 経理の画面は店舗側と分けているので、使い方チャットを出さない
+  if (isKeiriPath(path)) return null;
 
   if (!open) {
     return (

@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Nav from "@/components/Nav";
 import type { KeiriMonthlyResponse } from "@/app/api/keiri/monthly/route";
 import CashTable from "./CashTable";
 import PlTable from "./PlTable";
@@ -46,7 +45,6 @@ export default function KeiriMonthly() {
 
   return (
     <main>
-      <Nav />
       <div className="head">
         <div className="months">
           <button type="button" onClick={() => go(prev, view)} aria-label="前の月">‹</button>

@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { CATEGORIES } from "@/lib/receipt";
-import Nav from "@/components/Nav";
 
 type RLine = { name: string; amount: number; category: string; tags?: string[]; item?: string };
 
@@ -363,7 +362,6 @@ export default function Receipts() {
         <h1>📥 保存済み領収書</h1>
         <p>アップした立替領収書。freeeに登録（借)科目／貸)役員借入金）できます</p>
       </header>
-      <Nav />
 
       {/* 一括登録（先に検証、問題なければ実行） */}
       <div className="card" style={{ padding: 14 }}>

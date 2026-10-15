@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import Nav from "@/components/Nav";
 
 type LineItem = { name: string; amount: number; category: string; tags: string[] };
 type Advance = {
@@ -61,7 +60,6 @@ export default function KariirePage() {
 
   return (
     <div className="wrap">
-      <Nav />
       <header>
         <h1>💴 役員借入金（立替）</h1>
         <p>誰がいくら何を立て替えたか</p>

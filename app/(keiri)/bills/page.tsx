@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { CATEGORIES } from "@/lib/receipt";
-import Nav from "@/components/Nav";
 
 const METHODS = ["口座振替", "振込", "コンビニ", "カード", "その他"] as const;
 type Method = (typeof METHODS)[number];
@@ -264,7 +263,6 @@ export default function Bills() {
         <h1>🔁 定期請求（毎月の固定費）</h1>
         <p>保険・駐車場・家賃など毎月払うものを登録 → 各月ちゃんと払えたか確認できます</p>
       </header>
-      <Nav />
 
       <div className="kind-toggle" style={{ marginBottom: 12 }}>
         <button className={`kind-btn ${tab === "list" ? "active" : ""}`} onClick={() => setTab("list")}>
