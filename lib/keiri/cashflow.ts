@@ -7,6 +7,7 @@ import type {
   CashTotals,
   CashView,
   FreeeDeal,
+  FreeeJournal,
   FreeePayment,
   FreeeTransfer,
   PayTag,
@@ -30,6 +31,13 @@ function dealText(deal: FreeeDeal, names: Map<number, string>): { accounts: stri
   const accounts = [...new Set(deal.details.map((d) => names.get(d.account_item_id) ?? "不明"))];
   const desc = deal.details.map((d) => d.description).find((x) => !!x) ?? "";
   return { accounts, text: desc ? `${accounts.join("・")}／${desc}` : accounts.join("・") };
+}
+
+function journalText(j: FreeeJournal, names: Map<number, string>): string {
+  const debits = j.details.filter((d) => d.entry_side === "debit");
+  const accounts = [...new Set(debits.map((d) => names.get(d.account_item_id) ?? "不明"))];
+  const desc = [...debits, ...j.details].map((d) => d.description).find((x) => !!x) ?? "";
+  return desc ? `${accounts.join("・")}／${desc}` : accounts.join("・");
 }
 
 export function summarize(inflows: CashRow[], outflows: CashRow[]): CashTotals {
@@ -79,6 +87,16 @@ export function buildCash(input: CashInput): CashView {
     return i < 0 ? undefined : unsettled.splice(i, 1)[0];
   };
 
+  // 貸方が普通預金の振替伝票（7〜8月は領収書をこの形で登録していた）。日付と貸方の金額で出金の明細に当てる
+  const isBank = (id: number) => input.bankAccountItemId !== undefined && id === input.bankAccountItemId;
+  const bankCredit = (j: FreeeJournal, amount?: number) =>
+    j.details.some((d) => d.entry_side === "credit" && isBank(d.account_item_id) && (amount === undefined || d.amount === amount));
+  const bankJournals = input.journals.filter((j) => inMonth(j.issue_date, month) && bankCredit(j));
+  const takeBankJournal = (date: string, amount: number) => {
+    const i = bankJournals.findIndex((j) => j.issue_date === date && bankCredit(j, amount));
+    return i < 0 ? undefined : bankJournals.splice(i, 1)[0];
+  };
+
   const inflows: CashRow[] = [];
   const outflows: CashRow[] = [];
 
@@ -97,8 +115,10 @@ export function buildCash(input: CashInput): CashView {
       processed: t.status !== 1,
     };
     const tag: PayTag = isCard(t.description) ? "card" : "bank";
+    // 取引・振替と突き合わせできても、freeeの明細がまだ未処理ならそう出す（画面は detail をそのまま出す）
+    const todo = t.status === 1 ? "（未処理）" : "";
 
-    const pushDeal = (deal: FreeeDeal, suffix = "") => {
+    const pushDeal = (deal: FreeeDeal, suffix = todo) => {
       const s = dealText(deal, names);
       const detail = s.text + suffix;
       const partner = deal.partner_id ? input.partnerNames.get(deal.partner_id) : undefined;
@@ -116,15 +136,15 @@ export function buildCash(input: CashInput): CashView {
     if (tr) {
       if (t.entry_side === "income") {
         if (tr.from_walletable_id === input.squareOtherWalletableId) {
-          inflows.push({ ...base, detail: "売上金（PayPayなど・Square経由）", kind: "sales" });
+          inflows.push({ ...base, detail: "売上金（PayPayなど・Square経由）" + todo, kind: "sales" });
         } else if (tr.from_walletable_id === input.cashWalletableId) {
-          inflows.push({ ...base, detail: "現金の預け入れ", kind: "move" });
+          inflows.push({ ...base, detail: "現金の預け入れ" + todo, kind: "move" });
         } else {
-          inflows.push({ ...base, detail: "口座振替", kind: "other" });
+          inflows.push({ ...base, detail: "口座振替" + todo, kind: "other" });
         }
       } else {
         const toCash = tr.to_walletable_id === input.cashWalletableId;
-        outflows.push({ ...base, detail: toCash ? "現金へ移動" : "口座振替", kind: toCash ? "move" : "expense", tag: "bank" });
+        outflows.push({ ...base, detail: (toCash ? "現金へ移動" : "口座振替") + todo, kind: toCash ? "move" : "expense", tag: "bank" });
       }
       continue;
     }
@@ -132,6 +152,13 @@ export function buildCash(input: CashInput): CashView {
     const ref = takePay();
     if (ref) {
       pushDeal(ref.deal);
+      continue;
+    }
+
+    // 振替伝票で帳簿に載っているので、freeeの明細が未処理のままでも処理済みとして扱う
+    const bj = t.entry_side === "expense" ? takeBankJournal(t.date, t.amount) : undefined;
+    if (bj) {
+      outflows.push({ ...base, detail: journalText(bj, names), kind: "expense", tag, processed: true, journalId: bj.id });
       continue;
     }
 
@@ -146,28 +173,33 @@ export function buildCash(input: CashInput): CashView {
     else outflows.push({ ...base, detail, kind: "expense", tag });
   }
 
-  // 現金の動き: Squareの現金売上は日ごとに合計、現金で払った支出の取引はそのまま
+  // 現金の動き: Square連携の売上取引（売上高の明細がある取引）の現金分は日ごとに合計。
+  // それ以外の現金の入金と、現金で払った支出の取引はそのまま1行ずつ
   const cashSales = new Map<string, number>();
   for (const deal of input.deals) {
-    for (const p of deal.payments ?? []) {
+    const squareSale = deal.type === "income" && deal.details.some((d) => names.get(d.account_item_id) === "売上高");
+    for (const [pi, p] of (deal.payments ?? []).entries()) {
       if (p.from_walletable_id !== input.cashWalletableId || !inMonth(p.date, month)) continue;
-      if (deal.type === "income") {
+      if (squareSale) {
         cashSales.set(p.date, (cashSales.get(p.date) ?? 0) + p.amount);
+        continue;
+      }
+      const s = dealText(deal, names);
+      const partner = deal.partner_id ? input.partnerNames.get(deal.partner_id) : undefined;
+      const row = {
+        key: `d${deal.id}-p${pi}`,
+        date: p.date,
+        amount: p.amount,
+        title: partner ?? s.text,
+        detail: s.text,
+        processed: true,
+        partner,
+        dealId: deal.id,
+      };
+      if (deal.type === "income") {
+        inflows.push({ ...row, kind: s.accounts.some((a) => SALES_ACCOUNTS.includes(a)) ? "sales" : "other" });
       } else {
-        const s = dealText(deal, names);
-        const partner = deal.partner_id ? input.partnerNames.get(deal.partner_id) : undefined;
-        outflows.push({
-          key: `d${deal.id}-${p.date}-${p.amount}`,
-          date: p.date,
-          amount: p.amount,
-          title: partner ?? s.text,
-          detail: s.text,
-          kind: "expense",
-          tag: "cash",
-          processed: true,
-          partner,
-          dealId: deal.id,
-        });
+        outflows.push({ ...row, kind: "expense", tag: "cash" });
       }
     }
   }
@@ -185,7 +217,6 @@ export function buildCash(input: CashInput): CashView {
 
   // 振替伝票: 銀行が出てくる伝票は明細の側で数えるので除く。
   // 借方が現金 → 現金が入ってくる（貸方が売上高なら売上金）。貸方が現金 → 現金払い、役員借入金 → 立替
-  const isBank = (id: number) => input.bankAccountItemId !== undefined && id === input.bankAccountItemId;
   for (const j of input.journals) {
     if (!inMonth(j.issue_date, month)) continue;
     if (j.details.some((d) => isBank(d.account_item_id))) continue;
@@ -211,13 +242,13 @@ export function buildCash(input: CashInput): CashView {
     }
 
     const accounts = [...new Set(debits.map((d) => nameOf(d.account_item_id)))];
-    for (const c of credits) {
+    for (const [ci, c] of credits.entries()) {
       const credit = nameOf(c.account_item_id);
       const tag: PayTag | undefined = credit === "現金" ? "cash" : credit === "役員借入金" ? "tatekae" : undefined;
       if (!tag) continue;
       const desc = c.description || debits.map((d) => d.description).find((x) => !!x) || "";
       outflows.push({
-        key: `j${j.id}-${c.amount}`,
+        key: `j${j.id}-c${ci}`,
         date: j.issue_date,
         amount: c.amount,
         title: desc || accounts.join("・"),

@@ -250,3 +250,99 @@ test("同じ日のカード払いとATM出金が同じ金額でも取り違え�
   assert.equal(v.outflows.find((r) => r.walletTxnId === 30)?.dealId, 91);
   assert.equal(v.outflows.find((r) => r.walletTxnId === 31)?.kind, "move");
 });
+
+test("未処理の明細は、どの行でも詳細に「未処理」を1回だけ出す（画面では足さない）", () => {
+  const v = buildCash(base({
+    walletTxns: [
+      txn(40, "2026-10-13", 17057, "Visaデビット利用 AMAZON CO JP 承認番号：1", "expense", 1),
+      txn(41, "2026-10-14", 3000, "振込 ニホンセ-フテイ-", "expense", 1),
+      txn(42, "2026-10-15", 9000, "ATM セブン銀行", "expense", 1),
+    ],
+    deals: [expenseDeal(92, "2026-10-14", "2026-10-14", 3000, 6, "棚")],
+    transfers: [{ id: 10, date: "2026-10-15", amount: 9000, from_walletable_id: BANK, to_walletable_id: CASH }],
+  }));
+  for (const id of [40, 41, 42]) {
+    const row = v.outflows.find((r) => r.walletTxnId === id);
+    assert.equal(row?.processed, false);
+    assert.equal(row?.detail.match(/未処理/g)?.length, 1, `明細${id}: ${row?.detail}`);
+  }
+});
+
+test("貸方が普通預金の振替伝票は、日付と金額で口座明細に紐づける", () => {
+  // 7〜8月は領収書を「貸方＝普通預金」の振替伝票で登録していた。freeeの明細は未処理のまま残っている
+  const v = buildCash(base({
+    month: { from: "2026-08-01", to: "2026-08-31" },
+    walletTxns: [txn(50, "2026-08-28", 220, "Visaデビット利用 平和堂 承認番号：409288", "expense", 1)],
+    journals: [{ id: 3743184556, issue_date: "2026-08-28", details: [
+      { account_item_id: 6, amount: 220, description: "シンプルストレージ 2コ×単100", entry_side: "debit" },
+      { account_item_id: 9, amount: 220, description: "シンプルストレージ 2コ×単100", entry_side: "credit" },
+    ] }],
+  }));
+  assert.equal(v.outflows.length, 1);
+  const row = v.outflows[0];
+  assert.equal(row.walletTxnId, 50);
+  assert.equal(row.journalId, 3743184556);
+  assert.equal(row.tag, "card");
+  assert.equal(row.processed, true);
+  assert.equal(row.detail, "消耗品費／シンプルストレージ 2コ×単100");
+  assert.equal(v.totals.unprocessed, 0);
+});
+
+test("普通預金の振替伝票は、金額が違えば紐づけない", () => {
+  const v = buildCash(base({
+    month: { from: "2026-08-01", to: "2026-08-31" },
+    walletTxns: [txn(51, "2026-08-10", 1686, "Visaデビット利用 業務スーパー 承認番号：1", "expense", 1)],
+    journals: [{ id: 60, issue_date: "2026-08-10", details: [
+      { account_item_id: 6, amount: 1687, description: "ウェットティッシュ", entry_side: "debit" },
+      { account_item_id: 9, amount: 1687, entry_side: "credit" },
+    ] }],
+  }));
+  assert.equal(v.outflows.length, 1);
+  assert.equal(v.outflows[0].journalId, undefined);
+  assert.equal(v.outflows[0].processed, false);
+});
+
+test("同じ金額の行が1つの伝票・取引に2つあっても、行のkeyは重ならない", () => {
+  const v = buildCash(base({
+    journals: [{ id: 43, issue_date: "2026-10-11", details: [
+      { account_item_id: 6, amount: 1000, description: "紙皿", entry_side: "debit" },
+      { account_item_id: 7, amount: 500, description: "平和堂", entry_side: "credit" },
+      { account_item_id: 7, amount: 500, description: "平和堂", entry_side: "credit" },
+    ] }],
+    deals: [{
+      id: 51, issue_date: "2026-10-05", type: "expense",
+      details: [{ account_item_id: 6, amount: 2400, description: "氷", entry_side: "debit" }],
+      payments: [
+        { date: "2026-10-05", from_walletable_type: "wallet", from_walletable_id: CASH, amount: 1200 },
+        { date: "2026-10-05", from_walletable_type: "wallet", from_walletable_id: CASH, amount: 1200 },
+      ],
+    }],
+  }));
+  assert.equal(v.outflows.length, 4);
+  assert.equal(new Set(v.outflows.map((r) => r.key)).size, 4);
+});
+
+test("現金売上（レジ）は売上高の明細がある取引だけ。それ以外の現金の入金は取引ごとに出す", () => {
+  const v = buildCash(base({
+    deals: [
+      {
+        id: 33, issue_date: "2026-10-03", type: "income",
+        details: [{ account_item_id: 1, amount: 3000, entry_side: "credit" }],
+        payments: [{ date: "2026-10-03", from_walletable_type: "wallet", from_walletable_id: CASH, amount: 3000 }],
+      },
+      {
+        id: 34, issue_date: "2026-10-03", type: "income", partner_id: 50,
+        details: [{ account_item_id: 5, amount: 10000, description: "返済（現金）", entry_side: "credit" }],
+        payments: [{ date: "2026-10-03", from_walletable_type: "wallet", from_walletable_id: CASH, amount: 10000 }],
+      },
+    ],
+  }));
+  const reji = v.inflows.filter((r) => r.title === "現金売上（レジ）");
+  assert.deepEqual(reji.map((r) => r.amount), [3000]);
+  const other = v.inflows.find((r) => r.dealId === 34);
+  assert.equal(other?.amount, 10000);
+  assert.equal(other?.kind, "other");
+  assert.equal(other?.partner, "町田創");
+  assert.match(other?.detail ?? "", /役員貸付金/);
+  assert.equal(v.totals.in, 13000);
+});

@@ -46,7 +46,7 @@ function Rows({ rows, out }: { rows: CashRow[]; out: boolean }) {
             <span className="amt">{yen(r.amount)}</span>
           </button>
           <div className="sub">
-            <span className="detail">{r.detail}{!r.processed && "（未処理）"}</span>
+            <span className="detail">{r.detail}</span>
             {out && (
               <ReceiptCell
                 row={r}
