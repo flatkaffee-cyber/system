@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { CashRow, CashView } from "@/lib/keiri/types";
 import ReceiptPreview from "./ReceiptPreview";
 import { md, TAG_LABEL, yen } from "./format";
-import { inflowLabel } from "@/lib/keiri/nav";
+import { freeeLinks, inflowLabel } from "@/lib/keiri/nav";
 
 function ReceiptCell({ row, open, onToggle }: { row: CashRow; open: boolean; onToggle: () => void }) {
   switch (row.receiptStatus) {
@@ -59,13 +59,11 @@ function Rows({ rows, out }: { rows: CashRow[]; out: boolean }) {
           {openKey === r.key && (
             <div className="more">
               <div>明細: {r.title}</div>
-              {r.dealId && <div>freee 取引ID: {r.dealId}</div>}
-              {r.journalId && <div>freee 振替伝票ID: {r.journalId}</div>}
-              {r.walletTxnId && (
-                <a target="_blank" rel="noreferrer" href={`https://secure.freee.co.jp/wallet_txns/stream/${r.walletTxnId}`}>
-                  freeeで明細を開く
+              {freeeLinks(r).map((l) => (
+                <a key={l.href} target="_blank" rel="noreferrer" href={l.href}>
+                  {l.label}
                 </a>
-              )}
+              ))}
             </div>
           )}
         </li>

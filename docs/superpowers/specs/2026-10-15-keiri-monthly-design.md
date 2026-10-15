@@ -97,7 +97,9 @@
 - 銀行（振込・引き落とし）の行は領収書を求めない（`receiptStatus: "n/a"`。領収書の欄は空）。領収書が付いていればそれを出す
 - 摘要に `Amazon 注文xxx-xxxxxxx-xxxxxxx` があれば、Amazon の注文ページへのリンクを出す
 - 領収書が無いカード・現金・立替の行のうち、「レシートなし経費」（`pending-expenses`）に同じ日付・金額で、タグ `詳細未登録` が付いて載っているもの（`status` が `skipped` のものは除く）は「⚠領収書なし（記録済み）」と出す。それ以外は「⚠領収書なし」と出す
-- 行を押すと、科目・摘要・取引ID・freeeで開くリンクが開く
+- 行を押すと、明細の文字と、freee で開くリンクが開く（2026-10-15 に実際に開けることを確かめたURL）
+  - 明細: `https://secure.freee.co.jp/wallet_txns/stream/{明細ID}`
+  - 取引・振替伝票: `https://secure.freee.co.jp/reports/journals?deal_id={取引ID または 振替伝票ID}`（仕訳帳をその1件で絞り込んだ画面。`/deals/{id}` や `/manual_journals/{id}` は「ページが見つかりませんでした」になる）
 
 明細と取引の紐づけ:
 

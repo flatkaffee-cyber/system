@@ -1,4 +1,6 @@
 // 経理画面のナビに出すページ。components/KeiriNav.tsx と components/Nav.tsx が使う（JSXを含まないのでテストできる）。
+import type { CashRow } from "./types";
+
 export const KEIRI_TABS = [
   { href: "/keiri", label: "📅 月次" },
   { href: "/ryoshusho", label: "🧾 領収書" },
@@ -25,4 +27,18 @@ export function isKeiriPath(path: string): boolean {
 
 export function inflowLabel(kind: "sales" | "other" | "expense" | "move"): string {
   return kind === "sales" ? "売上金" : kind === "move" ? "移動" : "その他";
+}
+
+const FREEE = "https://secure.freee.co.jp";
+
+/**
+ * 行から開ける freee の画面。明細は自動で経理の明細画面。取引・振替伝票は個別の画面が無いので、
+ * 仕訳帳を deal_id（取引ID・振替伝票IDのどちらでも効く）で絞り込んで開く。
+ */
+export function freeeLinks(row: Pick<CashRow, "walletTxnId" | "dealId" | "journalId">): { label: string; href: string }[] {
+  const links: { label: string; href: string }[] = [];
+  if (row.walletTxnId) links.push({ label: "freeeで明細を開く", href: `${FREEE}/wallet_txns/stream/${row.walletTxnId}` });
+  if (row.dealId) links.push({ label: "freeeで取引を開く", href: `${FREEE}/reports/journals?deal_id=${row.dealId}` });
+  if (row.journalId) links.push({ label: "freeeで振替伝票を開く", href: `${FREEE}/reports/journals?deal_id=${row.journalId}` });
+  return links;
 }
