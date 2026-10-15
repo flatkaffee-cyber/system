@@ -5,16 +5,10 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { keiriMenu, keiriPageLabel } from "@/lib/keiri/nav";
 
-// 経理のページの外枠。PC は左にサイドバーを固定、スマホは上の帯の ☰ でメニューを開く。
-// 店舗側のナビ（components/Nav.tsx）とは別物。app/(keiri)/layout.tsx が使う。
-export default function KeiriShell({ children }: { children: React.ReactNode }) {
-  const path = usePathname();
-  const [open, setOpen] = useState(false);
-
-  // ページを移ったらスマホのメニューを閉じる
-  useEffect(() => setOpen(false), [path]);
-
-  const menu = (
+// 経理のメニュー（サイドバーとスマホのメニューの中身）。
+// JSX を変数に入れると styled-jsx のスコープが付かずスタイルが当たらないので、自分のスタイルを持つ部品にする。
+function KeiriMenu({ path }: { path: string }) {
+  return (
     <nav className="menu" aria-label="経理のメニュー">
       {keiriMenu().map((g) => (
         <div key={g.key} className="grp">
@@ -32,14 +26,41 @@ export default function KeiriShell({ children }: { children: React.ReactNode }) 
         </div>
       ))}
       <Link href="/table" className="item back">← 店舗へ</Link>
+      <style jsx>{`
+        .menu { display: flex; flex-direction: column; gap: 14px; }
+        .grp { display: flex; flex-direction: column; gap: 2px; }
+        .glabel { font-size: 11px; letter-spacing: 0.08em; color: rgba(255, 255, 255, 0.5); padding: 0 10px 2px; }
+        .menu :global(.item) {
+          display: block;
+          padding: 8px 10px;
+          border-radius: 8px;
+          color: rgba(255, 255, 255, 0.85);
+          text-decoration: none;
+          font-size: 14px;
+        }
+        .menu :global(.item:hover) { background: rgba(255, 255, 255, 0.08); color: #fff; }
+        .menu :global(.item.on) { background: rgba(255, 255, 255, 0.16); color: #fff; font-weight: 700; }
+        .menu :global(.item:focus-visible) { outline: 2px solid #fff; outline-offset: -2px; }
+        .menu :global(.item.back) { margin-top: 6px; color: rgba(255, 255, 255, 0.6); }
+      `}</style>
     </nav>
   );
+}
+
+// 経理のページの外枠。PC は左にサイドバーを固定、スマホは上の帯の ☰ でメニューを開く。
+// 店舗側のナビ（components/Nav.tsx）とは別物。app/(keiri)/layout.tsx が使う。
+export default function KeiriShell({ children }: { children: React.ReactNode }) {
+  const path = usePathname();
+  const [open, setOpen] = useState(false);
+
+  // ページを移ったらスマホのメニューを閉じる
+  useEffect(() => setOpen(false), [path]);
 
   return (
     <div className="shell">
       <aside className="side">
         <div className="brand">flat. 経理</div>
-        {menu}
+        <KeiriMenu path={path} />
       </aside>
 
       <header className="topbar">
@@ -59,7 +80,7 @@ export default function KeiriShell({ children }: { children: React.ReactNode }) 
       {open && (
         <>
           <button type="button" className="scrim" aria-label="メニューを閉じる" onClick={() => setOpen(false)} />
-          <div className="drawer" id="keiri-drawer">{menu}</div>
+          <div className="drawer" id="keiri-drawer"><KeiriMenu path={path} /></div>
         </>
       )}
 
@@ -110,22 +131,6 @@ export default function KeiriShell({ children }: { children: React.ReactNode }) 
           background: var(--ink);
           padding: 8px 12px 16px;
         }
-        .menu { display: flex; flex-direction: column; gap: 14px; }
-        .grp { display: flex; flex-direction: column; gap: 2px; }
-        .glabel { font-size: 11px; letter-spacing: 0.08em; color: rgba(255, 255, 255, 0.5); padding: 0 10px 2px; }
-        .menu :global(.item) {
-          display: block;
-          padding: 8px 10px;
-          border-radius: 8px;
-          color: rgba(255, 255, 255, 0.85);
-          text-decoration: none;
-          font-size: 14px;
-        }
-        .menu :global(.item:hover) { background: rgba(255, 255, 255, 0.08); color: #fff; }
-        .menu :global(.item.on) { background: rgba(255, 255, 255, 0.16); color: #fff; font-weight: 700; }
-        .menu :global(.item:focus-visible) { outline: 2px solid #fff; outline-offset: -2px; }
-        .menu :global(.item.back) { margin-top: 6px; color: rgba(255, 255, 255, 0.6); }
-
         @media (min-width: 900px) {
           .side {
             display: block;

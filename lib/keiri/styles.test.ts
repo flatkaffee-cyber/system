@@ -65,3 +65,15 @@ test("経理のサイドバーとスマホの帯は、経理のページの全�
   assert.ok(overlays.length >= 2, "ビューアの z-index が見つからない");
   assert.ok(Math.max(...shell) < Math.min(...overlays), `サイドバー・帯 ${Math.max(...shell)} / 全画面表示 ${Math.min(...overlays)}`);
 });
+
+test("styled-jsx を使う部品で、JSX を変数に入れて使わない（変数の中の要素にはスコープのクラスが付かず、見た目が当たらない）", () => {
+  // 2026-10-15 本番で、KeiriShell の const menu = (<nav className="menu">…) にスタイルが当たらず、サイドバーが崩れた
+  const files = readdirSync(join(ROOT, "components/keiri"))
+    .filter((f) => f.endsWith(".tsx"))
+    .map((f) => `components/keiri/${f}`)
+    .filter((f) => read(f).includes("<style jsx>"));
+  const found = files.flatMap((f) =>
+    [...read(f).matchAll(/const (\w+) = \(\s*\n\s*<[a-zA-Z]/g)].map((m) => `${f}: const ${m[1]}`),
+  );
+  assert.deepEqual(found, []);
+});
