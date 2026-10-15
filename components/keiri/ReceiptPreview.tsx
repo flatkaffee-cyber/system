@@ -21,7 +21,7 @@ export default function ReceiptPreview({ id, title }: { id: string; title: strin
   }, [id]);
 
   return (
-    <div className="preview">
+    <div className="rp-box">
       {error && <p className="hint">{error}</p>}
       {!error && !image && <p className="hint">領収書を読み込んでいます…</p>}
       {image &&
@@ -32,7 +32,7 @@ export default function ReceiptPreview({ id, title }: { id: string; title: strin
           <img src={image} alt={`領収書: ${title}`} />
         ))}
       <style jsx>{`
-        .preview { padding: 8px 0 4px 52px; }
+        .rp-box { padding: 8px 0 4px 52px; }
         img { display: block; max-width: min(420px, 100%); height: auto; border-radius: 10px; border: 1px solid var(--line); }
         iframe { width: 100%; height: 60vh; border: 1px solid var(--line); border-radius: 10px; }
       `}</style>

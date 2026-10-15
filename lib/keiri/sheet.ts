@@ -67,6 +67,11 @@ export function buildSheet(
   return { sections, totals: { in: inSum, out: outSum, net: inSum - outSum } };
 }
 
+/** 行のキー操作で開閉するか。行そのものにフォーカスがあるときの Enter と Space だけ（中のボタンやリンクの Enter は、そちらに任せる） */
+export function rowKeyToggles(key: string, fromRow: boolean): boolean {
+  return fromRow && (key === "Enter" || key === " ");
+}
+
 /** 月のタブの最初の月（会計年度の初め・会社設立の月） */
 export const FIRST_MONTH = "2026-06";
 

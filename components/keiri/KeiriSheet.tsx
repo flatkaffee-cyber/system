@@ -4,6 +4,7 @@ import { Fragment, useState } from "react";
 import type { Sheet, SheetRow } from "@/lib/keiri/sheet";
 import { MARK_COLORS, type RowMarks } from "@/lib/keiri/notes";
 import { freeeLinks } from "@/lib/keiri/nav";
+import { rowKeyToggles } from "@/lib/keiri/sheet";
 import ReceiptPreview from "./ReceiptPreview";
 import { md, yen } from "./format";
 
@@ -14,14 +15,14 @@ function ReceiptCell({ row, onOpen }: { row: SheetRow; onOpen: () => void }) {
   switch (row.receiptStatus) {
     case "attached":
       return (
-        <button type="button" className="rc ok" onClick={(e) => { e.stopPropagation(); onOpen(); }} aria-label="領収書を開く">
+        <button type="button" className="rcpt ok" onClick={(e) => { e.stopPropagation(); onOpen(); }} aria-label="領収書を開く">
           🧾
         </button>
       );
     case "amazon":
       return (
         <a
-          className="rc ok"
+          className="rcpt ok"
           target="_blank"
           rel="noreferrer"
           href={`https://www.amazon.co.jp/gp/your-account/order-details?orderID=${row.amazonOrderId}`}
@@ -31,9 +32,9 @@ function ReceiptCell({ row, onOpen }: { row: SheetRow; onOpen: () => void }) {
         </a>
       );
     case "missing-recorded":
-      return <span className="rc warn">⚠ なし（記録済み）</span>;
+      return <span className="rcpt warn">⚠ なし（記録済み）</span>;
     case "missing":
-      return <span className="rc bad">⚠ なし</span>;
+      return <span className="rcpt bad">⚠ なし</span>;
     default:
       return null;
   }
@@ -77,7 +78,7 @@ export default function KeiriSheet({ sheet, marks, onOpenMark }: Props) {
                   <span className="bar" aria-hidden="true" />
                   {sec.label}
                   <span className="count">{sec.rows.length}件</span>
-                  {sec.key === "move" && <span className="note">口座⇄現金の移動。合計に入れない</span>}
+                  {sec.key === "move" && <span className="sec-note">口座⇄現金の移動。合計に入れない</span>}
                 </th>
                 <td className="c-amt">{sec.inSum ? yen(sec.inSum) : ""}</td>
                 <td className="c-amt">{sec.outSum ? yen(sec.outSum) : ""}</td>
@@ -86,7 +87,7 @@ export default function KeiriSheet({ sheet, marks, onOpenMark }: Props) {
               {sec.rows.map((r) => (
                 <Fragment key={r.key}>
                   <tr
-                    className={`row ${r.kind === "move" ? "move" : ""} ${r.status !== "done" ? "todo" : ""}`}
+                    className={`entry ${r.kind === "move" ? "move" : ""} ${r.status !== "done" ? "todo" : ""}`}
                     style={marks[r.key]?.color ? { background: MARK_BG[marks[r.key].color ?? ""] } : undefined}
                     onClick={() => toggle(r.key)}
                     onContextMenu={(e) => {
@@ -94,7 +95,7 @@ export default function KeiriSheet({ sheet, marks, onOpenMark }: Props) {
                       onOpenMark(r, { x: e.clientX, y: e.clientY });
                     }}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
+                      if (rowKeyToggles(e.key, e.target === e.currentTarget)) {
                         e.preventDefault();
                         toggle(r.key);
                       }
@@ -109,7 +110,14 @@ export default function KeiriSheet({ sheet, marks, onOpenMark }: Props) {
                     <td className="c-amt">{r.side === "in" ? yen(r.amount) : ""}</td>
                     <td className="c-amt">{r.side === "out" ? yen(r.amount) : ""}</td>
                     <td className="c-rc"><ReceiptCell row={r} onOpen={() => setOpenKey(r.key)} /></td>
-                    <td className={`c-st st-${r.status}`}>{STATUS_LABEL[r.status]}</td>
+                    <td className={`c-st st-${r.status}`}>
+                      {STATUS_LABEL[r.status]}
+                      {freeeLinks(r).map((l) => (
+                        <a key={l.href} className="flink" href={l.href} target="_blank" rel="noreferrer" title={l.label} onClick={(e) => e.stopPropagation()}>
+                          {l.short}↗
+                        </a>
+                      ))}
+                    </td>
                     <td className="c-memo">
                       <button
                         type="button"
@@ -174,7 +182,10 @@ export default function KeiriSheet({ sheet, marks, onOpenMark }: Props) {
         .c-date { width: 52px; color: var(--muted); font-variant-numeric: tabular-nums; }
         .c-who { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
         .c-desc { white-space: normal; min-width: 200px; }
-        .c-st { width: 64px; }
+        .c-st { min-width: 64px; }
+        .flink { margin-left: 6px; font-size: 11px; font-weight: 400; color: var(--accent); text-decoration: none; }
+        .flink:hover { text-decoration: underline; }
+        .flink:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         .c-memo { min-width: 120px; max-width: 260px; white-space: normal; }
         .memo-btn { border: 0; background: none; padding: 0; font: inherit; font-size: 12px; text-align: left; cursor: pointer; color: var(--muted); }
         .memo-btn.has { color: var(--ink); }
@@ -183,7 +194,7 @@ export default function KeiriSheet({ sheet, marks, onOpenMark }: Props) {
         .sec th, .sec td { font-weight: 700; border-bottom-color: transparent; }
         .sec .bar { display: inline-block; width: 4px; height: 14px; border-radius: 2px; margin-right: 8px; vertical-align: -2px; }
         .sec .count { margin-left: 8px; font-weight: 400; font-size: 12px; color: var(--muted); }
-        .sec .note { margin-left: 8px; font-weight: 400; font-size: 11px; color: var(--muted); }
+        .sec .sec-note { margin-left: 8px; font-weight: 400; font-size: 11px; color: var(--muted); }
         .sec-in th, .sec-in td { background: #eaf4ea; } .sec-in .bar { background: #2e7d32; }
         .sec-card th, .sec-card td { background: var(--accent-weak); } .sec-card .bar { background: var(--accent); }
         .sec-bank th, .sec-bank td { background: #e8eef7; } .sec-bank .bar { background: #2f5d9b; }
@@ -191,20 +202,21 @@ export default function KeiriSheet({ sheet, marks, onOpenMark }: Props) {
         .sec-tatekae th, .sec-tatekae td { background: #f6e8f3; } .sec-tatekae .bar { background: #8e3a7d; }
         .sec-move th, .sec-move td { background: #efede8; } .sec-move .bar { background: #7a756c; }
 
-        .row { cursor: pointer; }
-        .row:hover td { background: #faf8f4; }
-        .row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-        .row.move td { color: var(--muted); }
-        .row.todo .c-who { color: #c62828; }
+        .entry { cursor: pointer; }
+        .entry:hover td { background: #faf8f4; }
+        .entry:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+        .entry.move td { color: var(--muted); }
+        .entry.todo .c-who { color: #c62828; }
         .st-done { color: var(--ok, #2e7d32); }
         .st-todo { color: #c62828; font-weight: 700; }
         .st-waiting { color: #8a5300; font-weight: 700; }
 
-        .rc { border: 0; background: none; padding: 0; font: inherit; cursor: pointer; text-decoration: none; }
-        .rc.ok { color: var(--accent); }
-        .rc.warn { color: #8a5300; cursor: default; }
-        .rc.bad { color: #c62828; cursor: default; }
-        .rc:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+        /* 領収書の列は別の関数（ReceiptCell）で描くので、styled-jsx のスコープが付かない。表の下だけに :global で当てる */
+        .sheet :global(.rcpt) { border: 0; border-radius: 0; background: none; padding: 0; margin: 0; font: inherit; font-weight: 400; cursor: pointer; text-decoration: none; }
+        .sheet :global(.rcpt.ok) { color: var(--accent); }
+        .sheet :global(.rcpt.warn) { color: #8a5300; cursor: default; }
+        .sheet :global(.rcpt.bad) { color: #c62828; cursor: default; }
+        .sheet :global(.rcpt:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
 
         .detail td { background: #fbfaf7; white-space: normal; font-size: 12px; color: var(--muted); }
         .links { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 4px; }
@@ -221,10 +233,10 @@ export default function KeiriSheet({ sheet, marks, onOpenMark }: Props) {
           .sheet { min-width: 0; font-size: 10px; }
           thead th { position: static; }
           .detail { display: none; }
-          .row:hover td { background: none; }
+          .entry:hover td { background: none; }
           tr { break-inside: avoid; }
           .sec th, .sec td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .row { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .entry { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .memo-btn:not(.has) { visibility: hidden; }
         }
       `}</style>

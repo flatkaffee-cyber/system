@@ -31,11 +31,11 @@ test("スマホの帯に出すページ名は絵文字を除く", () => {
 
 test("行から開ける freee の画面（2026-10-15 に開けることを確かめたURL）", () => {
   assert.deepEqual(freeeLinks({ walletTxnId: 2429972226, journalId: 3743184556 }), [
-    { label: "freeeで明細を開く", href: "https://secure.freee.co.jp/wallet_txns/stream/2429972226" },
-    { label: "freeeで振替伝票を開く", href: "https://secure.freee.co.jp/reports/journals?deal_id=3743184556" },
+    { label: "freeeで明細を開く", short: "明細", href: "https://secure.freee.co.jp/wallet_txns/stream/2429972226" },
+    { label: "freeeで振替伝票を開く", short: "伝票", href: "https://secure.freee.co.jp/reports/journals?deal_id=3743184556" },
   ]);
   assert.deepEqual(freeeLinks({ dealId: 3841125832 }), [
-    { label: "freeeで取引を開く", href: "https://secure.freee.co.jp/reports/journals?deal_id=3841125832" },
+    { label: "freeeで取引を開く", short: "取引", href: "https://secure.freee.co.jp/reports/journals?deal_id=3841125832" },
   ]);
   assert.deepEqual(freeeLinks({}), []);
 });

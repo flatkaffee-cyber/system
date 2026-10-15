@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildSheet, monthTabs, NO_FILTER } from "./sheet.ts";
+import { buildSheet, monthTabs, NO_FILTER, rowKeyToggles } from "./sheet.ts";
 import type { CashRow } from "./types.ts";
 
 const row = (over: Partial<CashRow>): CashRow => ({
@@ -97,4 +97,12 @@ test("月のタブは2026年6月から今月まで、新しい月が先。年を
   assert.deepEqual(next.slice(0, 2), ["2027-01", "2026-12"]);
   assert.equal(next.length, 8);
   assert.deepEqual(monthTabs("2026-06"), ["2026-06"]);
+});
+
+test("行のキー操作で開閉するのは、行そのものにフォーカスがあるときの Enter と Space だけ（中のボタンやリンクの Enter は奪わない）", () => {
+  assert.equal(rowKeyToggles("Enter", true), true);
+  assert.equal(rowKeyToggles(" ", true), true);
+  assert.equal(rowKeyToggles("Enter", false), false);
+  assert.equal(rowKeyToggles(" ", false), false);
+  assert.equal(rowKeyToggles("a", true), false);
 });

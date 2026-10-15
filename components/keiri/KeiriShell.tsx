@@ -70,7 +70,7 @@ export default function KeiriShell({ children }: { children: React.ReactNode }) 
         .topbar {
           position: sticky;
           top: 0;
-          z-index: 930;
+          z-index: 40; /* 経理のページのビューア（50）より下。メニュー・暗幕・行のメニューは上 */
           display: flex;
           align-items: center;
           gap: 10px;
@@ -138,7 +138,7 @@ export default function KeiriShell({ children }: { children: React.ReactNode }) 
             background: var(--ink);
             color: #fff;
             padding: 18px 12px;
-            z-index: 930;
+            z-index: 40; /* 経理のページのビューア（50）より下。メニュー・暗幕・行のメニューは上 */
           }
           .side .brand { display: block; font-size: 18px; padding: 0 10px 16px; }
           .topbar, .drawer, .scrim { display: none; }
