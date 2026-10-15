@@ -2,11 +2,13 @@
 
 import { Fragment, useState } from "react";
 import type { Sheet, SheetRow } from "@/lib/keiri/sheet";
+import { MARK_COLORS, type RowMarks } from "@/lib/keiri/notes";
 import { freeeLinks } from "@/lib/keiri/nav";
 import ReceiptPreview from "./ReceiptPreview";
 import { md, yen } from "./format";
 
 const STATUS_LABEL = { done: "✓", todo: "未処理", waiting: "消込待ち" } as const;
+const MARK_BG: Record<string, string> = Object.fromEntries(MARK_COLORS.map((c) => [c.key, c.bg]));
 
 function ReceiptCell({ row, onOpen }: { row: SheetRow; onOpen: () => void }) {
   switch (row.receiptStatus) {
@@ -37,9 +39,15 @@ function ReceiptCell({ row, onOpen }: { row: SheetRow; onOpen: () => void }) {
   }
 }
 
+type Props = {
+  sheet: Sheet;
+  marks: RowMarks;
+  onOpenMark: (row: SheetRow, at: { x: number; y: number }) => void;
+};
+
 // 月次の「経理で見る」の表。1行＝1件の入出金。区切りごとに小計、最後に合計（移動は除く）。
-// 行を押すと、すぐ下に明細の原文・freeeのリンク・領収書の画像を開く。
-export default function KeiriSheet({ sheet }: { sheet: Sheet }) {
+// 行を押すと、すぐ下に明細の原文・freeeのリンク・領収書の画像を開く。右クリックかメモのセルで、色とメモを付ける。
+export default function KeiriSheet({ sheet, marks, onOpenMark }: Props) {
   const [openKey, setOpenKey] = useState<string | null>(null);
   const toggle = (key: string) => setOpenKey(openKey === key ? null : key);
 
@@ -58,6 +66,7 @@ export default function KeiriSheet({ sheet }: { sheet: Sheet }) {
             <th className="c-amt">出金</th>
             <th className="c-rc">領収書</th>
             <th className="c-st">freee</th>
+            <th className="c-memo">メモ</th>
           </tr>
         </thead>
         <tbody>
@@ -72,13 +81,18 @@ export default function KeiriSheet({ sheet }: { sheet: Sheet }) {
                 </th>
                 <td className="c-amt">{sec.inSum ? yen(sec.inSum) : ""}</td>
                 <td className="c-amt">{sec.outSum ? yen(sec.outSum) : ""}</td>
-                <td colSpan={2} />
+                <td colSpan={3} />
               </tr>
               {sec.rows.map((r) => (
                 <Fragment key={r.key}>
                   <tr
                     className={`row ${r.kind === "move" ? "move" : ""} ${r.status !== "done" ? "todo" : ""}`}
+                    style={marks[r.key]?.color ? { background: MARK_BG[marks[r.key].color ?? ""] } : undefined}
                     onClick={() => toggle(r.key)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      onOpenMark(r, { x: e.clientX, y: e.clientY });
+                    }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
@@ -96,10 +110,24 @@ export default function KeiriSheet({ sheet }: { sheet: Sheet }) {
                     <td className="c-amt">{r.side === "out" ? yen(r.amount) : ""}</td>
                     <td className="c-rc"><ReceiptCell row={r} onOpen={() => setOpenKey(r.key)} /></td>
                     <td className={`c-st st-${r.status}`}>{STATUS_LABEL[r.status]}</td>
+                    <td className="c-memo">
+                      <button
+                        type="button"
+                        className={`memo-btn ${marks[r.key]?.note ? "has" : ""}`}
+                        aria-label={`${r.partner ?? r.title} の色とメモ`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          onOpenMark(r, { x: rect.left, y: rect.bottom + 4 });
+                        }}
+                      >
+                        {marks[r.key]?.note || "＋"}
+                      </button>
+                    </td>
                   </tr>
                   {openKey === r.key && (
                     <tr className="detail">
-                      <td colSpan={8}>
+                      <td colSpan={9}>
                         <div>元の文字: {r.title}</div>
                         <div className="links">
                           {freeeLinks(r).map((l) => (
@@ -122,7 +150,7 @@ export default function KeiriSheet({ sheet }: { sheet: Sheet }) {
             </th>
             <td className="c-amt">{yen(sheet.totals.in)}</td>
             <td className="c-amt">{yen(sheet.totals.out)}</td>
-            <td colSpan={2} />
+            <td colSpan={3} />
           </tr>
         </tfoot>
       </table>
@@ -147,6 +175,10 @@ export default function KeiriSheet({ sheet }: { sheet: Sheet }) {
         .c-who { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
         .c-desc { white-space: normal; min-width: 200px; }
         .c-st { width: 64px; }
+        .c-memo { min-width: 120px; max-width: 260px; white-space: normal; }
+        .memo-btn { border: 0; background: none; padding: 0; font: inherit; font-size: 12px; text-align: left; cursor: pointer; color: var(--muted); }
+        .memo-btn.has { color: var(--ink); }
+        .memo-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
         .sec th, .sec td { font-weight: 700; border-bottom-color: transparent; }
         .sec .bar { display: inline-block; width: 4px; height: 14px; border-radius: 2px; margin-right: 8px; vertical-align: -2px; }
@@ -192,6 +224,8 @@ export default function KeiriSheet({ sheet }: { sheet: Sheet }) {
           .row:hover td { background: none; }
           tr { break-inside: avoid; }
           .sec th, .sec td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .row { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .memo-btn:not(.has) { visibility: hidden; }
         }
       `}</style>
     </div>

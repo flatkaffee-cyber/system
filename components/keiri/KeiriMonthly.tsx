@@ -7,7 +7,9 @@ import KeiriSheet from "./KeiriSheet";
 import PlTable from "./PlTable";
 import { monthLabel, yen } from "./format";
 import { isMonth, jstMonth } from "@/lib/keiri/period";
-import { buildSheet, monthTabs, NO_FILTER, type SheetFilter } from "@/lib/keiri/sheet";
+import { buildSheet, monthTabs, NO_FILTER, type SheetFilter, type SheetRow } from "@/lib/keiri/sheet";
+import RowMarkMenu from "./RowMarkMenu";
+import type { RowMarks } from "@/lib/keiri/notes";
 
 // 月次ページ。上から 月のタブ → 数字のカード → 道具の帯 → 表（経理で見る）または損益計算書（会計で見る）。
 export default function KeiriMonthly() {
@@ -21,6 +23,9 @@ export default function KeiriMonthly() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<SheetFilter>(NO_FILTER);
+  const [marks, setMarks] = useState<RowMarks>({});
+  const [marksError, setMarksError] = useState("");
+  const [menu, setMenu] = useState<{ row: SheetRow; at: { x: number; y: number } } | null>(null);
 
   const go = useCallback(
     (m: string, v: string) => router.push(`/keiri?month=${m}&view=${v}`),
@@ -44,7 +49,46 @@ export default function KeiriMonthly() {
     return () => { alive = false; };
   }, [month, view]);
 
-  const sheet = useMemo(() => (data?.cash ? buildSheet(data.cash, filter) : null), [data, filter]);
+  // 行の色とメモは freee の読み込みを待たずに取る
+  useEffect(() => {
+    let alive = true;
+    setMarks({});
+    setMarksError("");
+    setMenu(null);
+    fetch(`/api/keiri/marks?month=${encodeURIComponent(month)}`, { cache: "no-store" })
+      .then(async (r) => {
+        const j = await r.json();
+        if (!alive) return;
+        if (!r.ok) setMarksError("メモと色を読み込めませんでした");
+        else setMarks(j.marks as RowMarks);
+      })
+      .catch(() => alive && setMarksError("メモと色を読み込めませんでした"));
+    return () => { alive = false; };
+  }, [month]);
+
+  const closeMenu = useCallback(() => setMenu(null), []);
+
+  // 保存できたら画面の色とメモを保存後のものにする。失敗したら throw してメニューに出す（画面の色とメモは変えない）
+  const saveMark = useCallback(
+    async (key: string, input: { color: string; note: string }) => {
+      const r = await fetch("/api/keiri/marks", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ month, key, ...input }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || "保存できませんでした");
+      setMarks(j.marks as RowMarks);
+      setMenu(null);
+    },
+    [month],
+  );
+
+  const notes = useMemo(
+    () => Object.fromEntries(Object.entries(marks).map(([k, m]) => [k, m.note ?? ""])),
+    [marks],
+  );
+  const sheet = useMemo(() => (data?.cash ? buildSheet(data.cash, filter, notes) : null), [data, filter, notes]);
   const t = data?.cash?.totals;
 
   return (
@@ -74,6 +118,7 @@ export default function KeiriMonthly() {
       )}
       {loading && !error && <p className="hint">freeeから読み込んでいます…</p>}
       {!loading && data?.warnings.map((w) => <p key={w} className="warn">{w}</p>)}
+      {marksError && <p className="warn">{marksError}</p>}
       {!loading && (data?.future || data?.noData) && <section className="card"><p>まだデータがありません。</p></section>}
 
       {t && (
@@ -114,7 +159,19 @@ export default function KeiriMonthly() {
         </div>
       </div>
 
-      {!loading && view === "cash" && sheet && <KeiriSheet sheet={sheet} />}
+      {!loading && view === "cash" && sheet && (
+        <KeiriSheet sheet={sheet} marks={marks} onOpenMark={(row, at) => setMenu({ row, at })} />
+      )}
+      {menu && (
+        <RowMarkMenu
+          key={menu.row.key}
+          title={`${menu.row.partner ?? menu.row.title}　${yen(menu.row.amount)}`}
+          mark={marks[menu.row.key]}
+          at={menu.at}
+          onSave={(input) => saveMark(menu.row.key, input)}
+          onClose={closeMenu}
+        />
+      )}
       {!loading && view === "pl" && data?.pl && <PlTable data={data.pl} />}
 
       <style jsx>{`
