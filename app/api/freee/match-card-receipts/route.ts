@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { FREEE_COMPANY_ID, freeeGet, freeePost, isConnected } from "@/lib/freee";
 import { getReceipt, getReceipts, receiptLines, markRegistered, clearRegistered } from "@/lib/receipts";
 import { mapCategory, clampIssueDate } from "@/lib/freeeMap";
+import { pickSource } from "@/lib/freeeMirror/source";
 import { itemIdForProduct, newItemCache, getOverrides, resolveWithOverrides } from "@/lib/freeeItems";
 
 export const runtime = "nodejs";
@@ -94,29 +95,14 @@ async function fetchAllWalletTxns(
   return all;
 }
 
-async function getUnprocessedTxns(
-  walletables: Walletable[],
-  startDate: string,
-  endDate: string,
-): Promise<(WalletTxn & { walletName: string; walletType: string })[]> {
-  const all: (WalletTxn & { walletName: string; walletType: string })[] = [];
-  for (const w of walletables) {
-    const wallet_txns = await fetchAllWalletTxns(w, startDate, endDate);
-    for (const t of wallet_txns) {
-      if (t.status === 1 && t.entry_side === "expense") {
-        all.push({ ...t, walletName: w.name, walletType: w.type });
-      }
-    }
-  }
-  return all;
-}
-
 const daysBetween = (a: string, b: string) =>
   Math.abs((new Date(a).getTime() - new Date(b).getTime()) / 86_400_000);
 
 // GET: 未登録のカード払い領収書ごとに、候補となる未処理明細を提示
-export async function GET() {
-  if (!(await isConnected())) {
+//   明細は Supabase の写しから読む（?source=freee なら freee から直接）。登録（POST）は freee の最新を見る
+export async function GET(req: NextRequest) {
+  const src = await pickSource(req);
+  if (src.kind === "freee" && !(await isConnected())) {
     return NextResponse.json({ connected: false, matches: [] });
   }
   try {
@@ -133,8 +119,12 @@ export async function GET() {
     endD.setDate(endD.getDate() + 14); // カード引き落としの反映ラグを見込む
     const endDate = endD.toISOString().slice(0, 10);
 
-    const walletables = await getBankWalletables();
-    const txns = await getUnprocessedTxns(walletables, startDate, endDate);
+    const walletName = new Map((await src.walletables()).map((w) => [w.id, w.name]));
+    const txns = (
+      await src.walletTxns({ from: startDate, to: endDate }, { walletableTypes: ["bank_account", "wallet"], status: 1 })
+    )
+      .filter((t) => t.entry_side === "expense")
+      .map((t) => ({ ...t, walletName: walletName.get(t.walletable_id) ?? "" }));
 
     const overrides = await getOverrides();
     const matches = receipts.map((r) => {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isConnected } from "@/lib/freee";
+import { pickSource } from "@/lib/freeeMirror/source";
 import { passAuth } from "@/lib/internalFetch";
 import { buildMonthly, saveSettings, setOverride, type Bucket, type Settings } from "@/lib/monthlyReport";
 
@@ -11,7 +12,8 @@ const jstMonth = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0
 // GET /api/monthly-report?month=2026-09
 //   freeeの実績を「通常営業／イベント／臨時」に分けた月次レポートと、アルバイト試算の材料を返す
 export async function GET(req: NextRequest) {
-  if (!(await isConnected())) {
+  const src = await pickSource(req);
+  if (src.kind === "freee" && !(await isConnected())) {
     return NextResponse.json({ error: "freee未接続です" }, { status: 400 });
   }
   try {
@@ -32,6 +34,7 @@ export async function GET(req: NextRequest) {
     const data = await buildMonthly(
       month,
       evSales.filter((e) => e.reason === "イベント"),
+      src,
     );
 
     const bizDays: number = (a?.sales?.byDay ?? []).length;

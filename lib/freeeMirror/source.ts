@@ -1,6 +1,8 @@
 // freee のデータの取り出し口。freee から直接読む口（live.ts）と、Supabase の写しから読む口（read.ts）を同じ形にする。
 // 返す形は freee の API の応答と同じ。照合と損益の計算（lib/keiri/*）はどちらの口でも同じに動く。
 import type { FreeeDeal, FreeeJournal, FreeeTransfer, TrialPlBalance, WalletTxn } from "@/lib/keiri/types";
+import { liveSource } from "./live";
+import { dbHasData, dbSource } from "./read";
 
 export type Range = { from: string; to: string };
 export type TxnFilter = { walletableId?: number; walletableTypes?: string[]; status?: number };
@@ -34,4 +36,13 @@ export interface FreeeSource {
   /** null = freee にその会計期間が無い／写しにまだ無い */
   trialPl(month: string): Promise<TrialPlResponse | null>;
   trialBsPartner(fiscalYear: number): Promise<TrialBsPartnerResponse | null>;
+}
+
+/**
+ * 読む口を選ぶ。?source=freee なら freee から直接（比べるため）、
+ * Supabase に1回でも取り込めていれば写しから、まだなら freee から直接
+ */
+export async function pickSource(req?: { nextUrl: URL }): Promise<FreeeSource> {
+  if (req?.nextUrl.searchParams.get("source") === "freee") return liveSource;
+  return (await dbHasData()) ? dbSource : liveSource;
 }

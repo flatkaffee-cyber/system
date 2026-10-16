@@ -6,7 +6,7 @@
 //   - 臨時     … キャッシュバックや返金、クラファンの返礼品、椅子や備品など一度きりのもの
 // 自動で振り分けたうえで、画面から1行ずつ付け替えられる（付け替えはKVに保存）。
 
-import { fetchAll, freeeGet, FREEE_COMPANY_ID } from "@/lib/freee";
+import { pickSource, type FreeeSource } from "@/lib/freeeMirror/source";
 import { getReceipts, receiptLines, type SavedReceipt } from "@/lib/receipts";
 import { EXCLUDE_WINDOWS } from "@/lib/salesEvents";
 import { getShifts, toMin } from "@/lib/shift";
@@ -182,31 +182,27 @@ export type MonthlyData = Awaited<ReturnType<typeof buildMonthly>>;
 
 /**
  * @param squareEvents イベント時間帯のSquare売上（analyticsの除外分）。freeeのSquare連携売上から差し引いてイベントへ移す
+ * @param src freee のデータの読む口。省略時は Supabase の写し（まだ無ければ freee から直接）
  */
 export async function buildMonthly(
   month: string,
   squareEvents: { label: string; sales: number }[],
+  src?: FreeeSource,
 ) {
   const { from, to, days } = monthRange(month);
-  const [accountsRes, deals, journals, receipts, overrides, settings] = await Promise.all([
-    freeeGet<{ account_items: AccountItem[] }>("/api/1/account_items", { company_id: FREEE_COMPANY_ID }),
-    fetchAll<{ id: number; issue_date: string; type: "income" | "expense"; details: Detail[] }>(
-      "/api/1/deals",
-      "deals",
-      { company_id: FREEE_COMPANY_ID, start_issue_date: from, end_issue_date: to },
-    ),
-    fetchAll<{ id: number; issue_date: string; details: Detail[] }>(
-      "/api/1/manual_journals",
-      "manual_journals",
-      { company_id: FREEE_COMPANY_ID, start_issue_date: from, end_issue_date: to },
-    ),
+  const s = src ?? (await pickSource());
+  const [accountItems, deals, journals, receipts, overrides, settings] = await Promise.all([
+    s.accountItems() as Promise<AccountItem[]>,
+    // 中身は freee の応答そのもの。ここでは摘要（description）を null のない形で受ける
+    s.deals({ from, to }) as unknown as Promise<{ id: number; issue_date: string; type: "income" | "expense"; details: Detail[] }[]>,
+    s.manualJournals({ from, to }) as unknown as Promise<{ id: number; issue_date: string; details: Detail[] }[]>,
     getReceipts(),
     getOverrides(),
     getSettings(),
   ]);
 
   const accounts = new Map<number, AccountItem>();
-  for (const a of accountsRes.account_items ?? []) accounts.set(a.id, a);
+  for (const a of accountItems) accounts.set(a.id, a);
   const isPL = (a?: AccountItem) =>
     !!a &&
     (PL_CATEGORIES.includes(a.account_category ?? "") ||

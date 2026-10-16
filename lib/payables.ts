@@ -1,12 +1,11 @@
 // 「払うものリスト」のデータ型と取得ロジック。
-// freee接続済み（KVにトークンあり）→ freeeの役員借入金(取引先別)からライブ生成。
-// 未接続 → 2026-06-28 時点のスナップショットにフォールバック。
+// freee の役員借入金（取引先別）から作る。読む先は Supabase の写し（まだ無ければ freee から直接）。
+// どちらも読めなければ 2026-06-28 時点のスナップショットにフォールバック。
 
-import {
-  FREEE_COMPANY_ID,
-  freeeGet,
-  isConnected,
-} from "@/lib/freee";
+import { isConnected } from "@/lib/freee";
+import { pickSource, type FreeeSource } from "@/lib/freeeMirror/source";
+import { payablesFromTrialBs } from "@/lib/keiri/payables";
+import { jstMonth, periodOf } from "@/lib/keiri/period";
 
 export type Payable = {
   id: string;
@@ -25,7 +24,6 @@ export type PayablesResult = {
 };
 
 const YAKUIN_KARIIRE = 1035440156; // 役員借入金
-const FISCAL_YEAR = "2026";
 
 // 未接続時のスナップショット（2026-06-28 / 残高313,359）
 const SNAPSHOT: Payable[] = [
@@ -47,60 +45,27 @@ const SNAPSHOT: Payable[] = [
   },
 ];
 
-type TrialBs = {
-  trial_bs: {
-    balances: Array<{
-      account_item_id?: number;
-      closing_balance?: number;
-    }>;
-  };
-};
-
-type Partner = { id: number; name: string };
-
 function todayJst(): string {
   // YYYY-MM-DD（JST）。Date.now()は使用可。
   const d = new Date(Date.now() + 9 * 3600 * 1000);
   return d.toISOString().slice(0, 10);
 }
 
-async function yakuinBalance(partnerId?: number): Promise<number> {
-  const q: Record<string, string> = {
-    company_id: FREEE_COMPANY_ID,
-    fiscal_year: FISCAL_YEAR,
-  };
-  if (partnerId) q.partner_id = String(partnerId);
-  const r = await freeeGet<TrialBs>("/api/1/reports/trial_bs", q);
-  const row = r.trial_bs.balances.find(
-    (b) => b.account_item_id === YAKUIN_KARIIRE,
-  );
-  return row?.closing_balance ?? 0;
-}
+async function livePayables(src: FreeeSource): Promise<PayablesResult> {
+  // 取引先の内訳つきの試算表を1回で取る（前は取引先ごとに freee に聞いていた）
+  const bs = await src.trialBsPartner(periodOf(jstMonth()).fiscalYear);
+  if (!bs) throw new Error("今期の試算表がありません");
+  const { total, byPartner } = payablesFromTrialBs(bs.trial_bs.balances, YAKUIN_KARIIRE);
 
-async function livePayables(): Promise<PayablesResult> {
-  const total = await yakuinBalance();
-
-  const { partners } = await freeeGet<{ partners: Partner[] }>(
-    "/api/1/partners",
-    { company_id: FREEE_COMPANY_ID, limit: "100" },
-  );
-
-  const payables: Payable[] = [];
-  let assigned = 0;
-  for (const p of partners) {
-    const bal = await yakuinBalance(p.id);
-    if (bal > 0) {
-      assigned += bal;
-      payables.push({
-        id: `partner-${p.id}`,
-        payee: p.name,
-        amount: bal,
-        description: "立替（役員借入金）",
-        account: "役員借入金",
-        hasPartner: true,
-      });
-    }
-  }
+  const payables: Payable[] = byPartner.map((p) => ({
+    id: `partner-${p.id}`,
+    payee: p.name,
+    amount: p.amount,
+    description: "立替（役員借入金）",
+    account: "役員借入金",
+    hasPartner: true,
+  }));
+  const assigned = byPartner.reduce((s, p) => s + p.amount, 0);
 
   const unassigned = total - assigned;
   if (unassigned > 0) {
@@ -117,10 +82,11 @@ async function livePayables(): Promise<PayablesResult> {
   return { payables, total, source: "live", updatedAt: todayJst() };
 }
 
-export async function getPayables(): Promise<PayablesResult> {
+export async function getPayables(src?: FreeeSource): Promise<PayablesResult> {
   try {
-    if (await isConnected()) {
-      return await livePayables();
+    const s = src ?? (await pickSource());
+    if (s.kind === "db" || (await isConnected())) {
+      return await livePayables(s);
     }
   } catch {
     // ライブ取得に失敗したらスナップショットにフォールバック
