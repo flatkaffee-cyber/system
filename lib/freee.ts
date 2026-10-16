@@ -155,12 +155,20 @@ export async function freeeGet<T = unknown>(
   return (await res.json()) as T;
 }
 
-/** limit=100 でページを送り、最後まで取る（freee は limit 未指定だと20件しか返さない） */
-export async function fetchAll<T>(path: string, key: string, query: Record<string, string>): Promise<T[]> {
+/**
+ * limit=100 でページを送り、最後まで取る（freee は limit 未指定だと20件しか返さない）。
+ * get を渡すと、1ページごとの取り方（やり直し・回数を数えるなど）を差し替えられる
+ */
+export async function fetchAll<T>(
+  path: string,
+  key: string,
+  query: Record<string, string>,
+  get: <R>(path: string, query: Record<string, string>) => Promise<R> = freeeGet,
+): Promise<T[]> {
   const out: T[] = [];
   for (let offset = 0; ; offset += 100) {
     const page =
-      ((await freeeGet<Record<string, T[]>>(path, { ...query, limit: "100", offset: String(offset) }))[key]) ?? [];
+      ((await get<Record<string, T[]>>(path, { ...query, limit: "100", offset: String(offset) }))[key]) ?? [];
     out.push(...page);
     if (page.length < 100) break;
   }
