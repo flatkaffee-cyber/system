@@ -1,6 +1,8 @@
 // freee のデータの取り出し口。freee から直接読む口（live.ts）と、Supabase の写しから読む口（read.ts）を同じ形にする。
 // 返す形は freee の API の応答と同じ。照合と損益の計算（lib/keiri/*）はどちらの口でも同じに動く。
 import type { FreeeDeal, FreeeJournal, FreeeTransfer, TrialPlBalance, WalletTxn } from "@/lib/keiri/types";
+import { chooseSource } from "./choose";
+import { isDbReady } from "./db";
 import { liveSource } from "./live";
 import { dbHasData, dbSource } from "./read";
 
@@ -38,11 +40,18 @@ export interface FreeeSource {
   trialBsPartner(fiscalYear: number): Promise<TrialBsPartnerResponse | null>;
 }
 
+/** 画面を写しから出すスイッチ（Vercel の環境変数 KEIRI_READ_FROM=db）が入っていて、Supabase が使える */
+export function readsFromDb(): boolean {
+  return (process.env.KEIRI_READ_FROM ?? "").trim() === "db" && isDbReady();
+}
+
 /**
- * 読む口を選ぶ。?source=freee なら freee から直接（比べるため）、
- * Supabase に1回でも取り込めていれば写しから、まだなら freee から直接
+ * 読む口を選ぶ。?source=freee|db で口を指定できる（比べるため）。
+ * ふだんは、スイッチが入っていて写しに1回でも取り込めていれば写し、そうでなければ freee から直接
  */
 export async function pickSource(req?: { nextUrl: URL }): Promise<FreeeSource> {
-  if (req?.nextUrl.searchParams.get("source") === "freee") return liveSource;
-  return (await dbHasData()) ? dbSource : liveSource;
+  const param = req?.nextUrl.searchParams.get("source") ?? null;
+  const readFromDb = readsFromDb();
+  const hasData = !param && readFromDb ? await dbHasData() : false;
+  return chooseSource({ param, readFromDb, hasData, dbReady: isDbReady() }) === "db" ? dbSource : liveSource;
 }

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { fiscalMonths, fiscalRange, isMissingPeriodError, isMonth, jstDate, jstHour, jstMonth, periodOf, shiftMonth } from "./period.ts";
+import { fiscalMonths, fiscalRange, syncRange, isMissingPeriodError, isMonth, jstDate, jstHour, jstMonth, periodOf, shiftMonth } from "./period.ts";
 
 test("10月は期首2026年度、月末31日", () => {
   assert.deepEqual(periodOf("2026-10"), {
@@ -51,4 +51,9 @@ test("会計年度の範囲と、期首からの月", () => {
   assert.equal(fiscalMonths(2026, "2027-09").length, 12); // 期末で止まる
   assert.equal(jstDate(Date.UTC(2026, 9, 16, 15, 30)), "2026-10-17"); // UTC 15:30 = JST 翌0:30
   assert.equal(jstHour(Date.UTC(2026, 9, 16, 18, 0)), 3);
+});
+
+test("毎回取り込む範囲は、期首の3か月前から期末まで（期の変わり目の前期分も5分おきに拾う）", () => {
+  assert.deepEqual(syncRange(2026), { from: "2026-03-01", to: "2027-05-31" });
+  assert.deepEqual(syncRange(2027), { from: "2027-03-01", to: "2028-05-31" });
 });

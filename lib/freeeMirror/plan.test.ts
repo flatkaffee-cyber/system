@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chunk, monthHashes, needsNightly, trialPlMonthsToRefresh } from "./plan.ts";
+import { chunk, mapLimit, monthHashes, needsNightly, shouldRunCron, trialPlMonthsToRefresh } from "./plan.ts";
 
 test("月ごとのハッシュは、その月の行が変わったときだけ変わる", () => {
   const base = { deals: [{ id: 1, issue_date: "2026-09-03" }, { id: 2, issue_date: "2026-10-01" }], journals: [], transfers: [] };
@@ -41,4 +41,30 @@ test("毎晩の取り込みは3時以降に1日1回", () => {
 test("分割", () => {
   assert.deepEqual(chunk([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]]);
   assert.deepEqual(chunk([], 500), []);
+});
+
+test("毎分の cron が取り込むのは、書き込みの印があるか、前回（成功でも失敗でも）から5分たったとき", () => {
+  const now = Date.parse("2026-10-16T01:35:00Z");
+  const ago = (min: number) => new Date(now - min * 60_000).toISOString();
+  assert.equal(shouldRunCron({ dirty: true, lastSuccessAt: ago(1), lastErrorAt: null, nowMs: now }), true);
+  assert.equal(shouldRunCron({ dirty: false, lastSuccessAt: null, lastErrorAt: null, nowMs: now }), true);
+  assert.equal(shouldRunCron({ dirty: false, lastSuccessAt: ago(3), lastErrorAt: null, nowMs: now }), false);
+  assert.equal(shouldRunCron({ dirty: false, lastSuccessAt: ago(5), lastErrorAt: null, nowMs: now }), true);
+  // 失敗が続いているときも、やり直しは5分おき（毎分 freee を叩かない）
+  assert.equal(shouldRunCron({ dirty: false, lastSuccessAt: ago(60), lastErrorAt: ago(2), nowMs: now }), false);
+  assert.equal(shouldRunCron({ dirty: false, lastSuccessAt: ago(60), lastErrorAt: ago(6), nowMs: now }), true);
+});
+
+test("同時に3本までで回し、結果は渡した順に返す", async () => {
+  let running = 0;
+  let peak = 0;
+  const got = await mapLimit([5, 1, 4, 2, 3, 0], 3, async (n) => {
+    running++;
+    peak = Math.max(peak, running);
+    await new Promise((r) => setTimeout(r, n));
+    running--;
+    return n * 10;
+  });
+  assert.deepEqual(got, [50, 10, 40, 20, 30, 0]);
+  assert.equal(peak, 3);
 });

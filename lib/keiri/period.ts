@@ -69,3 +69,9 @@ export function jstDate(now: number = Date.now()): string {
 export function jstHour(now: number = Date.now()): number {
   return new Date(now + 9 * 3600_000).getUTCHours();
 }
+
+/** 取り込みで毎回取り直す範囲。期首の3か月前から期末まで（期が変わってすぐの前期分の処理も拾うため） */
+export function syncRange(fiscalYear: number): { from: string; to: string } {
+  const r = fiscalRange(fiscalYear);
+  return { from: `${shiftMonth(r.from.slice(0, 7), -3)}-01`, to: r.to };
+}

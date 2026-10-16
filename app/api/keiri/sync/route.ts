@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
-import { isDbReady } from "@/lib/freeeMirror/db";
 import { isStale, needsReconnect } from "@/lib/freeeMirror/health";
 import { getMirrorState } from "@/lib/freeeMirror/read";
+import { readsFromDb } from "@/lib/freeeMirror/source";
 import { syncFreee } from "@/lib/freeeMirror/sync";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 export type KeiriSyncStatus = {
-  configured: boolean; // Supabase が使えるか。使えないあいだ、画面は freee から直接出している
+  configured: boolean; // 画面を写しから出す設定になっているか。なっていないあいだ、画面は freee から直接出している
   lastSuccessAt: string | null;
   lastError: string | null;
   stale: boolean;
@@ -16,7 +16,7 @@ export type KeiriSyncStatus = {
 };
 
 async function status(): Promise<KeiriSyncStatus> {
-  if (!isDbReady()) return { configured: false, lastSuccessAt: null, lastError: null, stale: false, reconnect: false };
+  if (!readsFromDb()) return { configured: false, lastSuccessAt: null, lastError: null, stale: false, reconnect: false };
   const s = await getMirrorState();
   return {
     configured: true,

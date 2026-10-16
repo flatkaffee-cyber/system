@@ -5,7 +5,7 @@ import type { KeiriSyncStatus } from "@/app/api/keiri/sync/route";
 import { stamp } from "@/lib/freeeMirror/health";
 
 // freee → Supabase の取り込みの状態。「最終取り込み」と「今すぐ取り込む」、取り込めていないときの黄色い帯。
-// Supabase をまだ使っていない（configured=false）あいだは何も出さない（画面は freee から直接出ている）。
+// 画面を写しから出す設定になっていない（configured=false）あいだは何も出さない（画面は freee から直接出ている）。
 export default function SyncBar({ onSynced }: { onSynced?: () => void }) {
   const [s, setS] = useState<KeiriSyncStatus | null>(null);
   const [busy, setBusy] = useState(false);
@@ -61,7 +61,9 @@ export default function SyncBar({ onSynced }: { onSynced?: () => void }) {
       </div>
       {s.stale && (
         <p className="sb-alert">
-          freee から取り込めていません（最終 {last ?? "なし"}）。表示しているのは最後に取り込んだ数字です。
+          {last
+            ? `freee から取り込めていません（最終 ${last}）。表示しているのは最後に取り込んだ数字です。`
+            : "まだ取り込めていません。いまは freee から直接読んでいます。"}
           {s.reconnect && (
             <>
               {" "}

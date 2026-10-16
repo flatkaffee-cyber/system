@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { syncFreee } from "@/lib/freeeMirror/sync";
+import { cronTick } from "@/lib/freeeMirror/sync";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 300;
 
-// 5分おきに freee のデータを Supabase に取り込む（vercel.json の crons）。
-// ほかの取り込みが動いていれば何もしない。
+// 毎分動く（vercel.json の crons）。システムから freee に書き込んだ印があるか、前回から5分たったときだけ
+// freee のデータを Supabase に取り込む。ほかの取り込みが動いていれば何もしない。
 export async function GET() {
-  return NextResponse.json(await syncFreee("cron"));
+  return NextResponse.json(await cronTick());
 }

@@ -60,3 +60,32 @@ export function chunk<T>(xs: T[], size: number): T[][] {
   for (let i = 0; i < xs.length; i += size) out.push(xs.slice(i, i + size));
   return out;
 }
+
+/** 取り込みの間隔（分）。cron は毎分動き、書き込みの印が無ければこの間隔で取り込む */
+export const SYNC_EVERY_MINUTES = 5;
+
+/** 毎分の cron で取り込むか。書き込みの印がある、一度も動いていない、前回（成功か失敗の新しい方）から5分たった */
+export function shouldRunCron(a: {
+  dirty: boolean;
+  lastSuccessAt: string | null;
+  lastErrorAt: string | null;
+  nowMs: number;
+}): boolean {
+  if (a.dirty) return true;
+  const last = Math.max(a.lastSuccessAt ? Date.parse(a.lastSuccessAt) : 0, a.lastErrorAt ? Date.parse(a.lastErrorAt) : 0);
+  return !last || a.nowMs - last >= SYNC_EVERY_MINUTES * 60_000;
+}
+
+/** 同時に limit 本までで fn を回す。結果は xs の順 */
+export async function mapLimit<T, R>(xs: T[], limit: number, fn: (x: T) => Promise<R>): Promise<R[]> {
+  const out = new Array<R>(xs.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < xs.length) {
+      const i = next++;
+      out[i] = await fn(xs[i]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, xs.length) }, worker));
+  return out;
+}

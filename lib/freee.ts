@@ -176,14 +176,15 @@ export async function fetchAll<T>(
   return out;
 }
 
-// freee に書き込めたら、応答を返したあとで Supabase の写しを取り込み直す（5分待たずに画面に出すため）。
-// 1つのリクエストで何度書いても、取り込みの鍵とやり直しの印で多くて2回にまとまる
-function syncAfterResponse() {
+// freee に書き込めたら、応答を返したあとで「書き込んだ」印を付ける。毎分の cron がそれを見て Supabase の写しを
+// 取り込み直す（5分待たずに画面に出すため）。取り込みそのものをここで回さないのは、書き込んだルートの
+// 時間制限（30秒のものが多い）の中で打ち切られないようにするため
+function markDirtyAfterResponse() {
   try {
     after(async () => {
       // 動的 import にするのは sync.ts → live.ts → このファイル の循環を避けるため
-      const { syncFreee } = await import("@/lib/freeeMirror/sync");
-      await syncFreee("after-write");
+      const { markDirty } = await import("@/lib/freeeMirror/sync");
+      await markDirty().catch(() => {});
     });
   } catch {
     // リクエストの外（スクリプトなど）では after が使えない。取り込みは次の cron に任せる
@@ -208,7 +209,7 @@ export async function freeePost<T = unknown>(
   if (!res.ok) {
     throw new Error(`freee API POST ${path} 失敗(${res.status}): ${await res.text()}`);
   }
-  syncAfterResponse();
+  markDirtyAfterResponse();
   return (await res.json()) as T;
 }
 
@@ -230,7 +231,7 @@ export async function freeePut<T = unknown>(
   if (!res.ok) {
     throw new Error(`freee API PUT ${path} 失敗(${res.status}): ${text.slice(0, 300)}`);
   }
-  syncAfterResponse();
+  markDirtyAfterResponse();
   return (text ? JSON.parse(text) : {}) as T;
 }
 
@@ -249,5 +250,5 @@ export async function freeeDelete(path: string, query: Record<string, string> = 
   if (!res.ok && res.status !== 404) {
     throw new Error(`freee API DELETE ${path} 失敗(${res.status}): ${await res.text()}`);
   }
-  syncAfterResponse();
+  markDirtyAfterResponse();
 }
