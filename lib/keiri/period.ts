@@ -45,3 +45,27 @@ export function jstMonth(now: number = Date.now()): string {
 export function isMissingPeriodError(message: string): boolean {
   return /会計期間がありません/.test(message);
 }
+
+/** 会計年度（期首の年）の初日と最終日 */
+export function fiscalRange(fiscalYear: number): { from: string; to: string } {
+  const start = `${fiscalYear}-${String(FISCAL_START_MONTH).padStart(2, "0")}`;
+  return { from: `${start}-01`, to: periodOf(shiftMonth(start, 11)).to };
+}
+
+/** 期首の月から untilMonth まで（期末を超えない）。untilMonth が期首より前なら空 */
+export function fiscalMonths(fiscalYear: number, untilMonth: string): string[] {
+  const out: string[] = [];
+  let m = `${fiscalYear}-${String(FISCAL_START_MONTH).padStart(2, "0")}`;
+  for (let i = 0; i < 12 && m <= untilMonth; i++, m = shiftMonth(m, 1)) out.push(m);
+  return out;
+}
+
+/** 今日（JST）YYYY-MM-DD */
+export function jstDate(now: number = Date.now()): string {
+  return new Date(now + 9 * 3600_000).toISOString().slice(0, 10);
+}
+
+/** 今の時（JST）0〜23 */
+export function jstHour(now: number = Date.now()): number {
+  return new Date(now + 9 * 3600_000).getUTCHours();
+}

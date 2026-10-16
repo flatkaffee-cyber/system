@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isMissingPeriodError, isMonth, jstMonth, periodOf, shiftMonth } from "./period.ts";
+import { fiscalMonths, fiscalRange, isMissingPeriodError, isMonth, jstDate, jstHour, jstMonth, periodOf, shiftMonth } from "./period.ts";
 
 test("10月は期首2026年度、月末31日", () => {
   assert.deepEqual(periodOf("2026-10"), {
@@ -43,4 +43,12 @@ test("今月は日本時間で決める", () => {
 test("freeeの『会計期間がありません』を見分ける", () => {
   assert.equal(isMissingPeriodError('freee API /api/1/reports/trial_pl 失敗(400): {"errors":[{"messages":["指定された会計期間がありません"]}]}'), true);
   assert.equal(isMissingPeriodError("freee API 失敗(500): internal"), false);
+});
+
+test("会計年度の範囲と、期首からの月", () => {
+  assert.deepEqual(fiscalRange(2026), { from: "2026-06-01", to: "2027-05-31" });
+  assert.deepEqual(fiscalMonths(2026, "2026-10"), ["2026-06", "2026-07", "2026-08", "2026-09", "2026-10"]);
+  assert.equal(fiscalMonths(2026, "2027-09").length, 12); // 期末で止まる
+  assert.equal(jstDate(Date.UTC(2026, 9, 16, 15, 30)), "2026-10-17"); // UTC 15:30 = JST 翌0:30
+  assert.equal(jstHour(Date.UTC(2026, 9, 16, 18, 0)), 3);
 });
