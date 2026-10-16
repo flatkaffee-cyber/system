@@ -2,6 +2,7 @@
 // トークン保存は Vercel KV（@vercel/kv）。KV未設定なら NotConnected を投げ、
 // 呼び出し側（払うものリスト等）はスナップショットにフォールバックする。
 
+import { after } from "next/server";
 import { accessTokenWithLock, type Tokens } from "@/lib/freeeMirror/refresh";
 
 const AUTH_BASE = "https://accounts.secure.freee.co.jp/public_api";
@@ -175,6 +176,20 @@ export async function fetchAll<T>(
   return out;
 }
 
+// freee に書き込めたら、応答を返したあとで Supabase の写しを取り込み直す（5分待たずに画面に出すため）。
+// 1つのリクエストで何度書いても、取り込みの鍵とやり直しの印で多くて2回にまとまる
+function syncAfterResponse() {
+  try {
+    after(async () => {
+      // 動的 import にするのは sync.ts → live.ts → このファイル の循環を避けるため
+      const { syncFreee } = await import("@/lib/freeeMirror/sync");
+      await syncFreee("after-write");
+    });
+  } catch {
+    // リクエストの外（スクリプトなど）では after が使えない。取り込みは次の cron に任せる
+  }
+}
+
 export async function freeePost<T = unknown>(
   path: string,
   body: unknown,
@@ -193,6 +208,7 @@ export async function freeePost<T = unknown>(
   if (!res.ok) {
     throw new Error(`freee API POST ${path} 失敗(${res.status}): ${await res.text()}`);
   }
+  syncAfterResponse();
   return (await res.json()) as T;
 }
 
@@ -214,6 +230,7 @@ export async function freeePut<T = unknown>(
   if (!res.ok) {
     throw new Error(`freee API PUT ${path} 失敗(${res.status}): ${text.slice(0, 300)}`);
   }
+  syncAfterResponse();
   return (text ? JSON.parse(text) : {}) as T;
 }
 
@@ -232,4 +249,5 @@ export async function freeeDelete(path: string, query: Record<string, string> = 
   if (!res.ok && res.status !== 404) {
     throw new Error(`freee API DELETE ${path} 失敗(${res.status}): ${await res.text()}`);
   }
+  syncAfterResponse();
 }

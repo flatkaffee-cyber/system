@@ -1,7 +1,7 @@
 // KV を使った鍵。取り込みを同時に2つ動かさないために使う。KV は引数でもらう（テストでは偽物）。
 
 export type LockKv = {
-  set(key: string, value: string, opts: { nx: true; ex: number }): Promise<unknown>;
+  set(key: string, value: string, opts: { nx: true; ex: number } | { ex: number }): Promise<unknown>;
   get(key: string): Promise<unknown>;
   del(...keys: string[]): Promise<number>;
 };
