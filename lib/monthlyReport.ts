@@ -6,7 +6,7 @@
 //   - 臨時     … キャッシュバックや返金、クラファンの返礼品、椅子や備品など一度きりのもの
 // 自動で振り分けたうえで、画面から1行ずつ付け替えられる（付け替えはKVに保存）。
 
-import { freeeGet, FREEE_COMPANY_ID } from "@/lib/freee";
+import { fetchAll, freeeGet, FREEE_COMPANY_ID } from "@/lib/freee";
 import { getReceipts, receiptLines, type SavedReceipt } from "@/lib/receipts";
 import { EXCLUDE_WINDOWS } from "@/lib/salesEvents";
 import { getShifts, toMin } from "@/lib/shift";
@@ -153,17 +153,6 @@ export type Line = {
   bucket: Bucket;
   reason: string;
 };
-
-export async function fetchAll<T>(path: string, key: string, query: Record<string, string>): Promise<T[]> {
-  const out: T[] = [];
-  for (let offset = 0; ; offset += 100) {
-    const page =
-      ((await freeeGet<Record<string, T[]>>(path, { ...query, limit: "100", offset: String(offset) }))[key]) ?? [];
-    out.push(...page);
-    if (page.length < 100) break;
-  }
-  return out;
-}
 
 function monthRange(month: string) {
   const [y, m] = month.split("-").map(Number);

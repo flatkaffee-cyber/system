@@ -1,0 +1,22 @@
+// KV を使った鍵。取り込みを同時に2つ動かさないために使う。KV は引数でもらう（テストでは偽物）。
+
+export type LockKv = {
+  set(key: string, value: string, opts: { nx: true; ex: number }): Promise<unknown>;
+  get(key: string): Promise<unknown>;
+  del(...keys: string[]): Promise<number>;
+};
+
+export const SYNC_LOCK = "freee:sync-lock";
+export const SYNC_AGAIN = "freee:sync-again";
+
+/** 鍵を取る。取れたら合言葉、ほかが持っていれば null。ttlSec たつと自然に外れる */
+export async function tryLock(kv: LockKv, key: string, ttlSec: number): Promise<string | null> {
+  const token = globalThis.crypto.randomUUID();
+  const r = await kv.set(key, token, { nx: true, ex: ttlSec });
+  return r === "OK" ? token : null;
+}
+
+/** 自分の鍵のときだけ外す（期限切れのあとにほかが取った鍵は外さない） */
+export async function unlock(kv: LockKv, key: string, token: string): Promise<void> {
+  if ((await kv.get(key)) === token) await kv.del(key);
+}

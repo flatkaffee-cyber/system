@@ -2,6 +2,8 @@
 // トークン保存は Vercel KV（@vercel/kv）。KV未設定なら NotConnected を投げ、
 // 呼び出し側（払うものリスト等）はスナップショットにフォールバックする。
 
+import { accessTokenWithLock, type Tokens } from "@/lib/freeeMirror/refresh";
+
 const AUTH_BASE = "https://accounts.secure.freee.co.jp/public_api";
 const API_BASE = "https://api.freee.co.jp";
 const TOKEN_KEY = "freee:tokens";
@@ -31,11 +33,6 @@ export class FreeeNotConnected extends Error {
   }
 }
 
-type Tokens = {
-  access_token: string;
-  refresh_token: string;
-  expires_at: number; // epoch秒
-};
 
 // --- KV（保存先）。Vercel KV / Upstash Redis どちらの環境変数名でも拾う。
 //     未設定なら null を返す。 ---
@@ -117,20 +114,25 @@ export async function exchangeCode(origin: string, code: string): Promise<void> 
 }
 
 async function getAccessToken(): Promise<string> {
-  const t = await loadTokens();
-  if (!t) throw new FreeeNotConnected();
-  // 期限60秒前で更新（freeeはrefresh_tokenが毎回ローテートするので保存必須）
-  if (t.expires_at - 60 < Math.floor(Date.now() / 1000)) {
-    const nt = await tokenRequest({
-      grant_type: "refresh_token",
-      client_id: CLIENT_ID,
-      client_secret: CLIENT_SECRET,
-      refresh_token: t.refresh_token,
-    });
-    await saveTokens(nt);
-    return nt.access_token;
-  }
-  return t.access_token;
+  const store = await kv();
+  if (!store) throw new FreeeNotConnected();
+  // 期限60秒前で更新（freeeはrefresh_tokenが毎回ローテートするので保存必須）。
+  // 並べて呼ぶ処理が同時に更新すると古い方が失敗するので、更新は鍵を取った1つだけが行う
+  return accessTokenWithLock({
+    kv: store,
+    load: loadTokens,
+    save: saveTokens,
+    refresh: (refreshToken) =>
+      tokenRequest({
+        grant_type: "refresh_token",
+        client_id: CLIENT_ID,
+        client_secret: CLIENT_SECRET,
+        refresh_token: refreshToken,
+      }),
+    nowSec: () => Math.floor(Date.now() / 1000),
+    sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+    notConnected: () => new FreeeNotConnected(),
+  });
 }
 
 // --- API ---
@@ -151,6 +153,18 @@ export async function freeeGet<T = unknown>(
     throw new Error(`freee API ${path} 失敗(${res.status}): ${await res.text()}`);
   }
   return (await res.json()) as T;
+}
+
+/** limit=100 でページを送り、最後まで取る（freee は limit 未指定だと20件しか返さない） */
+export async function fetchAll<T>(path: string, key: string, query: Record<string, string>): Promise<T[]> {
+  const out: T[] = [];
+  for (let offset = 0; ; offset += 100) {
+    const page =
+      ((await freeeGet<Record<string, T[]>>(path, { ...query, limit: "100", offset: String(offset) }))[key]) ?? [];
+    out.push(...page);
+    if (page.length < 100) break;
+  }
+  return out;
 }
 
 export async function freeePost<T = unknown>(
