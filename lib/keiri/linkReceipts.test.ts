@@ -18,6 +18,16 @@ test("振替伝票IDでも紐づける（現金払い）", () => {
   assert.equal(r.receiptStatus, "attached");
 });
 
+test("1枚のレシートを追加の取引IDにも紐づける（Amazonの2回引き落とし）", () => {
+  const rows = attachReceipts(
+    [row({ dealId: 3742134469, amount: 5831 }), row({ dealId: 3742580474, amount: 3722 }), row({ dealId: 3742580475 })],
+    [{ id: "r_3", vendor: "Amazon", registered: { journalId: 3742134469, extraIds: [3742580474] } }],
+    [],
+  );
+  assert.deepEqual(rows.map((r) => r.receiptStatus), ["attached", "attached", "missing"]);
+  assert.deepEqual(rows[1].receipt, { id: "r_3", vendor: "Amazon" });
+});
+
 test("Amazonは注文番号で確認する", () => {
   const [r] = attachReceipts([row({ dealId: 9, description: "手すり（Amazon 注文250-1506470-9347845）" })], [], []);
   assert.equal(r.receiptStatus, "amazon");

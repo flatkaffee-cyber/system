@@ -27,7 +27,9 @@ export type SavedReceipt = {
   payer: string;
   memo: string;
   savedAt: string;
-  registered?: { journalId: number; at: string }; // freee登録済み
+  // freee登録済み。extraIds は1枚が取引2件以上に分かれたとき（Amazonの2回引き落とし等）の残りの取引ID。
+  // 経理の月次で領収書を紐づけるためだけに使い、登録の取消（unregister）では触らない。
+  registered?: { journalId: number; at: string; extraIds?: number[] };
   expenseKind?: "company" | "card" | "labor" | "cash"; // 立替 / 会社カード支出 / 労働枠経費 / 現金支出
   laborMember?: string; // 労働枠のとき、誰の枠から引くか
   tags?: string[]; // 用途タグ（旧・レシート全体。互換用）

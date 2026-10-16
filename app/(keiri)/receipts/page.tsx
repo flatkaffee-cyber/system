@@ -15,7 +15,7 @@ type Receipt = {
   payer: string;
   memo: string;
   savedAt: string;
-  registered?: { journalId: number; at: string };
+  registered?: { journalId: number; at: string; extraIds?: number[] };
   expenseKind?: "company" | "card" | "labor" | "cash";
   laborMember?: string;
   lines?: RLine[];
@@ -632,7 +632,7 @@ export default function Receipts() {
                 {r.registered ? (
                   <div className="decided-box" style={{ margin: 0 }}>
                     {r.expenseKind === "card"
-                      ? `✓ freee登録済（取引 #${r.registered.journalId}／銀行明細と消込済）`
+                      ? `✓ freee登録済（取引 #${[r.registered.journalId, ...(r.registered.extraIds ?? [])].join("・#")}／銀行明細と消込済）`
                       : `✓ freee登録済（振替伝票 #${r.registered.journalId}）／ 借)${r.category}・貸)${
                           r.expenseKind === "cash" ? "現金" : `役員借入金（${r.payer}）`
                         }`}
