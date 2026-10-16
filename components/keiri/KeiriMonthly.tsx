@@ -10,6 +10,7 @@ import { isMonth, jstMonth } from "@/lib/keiri/period";
 import { buildSheet, monthTabs, NO_FILTER, type SheetFilter, type SheetRow } from "@/lib/keiri/sheet";
 import RowMarkMenu from "./RowMarkMenu";
 import MemoBoard from "./MemoBoard";
+import SyncBar from "./SyncBar";
 import type { RowMarks } from "@/lib/keiri/notes";
 
 // 月次ページ。上から 月のタブ → 数字のカード → 道具の帯 → 表（経理で見る）または損益計算書（会計で見る）。
@@ -27,6 +28,7 @@ export default function KeiriMonthly() {
   const [marks, setMarks] = useState<RowMarks>({});
   const [marksError, setMarksError] = useState("");
   const [menu, setMenu] = useState<{ row: SheetRow; at: { x: number; y: number } } | null>(null);
+  const [reloadKey, setReloadKey] = useState(0); // 「今すぐ取り込む」のあとに読み直す
 
   const go = useCallback(
     (m: string, v: string) => router.push(`/keiri?month=${m}&view=${v}`),
@@ -48,9 +50,9 @@ export default function KeiriMonthly() {
       .catch(() => alive && setError("読み込みに失敗しました"))
       .finally(() => alive && setLoading(false));
     return () => { alive = false; };
-  }, [month, view]);
+  }, [month, view, reloadKey]);
 
-  // 行の色とメモは freee の読み込みを待たずに取る
+  // 行の色とメモは月の数字の読み込みを待たずに取る
   useEffect(() => {
     let alive = true;
     setMarks({});
@@ -95,6 +97,7 @@ export default function KeiriMonthly() {
   return (
     <main className="wide">
       <h1>{monthLabel(month)}の月次</h1>
+      <SyncBar onSynced={() => setReloadKey((k) => k + 1)} />
 
       <div className="months" role="tablist" aria-label="月">
         {monthTabs(thisMonth).map((m) => (
@@ -117,7 +120,7 @@ export default function KeiriMonthly() {
           {error.includes("未接続") && <a href="/api/freee/authorize">freeeに接続する</a>}
         </section>
       )}
-      {loading && !error && <p className="hint">freeeから読み込んでいます…</p>}
+      {loading && !error && <p className="hint">読み込んでいます…</p>}
       {!loading && data?.warnings.map((w) => <p key={w} className="warn">{w}</p>)}
       {marksError && <p className="warn">{marksError}</p>}
       {!loading && (data?.future || data?.noData) && <section className="card"><p>まだデータがありません。</p></section>}

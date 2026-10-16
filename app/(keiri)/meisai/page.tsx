@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import MeisaiItem, { type Txn } from "@/components/MeisaiItem";
+import SyncBar from "@/components/keiri/SyncBar";
 
 type CardCandidate = {
   walletTxnId: number;
@@ -38,7 +39,8 @@ export default function Meisai() {
       .catch(() => {});
   };
 
-  useEffect(() => {
+  const load = () => {
+    setError(null);
     fetch("/api/freee/unprocessed")
       .then((r) => r.json())
       .then((j) => {
@@ -49,7 +51,9 @@ export default function Meisai() {
       })
       .catch(() => setError("読み込みに失敗しました。"));
     loadCardMatches();
-  }, []);
+  };
+
+  useEffect(load, []);
 
   const confirmCardMatch = async (receiptId: string, walletTxnId: number) => {
     setCardErr(null);
@@ -78,6 +82,7 @@ export default function Meisai() {
         <h1>🧾 未処理の明細</h1>
         <p>freeeでまだ仕訳していない明細を、AIと相談して決めます</p>
       </header>
+      <SyncBar onSynced={load} />
 
       {error && <p className="err">{error}</p>}
 
