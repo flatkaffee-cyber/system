@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isConnected } from "@/lib/freee";
+import { passAuth } from "@/lib/internalFetch";
+import { bucketsForSources, buildMonthly, getOverrides, type MonthlyData } from "@/lib/monthlyReport";
+import { squareEventSales } from "@/lib/squareEvents";
+import { overrideKeysForRow, rowBucket, type Bucket, type Scopes } from "@/lib/keiri/buckets";
 import { pickSource } from "@/lib/freeeMirror/source";
 import { getReceipts } from "@/lib/receipts";
 import { getPendingExpenses } from "@/lib/pending-expenses";
@@ -20,6 +24,22 @@ export type KeiriMonthlyResponse = {
   future: boolean;
   noData?: boolean; // freeeにその会計期間が無い（1期目より前など）
   source: "db" | "freee"; // db = Supabase の写しから、freee = freee から直接
+  /** 店舗・イベント・臨時・全体の4つの数字（月次レポートと同じ計算） */
+  scopes?: Scopes;
+  /** その月の前受金の入金の合計（クラファンなど。臨時に含まれる） */
+  advanceIn?: number;
+  /** 経理で見る: 行の key → 区分・付け替えの鍵・自動のままか */
+  rowBuckets?: Record<string, Bucket>;
+  rowOverrideKeys?: Record<string, string[]>;
+  rowAuto?: Record<string, boolean>;
+  /** 会計で見る: 全体の足し引きと、店舗だけ・イベントの中身 */
+  plScope?: {
+    estimatesTotal: number;
+    advanceTotal: number;
+    store: MonthlyData["regular"];
+    event: { account: string; amount: number }[];
+    eventLabels: string[];
+  };
   cash?: CashView;
   pl?: PlView;
   warnings: string[];
@@ -53,6 +73,20 @@ export async function GET(req: NextRequest) {
   if (res.future) return NextResponse.json(res);
 
   const p = periodOf(month);
+  // 4つの数字は月次レポートと同じ計算で出す。表や損益計算書の読み込みと並べて走らせる
+  const reportP: Promise<MonthlyData | null> = squareEventSales(req.nextUrl.origin, passAuth(req), p.from, p.to)
+    .then(({ events }) => buildMonthly(month, events, src))
+    .catch(() => null);
+  const withScopes = async () => {
+    const report = await reportP;
+    if (!report) {
+      res.warnings.push("店舗・イベント・臨時の数字を出せませんでした。表はそのまま見られます。");
+      return null;
+    }
+    res.scopes = report.scopes;
+    res.advanceIn = report.offBook.filter((o) => o.amount > 0).reduce((s, o) => s + o.amount, 0);
+    return report;
+  };
   try {
     if (view === "pl") {
       // 1期目より前の月などは freee が「会計期間がありません」を返す（null）→ データが無い月として扱う
@@ -61,6 +95,18 @@ export async function GET(req: NextRequest) {
       const range = { from: p.from, to: p.to };
       const [deals, journals, items] = await Promise.all([src.deals(range), src.manualJournals(range), src.accountItems()]);
       res.pl = buildPl({ balances: trial.trial_pl.balances, upToDate: trial.up_to_date, deals, journals, accountNames: namesOf(items) });
+      const report = await withScopes();
+      if (report) {
+        const event = new Map<string, number>();
+        for (const l of report.lines.filter((x) => x.bucket === "event")) event.set(l.account, (event.get(l.account) ?? 0) + l.amount);
+        res.plScope = {
+          estimatesTotal: -report.lines.filter((l) => l.source === "estimate").reduce((n, l) => n + l.amount, 0),
+          advanceTotal: report.offBook.reduce((n, o) => n + o.amount, 0),
+          store: report.regular,
+          event: [...event].map(([account, amount]) => ({ account, amount: Math.round(amount) })),
+          eventLabels: report.eventLabels,
+        };
+      }
       if (!trial.up_to_date) res.warnings.push("freeeの集計が更新中です。少し待って開き直すと最新になります。");
       return NextResponse.json(res);
     }
@@ -104,6 +150,22 @@ export async function GET(req: NextRequest) {
       res.warnings.push("領収書を読み込めませんでした。領収書の欄は空のまま表示しています。");
     }
     res.cash = { inflows: built.inflows, outflows, totals: summarize(built.inflows, outflows) };
+    await withScopes();
+    // 表の行の区分。取引は計上の月の振り分けで（前の月の取引も同じ決まりで）
+    try {
+      const [{ sources, detailCounts }, overrides] = await Promise.all([bucketsForSources(deals, journals, src), getOverrides()]);
+      res.rowBuckets = {};
+      res.rowOverrideKeys = {};
+      res.rowAuto = {};
+      for (const r of [...built.inflows, ...outflows]) {
+        const keys = overrideKeysForRow(r, sources, detailCounts);
+        res.rowBuckets[r.key] = rowBucket(r, sources, overrides);
+        res.rowOverrideKeys[r.key] = keys;
+        res.rowAuto[r.key] = keys.every((k) => !(k in overrides));
+      }
+    } catch {
+      res.warnings.push("行の区分（店舗・イベント・臨時）を出せませんでした。");
+    }
     return NextResponse.json(res);
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "読み込みに失敗しました" }, { status: 500 });
