@@ -35,11 +35,13 @@ export default function ScopePl({ scope, plScope }: { scope: "store" | "event"; 
           {r.salesBy.map((x) => (
             <tr key={x.label} className="spl-part"><th>{x.label}</th><td>{yen(x.amount)}</td></tr>
           ))}
-          <tr><th>原価（仕入）<span className="spl-note">原価率 {r.cogsRate}%</span></th><td>{yen(-r.cogs)}</td></tr>
+          <tr className="spl-sub"><th>原価（仕入）<span className="spl-note">原価率 {r.cogsRate}%</span></th><td>{yen(-r.cogs)}</td></tr>
+          <tr className="spl-sub"><th>費用（人件費のほか）</th><td>{yen(-r.otherExpense)}</td></tr>
           {r.expenses.map((x) => (
             <tr key={x.account} className="spl-part"><th>{x.account}</th><td>{yen(-x.amount)}</td></tr>
           ))}
-          <tr className="spl-sub"><th>人件費を払う前</th><td className={r.beforeLabor < 0 ? "spl-minus" : ""}>{yen(r.beforeLabor)}</td></tr>
+          <tr className="spl-sub"><th>人件費を払う前の利益</th><td className={r.beforeLabor < 0 ? "spl-minus" : ""}>{yen(r.beforeLabor)}</td></tr>
+          <tr className="spl-sub"><th>人件費</th><td>{yen(-r.laborTotal)}</td></tr>
           {r.labor.map((x) => (
             <tr key={x.label} className="spl-part"><th>{x.label}</th><td>{yen(-x.amount)}</td></tr>
           ))}
