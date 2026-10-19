@@ -32,7 +32,10 @@ function Accounts({ line }: { line: PlLine }) {
   );
 }
 
-export default function PlTable({ data }: { data: PlView }) {
+/** 全体のとき、損益計算書の下に「全体の結果」までの足し引きを出す（カードの全体と同じ数字になる） */
+export type PlExtra = { estimatesTotal: number; advanceTotal: number; total: number };
+
+export default function PlTable({ data, extra }: { data: PlView; extra?: PlExtra }) {
   const [open, setOpen] = useState<string | null>(null);
   return (
     <section className="card">
@@ -63,6 +66,21 @@ export default function PlTable({ data }: { data: PlView }) {
           ))}
         </tbody>
       </table>
+      {extra && (() => {
+        // 税引前の利益 − 見込みの費用 + 前受金の動き。残る差（帳簿の法人税等など）は「そのほか」に出す
+        const other = extra.total - (data.pretax - extra.estimatesTotal + extra.advanceTotal);
+        return (
+          <table className="pl pl-extra" aria-label="全体の結果までの足し引き">
+            <tbody>
+              <tr><th>税引前当期純利益（上の表）</th><td>{yen(data.pretax)}</td></tr>
+              <tr className="part"><th>見込みの費用（freee 未計上）</th><td>{yen(-extra.estimatesTotal)}</td></tr>
+              <tr className="part"><th>前受金の動き（クラファンなど）</th><td>{extra.advanceTotal > 0 ? "+" : ""}{yen(extra.advanceTotal)}</td></tr>
+              {other !== 0 && <tr className="part"><th>そのほか（帳簿の法人税等など）</th><td>{yen(other)}</td></tr>}
+              <tr className="total"><th>全体の結果</th><td className={extra.total < 0 ? "r" : ""}>{yen(extra.total)}</td></tr>
+            </tbody>
+          </table>
+        );
+      })()}
       {data.tax.estimated && (
         <p className="hint">法人税等は見込みです（税引前利益がプラスなら×25%、毎月 均等割 ¥5,833）。決算で確定します。</p>
       )}
@@ -77,6 +95,7 @@ export default function PlTable({ data }: { data: PlView }) {
         .pl tr.part th { padding-left: 36px; font-size: 13px; color: var(--muted); }
         .pl tr.part td { font-size: 13px; color: var(--muted); }
         .pl tr.open td { text-align: left; padding: 4px 0 10px 16px; }
+        .pl-extra { margin-top: 18px; }
         .r { color: #c62828; }
         .toggle { all: unset; cursor: pointer; border-radius: 6px; }
         .toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

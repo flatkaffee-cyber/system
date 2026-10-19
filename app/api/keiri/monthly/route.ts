@@ -32,6 +32,8 @@ export type KeiriMonthlyResponse = {
   rowBuckets?: Record<string, Bucket>;
   rowOverrideKeys?: Record<string, string[]>;
   rowAuto?: Record<string, boolean>;
+  /** 取引の計上が別の月の行 → その月（札を付け替えると、その月の数字が動く） */
+  rowOtherMonth?: Record<string, string>;
   /** 会計で見る: 全体の足し引きと、店舗だけ・イベントの中身 */
   plScope?: {
     estimatesTotal: number;
@@ -157,7 +159,11 @@ export async function GET(req: NextRequest) {
       res.rowBuckets = {};
       res.rowOverrideKeys = {};
       res.rowAuto = {};
+      res.rowOtherMonth = {};
+      const dealMonth = new Map(deals.map((d) => [d.id, d.issue_date.slice(0, 7)]));
       for (const r of [...built.inflows, ...outflows]) {
+        const m = r.dealId != null ? dealMonth.get(r.dealId) : undefined;
+        if (m && m !== month) res.rowOtherMonth[r.key] = m;
         const keys = overrideKeysForRow(r, sources, detailCounts);
         res.rowBuckets[r.key] = rowBucket(r, sources, overrides);
         res.rowOverrideKeys[r.key] = keys;

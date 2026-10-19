@@ -2,11 +2,12 @@
 
 import { Fragment, useState } from "react";
 import type { Sheet, SheetRow } from "@/lib/keiri/sheet";
+import type { Bucket } from "@/lib/keiri/buckets";
 import { MARK_COLORS, type RowMarks } from "@/lib/keiri/notes";
 import { freeeLinks } from "@/lib/keiri/nav";
 import { rowKeyToggles } from "@/lib/keiri/sheet";
 import ReceiptPreview from "./ReceiptPreview";
-import { md, yen } from "./format";
+import { BUCKET_LABEL, md, yen } from "./format";
 
 const STATUS_LABEL = { done: "✓", todo: "未処理", waiting: "消込待ち" } as const;
 const MARK_BG: Record<string, string> = Object.fromEntries(MARK_COLORS.map((c) => [c.key, c.bg]));
@@ -44,11 +45,14 @@ type Props = {
   sheet: Sheet;
   marks: RowMarks;
   onOpenMark: (row: SheetRow, at: { x: number; y: number }) => void;
+  /** 行の key → 区分（店舗・イベント・臨時）。無ければ区分の札を出さない */
+  buckets?: Record<string, Bucket>;
+  onOpenBucket?: (row: SheetRow, at: { x: number; y: number }) => void;
 };
 
 // 月次の「経理で見る」の表。1行＝1件の入出金。区切りごとに小計、最後に合計（移動は除く）。
 // 行を押すと、すぐ下に明細の原文・freeeのリンク・領収書の画像を開く。右クリックかメモのセルで、色とメモを付ける。
-export default function KeiriSheet({ sheet, marks, onOpenMark }: Props) {
+export default function KeiriSheet({ sheet, marks, onOpenMark, buckets, onOpenBucket }: Props) {
   const [openKey, setOpenKey] = useState<string | null>(null);
   const toggle = (key: string) => setOpenKey(openKey === key ? null : key);
 
@@ -62,6 +66,7 @@ export default function KeiriSheet({ sheet, marks, onOpenMark }: Props) {
             <th className="c-date">日付</th>
             <th className="c-who">相手</th>
             <th className="c-acct">科目</th>
+            <th className="c-bk">区分</th>
             <th className="c-desc">摘要</th>
             <th className="c-amt">入金</th>
             <th className="c-amt">出金</th>
@@ -74,7 +79,7 @@ export default function KeiriSheet({ sheet, marks, onOpenMark }: Props) {
           {sheet.sections.map((sec) => (
             <Fragment key={sec.key}>
               <tr className={`sec sec-${sec.key}`}>
-                <th colSpan={4} scope="rowgroup">
+                <th colSpan={5} scope="rowgroup">
                   <span className="bar" aria-hidden="true" />
                   {sec.label}
                   <span className="count">{sec.rows.length}件</span>
@@ -106,6 +111,22 @@ export default function KeiriSheet({ sheet, marks, onOpenMark }: Props) {
                     <td className="c-date">{md(r.date)}</td>
                     <td className="c-who" title={r.partner ?? r.title}>{r.partner ?? r.title}</td>
                     <td className="c-acct">{r.account}</td>
+                    <td className="c-bk">
+                      {buckets?.[r.key] && (
+                        <button
+                          type="button"
+                          className={`bk-tag bk-${buckets[r.key]}`}
+                          aria-label={`${r.partner ?? r.title} の区分（${BUCKET_LABEL[buckets[r.key]]}）を変える`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            onOpenBucket?.(r, { x: rect.left, y: rect.bottom + 4 });
+                          }}
+                        >
+                          {BUCKET_LABEL[buckets[r.key]]}
+                        </button>
+                      )}
+                    </td>
                     <td className="c-desc">{r.description}</td>
                     <td className="c-amt">{r.side === "in" ? yen(r.amount) : ""}</td>
                     <td className="c-amt">{r.side === "out" ? yen(r.amount) : ""}</td>
@@ -135,7 +156,7 @@ export default function KeiriSheet({ sheet, marks, onOpenMark }: Props) {
                   </tr>
                   {openKey === r.key && (
                     <tr className="detail">
-                      <td colSpan={9}>
+                      <td colSpan={10}>
                         <div>元の文字: {r.title}</div>
                         <div className="links">
                           {freeeLinks(r).map((l) => (
@@ -153,7 +174,7 @@ export default function KeiriSheet({ sheet, marks, onOpenMark }: Props) {
         </tbody>
         <tfoot>
           <tr className="total">
-            <th colSpan={4} scope="row">
+            <th colSpan={5} scope="row">
               合計（移動を除く）<span className="net">差引 {yen(sheet.totals.net)}</span>
             </th>
             <td className="c-amt">{yen(sheet.totals.in)}</td>
@@ -182,6 +203,12 @@ export default function KeiriSheet({ sheet, marks, onOpenMark }: Props) {
         .c-date { width: 52px; color: var(--muted); font-variant-numeric: tabular-nums; }
         .c-who { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
         .c-desc { white-space: normal; min-width: 200px; }
+        .c-bk { width: 64px; }
+        .bk-tag { border: 0; border-radius: 6px; padding: 2px 7px; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+        .bk-tag.bk-regular { background: #e8f1fb; color: #1f5f8b; }
+        .bk-tag.bk-event { background: #fdf0e6; color: #9c5f22; }
+        .bk-tag.bk-irregular { background: #efe8f7; color: #5b3d8a; }
+        .bk-tag:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         .c-st { min-width: 64px; }
         .flink { margin-left: 6px; font-size: 11px; font-weight: 400; color: var(--accent); text-decoration: none; }
         .flink:hover { text-decoration: underline; }
