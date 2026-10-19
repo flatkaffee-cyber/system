@@ -10,3 +10,6 @@ next-env.d.ts
 
 .vercel
 .env*
+
+# ブレインストーミングの見本（コミットしない）
+.superpowers/
