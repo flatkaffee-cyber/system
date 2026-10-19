@@ -109,7 +109,7 @@ export default function Nav() {
             {g.label}
           </button>
         ))}
-        <Link href="/keiri" className="keiri-link">経理 →</Link>
+        <Link href="/keiri" className="keiri-link">業務管理 →</Link>
       </div>
       <div className="tabs">
         {current.tabs.map((t) => (

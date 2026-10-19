@@ -9,7 +9,7 @@ import { keiriMenu, keiriPageLabel } from "@/lib/keiri/nav";
 // JSX を変数に入れると styled-jsx のスコープが付かずスタイルが当たらないので、自分のスタイルを持つ部品にする。
 function KeiriMenu({ path }: { path: string }) {
   return (
-    <nav className="menu" aria-label="経理のメニュー">
+    <nav className="menu" aria-label="業務管理のメニュー">
       {keiriMenu().map((g) => (
         <div key={g.key} className="grp">
           {g.label && <div className="glabel">{g.label}</div>}
@@ -59,7 +59,7 @@ export default function KeiriShell({ children }: { children: React.ReactNode }) 
   return (
     <div className="shell">
       <aside className="side">
-        <div className="brand">flat. 経理</div>
+        <div className="brand">flat業務管理ページ</div>
         <KeiriMenu path={path} />
       </aside>
 
@@ -74,7 +74,7 @@ export default function KeiriShell({ children }: { children: React.ReactNode }) 
         >
           ☰
         </button>
-        <span className="brand">経理</span>
+        <span className="brand">業務管理</span>
         <span className="page">{keiriPageLabel(path) ?? ""}</span>
       </header>
       {open && (
