@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isConnected } from "@/lib/freee";
 import { pickSource } from "@/lib/freeeMirror/source";
 import { passAuth } from "@/lib/internalFetch";
+import { squareEventSales } from "@/lib/squareEvents";
 import { buildMonthly, saveSettings, setOverride, type Bucket, type Settings } from "@/lib/monthlyReport";
 
 export const runtime = "nodejs";
@@ -24,18 +25,10 @@ export async function GET(req: NextRequest) {
     const to = `${month}-${String(last).padStart(2, "0")}`;
 
     // Squareの売上（イベント時間帯を外したもの）。イベント分の金額と、時間帯別の平均売上に使う
-    const res = await fetch(`${req.nextUrl.origin}/api/analytics?from=${from}&to=${to}`, {
-      headers: passAuth(req),
-      cache: "no-store",
-    });
-    // 取れなくても（保護されたプレビュー環境など）freee側のレポートは出す
-    const a = res.ok ? await res.json().catch(() => null) : null;
-    const evSales: { label: string; sales: number; reason: string }[] = a?.excludedEvents?.sales ?? [];
-    const data = await buildMonthly(
-      month,
-      evSales.filter((e) => e.reason === "イベント"),
-      src,
-    );
+    const { events, analytics } = await squareEventSales(req.nextUrl.origin, passAuth(req), from, to);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const a = analytics as any;
+    const data = await buildMonthly(month, events, src);
 
     const bizDays: number = (a?.sales?.byDay ?? []).length;
     const hourly = ((a?.sales?.byHour ?? []) as { hour: number; sales: number }[])

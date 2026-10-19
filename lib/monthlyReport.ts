@@ -11,7 +11,16 @@ import { getReceipts, receiptLines, type SavedReceipt } from "@/lib/receipts";
 import { EXCLUDE_WINDOWS } from "@/lib/salesEvents";
 import { getShifts, toMin } from "@/lib/shift";
 
-export type Bucket = "regular" | "event" | "irregular";
+import {
+  buildLines,
+  LABOR_ACCOUNTS,
+  scopeTotals,
+  sourceBucket,
+  type Bucket,
+  type Line,
+} from "@/lib/keiri/buckets";
+import type { FreeeDeal, FreeeJournal } from "@/lib/keiri/types";
+export type { Bucket, Line } from "@/lib/keiri/buckets";
 
 const OVERRIDE_KEY = "monthly:overrides";
 const SETTINGS_KEY = "monthly:settings";
@@ -104,54 +113,11 @@ export async function setOverride(key: string, bucket: Bucket | null): Promise<v
 
 type AccountItem = { id: number; name: string; account_category?: string; categories?: string[] };
 
-const PL_CATEGORIES = [
-  "売上高",
-  "売上原価",
-  "販売管理費",
-  "営業外収益",
-  "営業外費用",
-  "特別利益",
-  "特別損失",
-  "法人税等",
-];
-
-/** 人件費として扱う科目 */
-export const LABOR_ACCOUNTS = ["役員報酬", "給料手当", "雑給", "賞与", "法定福利費", "外注費"];
-/** 一度きりの収入として扱う科目 */
-const IRREGULAR_ACCOUNTS = ["雑収入", "受取利息", "雑損失", "固定資産売却益", "固定資産売却損"];
-/** 領収書のこのタグが付いた行は一度きりの支出として扱う */
-const IRREGULAR_TAGS = [
-  "物販",
-  "内装・家具",
-  "店舗備品",
-  "開業準備",
-  "クラファン",
-  // 開店まもない時期に揃えている道具類。毎月買うものではない
-  "調理器具",
-  "工具・作業用品",
-  "塗装材料",
-];
-
 type Detail = {
   entry_side?: "credit" | "debit";
   account_item_id: number;
   amount: number;
   description?: string;
-};
-
-export type Line = {
-  key: string; // 付け替えの保存に使う一意キー
-  source: "deal" | "journal" | "estimate" | "event-adjust";
-  sourceId: number | string;
-  date: string;
-  account: string;
-  /** 利益への影響。収入はプラス、費用はマイナス */
-  amount: number;
-  description: string;
-  tags: string[];
-  auto: Bucket;
-  bucket: Bucket;
-  reason: string;
 };
 
 function monthRange(month: string) {
@@ -203,84 +169,12 @@ export async function buildMonthly(
 
   const accounts = new Map<number, AccountItem>();
   for (const a of accountItems) accounts.set(a.id, a);
-  const isPL = (a?: AccountItem) =>
-    !!a &&
-    (PL_CATEGORIES.includes(a.account_category ?? "") ||
-      (a.categories ?? []).some((c) => PL_CATEGORIES.includes(c)));
 
   const eventDays = new Set(
     EXCLUDE_WINDOWS.filter((w) => w.reason === "イベント" && w.date.startsWith(month)).map((w) => w.date),
   );
-  const tagOf = receiptTagger(receipts);
-
-  // 前受金（クラファンなど）は損益ではないが、入ってきたお金として欄外に見せる
-  const offBook: { date: string; label: string; amount: number }[] = [];
-
-  const lines: Line[] = [];
-  const push = (
-    source: Line["source"],
-    sourceId: number,
-    idx: number,
-    date: string,
-    d: Detail,
-    side: "credit" | "debit",
-  ) => {
-    const acc = accounts.get(d.account_item_id);
-    const name = acc?.name ?? String(d.account_item_id);
-    if (!isPL(acc)) {
-      if (name === "前受金" && side === "credit") {
-        offBook.push({ date, label: d.description || "前受金", amount: d.amount });
-      }
-      return;
-    }
-    const amount = side === "credit" ? d.amount : -d.amount;
-    const description = d.description ?? "";
-    const tags = tagOf(sourceId, d.amount);
-
-    let auto: Bucket = "regular";
-    let reason = "";
-    const onEventDay = eventDays.has(date);
-    if (IRREGULAR_ACCOUNTS.includes(name)) {
-      auto = "irregular";
-      reason = `${name}は毎月のものではない`;
-    } else if (/返金|出金取消|キャッシュバック/.test(description)) {
-      auto = "irregular";
-      reason = "返金・取消";
-    } else if (tags.some((t) => IRREGULAR_TAGS.includes(t))) {
-      auto = "irregular";
-      reason = `タグ「${tags.filter((t) => IRREGULAR_TAGS.includes(t)).join("・")}」`;
-    } else if (/DJ|イベント|ライブ/.test(description) || (onEventDay && ["支払報酬", "賃借料"].includes(name))) {
-      auto = "event";
-      reason = onEventDay ? "イベント日の費用・売上" : "摘要にイベント";
-    } else if (onEventDay && /【売上】/.test(description)) {
-      // Square連携の売上はイベント分を後でまとめて移すので、ここでは通常のまま
-      auto = "regular";
-    }
-    const key = `${source}:${sourceId}:${idx}`;
-    lines.push({
-      key,
-      source,
-      sourceId,
-      date,
-      account: name,
-      amount,
-      description,
-      tags,
-      auto,
-      bucket: overrides[key] ?? auto,
-      reason,
-    });
-  };
-
-  for (const deal of deals) {
-    deal.details.forEach((d, i) => {
-      const side = d.entry_side ?? (deal.type === "income" ? "credit" : "debit");
-      push("deal", deal.id, i, deal.issue_date, d, side);
-    });
-  }
-  for (const j of journals) {
-    j.details.forEach((d, i) => push("journal", j.id, i, j.issue_date, d, d.entry_side ?? "debit"));
-  }
+  // 損益の行と、前受金の動き（クラファンなど。入金は＋、売上への振り替え・返金は−）
+  const { lines, offBook } = buildLines({ deals, journals, accounts, tagOf: receiptTagger(receipts), overrides, eventDays });
 
   // Squareのイベント時間帯の売上を、通常営業の売上からイベントへ移す
   for (const ev of squareEvents) {
@@ -361,10 +255,8 @@ export async function buildMonthly(
   const beforeLabor = sales - cogs - otherExpense;
   const regularProfit = beforeLabor - labor;
 
-  const ev = lines.filter((l) => l.bucket === "event");
-  const ir = lines.filter((l) => l.bucket === "irregular");
-  const eventTotal = sum(ev);
-  const irregularTotal = sum(ir);
+  // 店舗・イベント・臨時・全体の4つの数字。経理画面の月次と同じ計算（lib/keiri/buckets.ts）
+  const scopes = scopeTotals(lines, offBook);
 
   // ── アルバイト試算の材料 ──
   const shifts = (await getShifts()).filter((s) => s.date.startsWith(month));
@@ -416,9 +308,11 @@ export async function buildMonthly(
       laborTotal: r(labor),
       profit: r(regularProfit),
     },
-    event: { total: r(eventTotal) },
-    irregular: { total: r(irregularTotal) },
-    final: r(regularProfit + eventTotal + irregularTotal),
+    event: { total: scopes.event },
+    // 臨時には前受金の動き（クラファンの入金など）も入る
+    irregular: { total: scopes.irregular },
+    final: scopes.total,
+    scopes,
     offBook,
     lines: lines.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)),
     shift: {
@@ -432,4 +326,38 @@ export async function buildMonthly(
       })),
     },
   };
+}
+
+/**
+ * 取引・振替伝票ごとの区分（経理画面の表の行の札に使う）。月次レポートと同じ振り分け・付け替え・領収書のタグで、
+ * 月で区切らずに数える（前の月に計上して今月払った取引も、その取引の月の振り分けになる）
+ */
+export async function bucketsForSources(
+  deals: FreeeDeal[],
+  journals: FreeeJournal[],
+  src: FreeeSource,
+): Promise<{ sources: Map<string, Bucket>; detailCounts: Map<string, number> }> {
+  const [accountItems, receipts, overrides] = await Promise.all([
+    src.accountItems() as Promise<AccountItem[]>,
+    getReceipts(),
+    getOverrides(),
+  ]);
+  const accounts = new Map(accountItems.map((a) => [a.id, a]));
+  const eventDays = new Set(EXCLUDE_WINDOWS.filter((w) => w.reason === "イベント").map((w) => w.date));
+  const { lines } = buildLines({ deals, journals, accounts, tagOf: receiptTagger(receipts), overrides, eventDays });
+  const bySource = new Map<string, Line[]>();
+  for (const l of lines) {
+    const k = `${l.source}:${l.sourceId}`;
+    bySource.set(k, [...(bySource.get(k) ?? []), l]);
+  }
+  const sources = new Map<string, Bucket>();
+  for (const [k, ls] of bySource) {
+    const b = sourceBucket(ls);
+    if (b) sources.set(k, b);
+  }
+  const detailCounts = new Map<string, number>([
+    ...deals.map((d): [string, number] => [`deal:${d.id}`, d.details.length]),
+    ...journals.map((j): [string, number] => [`journal:${j.id}`, j.details.length]),
+  ]);
+  return { sources, detailCounts };
 }

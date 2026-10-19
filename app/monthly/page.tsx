@@ -289,11 +289,12 @@ export default function Monthly() {
                 </tr>
               </tbody>
             </table>
+            <p className="note">この月の成績は、店舗とイベントと臨時（クラファンや補助金などの一度きりの収入・支出）を合わせた結果です。経理画面の月次の「全体の結果」と同じ数字です。</p>
             {d.offBook.length > 0 && (
               <p className="note loan">
-                このほか、まだ売上にならない入金があります：
-                {d.offBook.map((o) => `${o.date.slice(5)} ${o.label} ${fmt(o.amount)}`).join("、")}。
-                クラファンはリターンを送った時点で売上になります。
+                臨時には、まだ売上にならない入金（前受金）も入れています：
+                {d.offBook.map((o) => `${o.date.slice(5)} ${o.label} ${o.amount < 0 ? `${fmt(o.amount)}（売上への振り替え）` : signed(o.amount)}`).join("、")}。
+                クラファンはリターンを送った時点で売上になりますが、そのときは臨時の中で打ち消し合うので、二重には数えません。
               </p>
             )}
           </section>
