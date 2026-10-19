@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isConnected } from "@/lib/freee";
 import { pickSource } from "@/lib/freeeMirror/source";
 import { passAuth } from "@/lib/internalFetch";
-import { squareEventSales } from "@/lib/squareEvents";
+import { squareEventSales } from "@/lib/keiri/squareEvents";
 import { buildMonthly, saveSettings, setOverride, type Bucket, type Settings } from "@/lib/monthlyReport";
 
 export const runtime = "nodejs";
@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
     const to = `${month}-${String(last).padStart(2, "0")}`;
 
     // Squareの売上（イベント時間帯を外したもの）。イベント分の金額と、時間帯別の平均売上に使う
-    const { events, analytics } = await squareEventSales(req.nextUrl.origin, passAuth(req), from, to);
+    const { ok: squareOk, events, analytics } = await squareEventSales(req.nextUrl.origin, passAuth(req), from, to);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const a = analytics as any;
     const data = await buildMonthly(month, events, src);
@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
       .map((h) => ({ hour: h.hour, avgSales: bizDays ? Math.round(h.sales / bizDays) : 0 }))
       .sort((p, q) => ((p.hour + 18) % 24) - ((q.hour + 18) % 24)); // 6時始まりで並べる
 
-    return NextResponse.json({ ...data, bizDays, hourly });
+    return NextResponse.json({ ...data, bizDays, hourly, squareOk });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "取得に失敗" },

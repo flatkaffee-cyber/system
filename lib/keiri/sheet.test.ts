@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildSheet, monthTabs, NO_FILTER, rowKeyToggles } from "./sheet.ts";
+import { buildSheet, monthTabs, NO_FILTER, rowKeyToggles, clearsOnLoad } from "./sheet.ts";
 import type { CashRow } from "./types.ts";
 
 const row = (over: Partial<CashRow>): CashRow => ({
@@ -105,4 +105,11 @@ test("行のキー操作で開閉するのは、行そのものにフォーカ�
   assert.equal(rowKeyToggles("Enter", false), false);
   assert.equal(rowKeyToggles(" ", false), false);
   assert.equal(rowKeyToggles("a", true), false);
+});
+
+test("読み直しで画面を空にするのは、月か見方が変わったときだけ（札の付け替えのあとは前の表を出したまま）", () => {
+  assert.equal(clearsOnLoad(null, { month: "2026-09", view: "cash" }), true);
+  assert.equal(clearsOnLoad({ month: "2026-09", view: "cash" }, { month: "2026-10", view: "cash" }), true);
+  assert.equal(clearsOnLoad({ month: "2026-09", view: "cash" }, { month: "2026-09", view: "pl" }), true);
+  assert.equal(clearsOnLoad({ month: "2026-09", view: "cash" }, { month: "2026-09", view: "cash" }), false);
 });

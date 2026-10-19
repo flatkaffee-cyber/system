@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   buildLines,
   classify,
+  irregularRows,
   overrideKeysForRow,
   rowBucket,
   scopeTotals,
@@ -73,4 +74,14 @@ test("イベント日の支払報酬はイベント、摘要に返金は臨時�
   assert.equal(classify({ account: "消耗品費", description: "Amazon 返金", tags: [], date: "2026-09-02", eventDays: ev, fromAdvance: false }).auto, "irregular");
   assert.equal(classify({ account: "消耗品費", description: "", tags: ["店舗備品"], date: "2026-09-02", eventDays: ev, fromAdvance: false }).auto, "irregular");
   assert.equal(classify({ account: "売上高", description: "", tags: [], date: "2026-09-02", eventDays: ev, fromAdvance: true }).reason, "前受金からの振り替え");
+});
+
+test("臨時の一覧には前受金の動きも並び、合計が臨時の数字と一致する", () => {
+  const r = buildLines({ ...none, accounts, deals: [
+    { id: 30, issue_date: "2026-09-01", type: "income", details: [{ account_item_id: 5, amount: 10396, entry_side: "credit" }] },
+    { id: 31, issue_date: "2026-09-30", type: "income", details: [{ account_item_id: 2, amount: 508735, entry_side: "credit", description: "CAMPFIRE" }] },
+  ], journals: [] });
+  const rows = irregularRows(r.lines, r.offBook);
+  assert.deepEqual(rows.map((x) => [x.kind, x.amount]), [["line", 10396], ["advance", 508735]]);
+  assert.equal(rows.reduce((s, x) => s + x.amount, 0), scopeTotals(r.lines, r.offBook).irregular);
 });

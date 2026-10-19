@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { KeiriMonthlyResponse } from "@/app/api/keiri/monthly/route";
 import KeiriSheet from "./KeiriSheet";
 import PlTable from "./PlTable";
 import { monthLabel, yen } from "./format";
 import { isMonth, jstMonth } from "@/lib/keiri/period";
-import { buildSheet, monthTabs, NO_FILTER, type SheetFilter, type SheetRow } from "@/lib/keiri/sheet";
+import { buildSheet, clearsOnLoad, monthTabs, NO_FILTER, type SheetFilter, type SheetRow } from "@/lib/keiri/sheet";
 import RowMarkMenu from "./RowMarkMenu";
 import MemoBoard from "./MemoBoard";
 import SyncBar from "./SyncBar";
@@ -42,11 +42,16 @@ export default function KeiriMonthly() {
     [router, scope],
   );
 
+  const loadedFor = useRef<{ month: string; view: string } | null>(null);
   useEffect(() => {
     let alive = true;
-    setLoading(true);
     setError("");
-    setData(null); // 前の月の数字が残らないように
+    // 前の月の数字が残らないように、月か見方が変わったときだけ空にする。付け替えのあとの読み直しは前の表のまま差し替える
+    if (clearsOnLoad(loadedFor.current, { month, view })) {
+      setLoading(true);
+      setData(null);
+    }
+    loadedFor.current = { month, view };
     fetch(`/api/keiri/monthly?month=${encodeURIComponent(month)}&view=${view}`, { cache: "no-store" })
       .then(async (r) => {
         const j = await r.json();

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isConnected } from "@/lib/freee";
 import { passAuth } from "@/lib/internalFetch";
 import { bucketsForSources, buildMonthly, getOverrides, type MonthlyData } from "@/lib/monthlyReport";
-import { squareEventSales } from "@/lib/squareEvents";
+import { squareEventSales } from "@/lib/keiri/squareEvents";
 import { overrideKeysForRow, rowBucket, type Bucket, type Scopes } from "@/lib/keiri/buckets";
 import { pickSource } from "@/lib/freeeMirror/source";
 import { getReceipts } from "@/lib/receipts";
@@ -76,8 +76,12 @@ export async function GET(req: NextRequest) {
 
   const p = periodOf(month);
   // 4つの数字は月次レポートと同じ計算で出す。表や損益計算書の読み込みと並べて走らせる
+  let squareOk = true;
   const reportP: Promise<MonthlyData | null> = squareEventSales(req.nextUrl.origin, passAuth(req), p.from, p.to)
-    .then(({ events }) => buildMonthly(month, events, src))
+    .then(({ ok, events }) => {
+      squareOk = ok;
+      return buildMonthly(month, events, src);
+    })
     .catch(() => null);
   const withScopes = async () => {
     const report = await reportP;
@@ -85,6 +89,7 @@ export async function GET(req: NextRequest) {
       res.warnings.push("店舗・イベント・臨時の数字を出せませんでした。表はそのまま見られます。");
       return null;
     }
+    if (!squareOk) res.warnings.push("Square の売上を取れなかったため、イベントの日のレジ売上が「店舗」に入っています。少しあとで開き直してください。");
     res.scopes = report.scopes;
     res.advanceIn = report.offBook.filter((o) => o.amount > 0).reduce((s, o) => s + o.amount, 0);
     return report;

@@ -93,3 +93,11 @@ export function monthTabs(thisMonth: string, first: string = FIRST_MONTH): strin
   }
   return out;
 }
+
+/**
+ * 読み直しのときに画面（カード・表）を空にするか。月か見方が変わったときだけ空にする
+ * （前の月の数字が残らないように）。札の付け替えのあとの読み直しでは、前の表を出したまま差し替える
+ */
+export function clearsOnLoad(prev: { month: string; view: string } | null, next: { month: string; view: string }): boolean {
+  return !prev || prev.month !== next.month || prev.view !== next.view;
+}

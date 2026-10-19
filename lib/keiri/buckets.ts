@@ -178,3 +178,19 @@ export function overrideKeysForRow(row: RowRef, sources: Map<string, Bucket>, de
   const n = k && sources.has(k) ? detailCounts.get(k) ?? 0 : 0;
   return n > 0 ? Array.from({ length: n }, (_, i) => `${k}:${i}`) : [`row:${row.key}`];
 }
+
+/** 月次レポートの「臨時」の一覧の行。損益の行と前受金の動き（付け替えはできない）を日付の順に並べる。合計は scopes.irregular と同じ */
+export type IrregularRow<L> =
+  | { kind: "line"; key: string; date: string; amount: number; line: L }
+  | { kind: "advance"; key: string; date: string; amount: number; label: string };
+
+export function irregularRows<L extends { key: string; date: string; amount: number; bucket: Bucket }>(
+  lines: L[],
+  offBook: OffBookEntry[],
+): IrregularRow<L>[] {
+  const rows: IrregularRow<L>[] = [
+    ...lines.filter((l) => l.bucket === "irregular").map((l): IrregularRow<L> => ({ kind: "line", key: l.key, date: l.date, amount: l.amount, line: l })),
+    ...offBook.map((o, i): IrregularRow<L> => ({ kind: "advance", key: `advance:${i}`, date: o.date, amount: o.amount, label: o.label })),
+  ];
+  return rows.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+}

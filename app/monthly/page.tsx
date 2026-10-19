@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Nav from "@/components/Nav";
+import { irregularRows } from "@/lib/keiri/buckets";
 
 // 月次レポート。freeeの実績を
 //   ① 通常営業の実力 → ② 臨時・不定期（イベント／一度きり）→ ③ この月の成績
@@ -45,6 +46,7 @@ type Data = {
   shift: { days: number; dayHours: number; nightHours: number; byStaff: { staff: string; day: number; night: number }[] };
   bizDays: number;
   hourly: { hour: number; avgSales: number }[];
+  squareOk?: boolean;
   error?: string;
 };
 
@@ -120,7 +122,8 @@ export default function Monthly() {
   }, [d, wage, night, hours]);
 
   const evLines = d?.lines.filter((l) => l.bucket === "event") ?? [];
-  const irLines = d?.lines.filter((l) => l.bucket === "irregular") ?? [];
+  // 臨時の一覧には前受金の動き（クラファンの入金など）も並べ、見出しの金額と合計が合うようにする
+  const irRows = d ? irregularRows(d.lines, d.offBook) : [];
   const maxHour = d ? Math.max(1, ...d.hourly.map((h) => h.avgSales)) : 1;
 
   const LineRow = ({ l }: { l: Line }) => (
@@ -253,11 +256,30 @@ export default function Monthly() {
             ) : (
               <p className="note">この月のイベントはありません。</p>
             )}
+            {d.squareOk === false && (
+              <p className="note">Square の売上を取れなかったため、イベントの日のレジ売上が通常営業に入っています。少しあとで「更新」を押してください。</p>
+            )}
             <h3>
               臨時の収入・支出 <span>{signed(d.irregular.total)}</span>
             </h3>
-            {irLines.length ? (
-              <ul className="lines">{irLines.map((l) => <LineRow key={l.key} l={l} />)}</ul>
+            {irRows.length ? (
+              <ul className="lines">
+                {irRows.map((x) =>
+                  x.kind === "line" ? (
+                    <LineRow key={x.key} l={x.line} />
+                  ) : (
+                    <li key={x.key}>
+                      <span className="dt">{x.date.slice(5)}</span>
+                      <span className="desc">
+                        {x.label}
+                        <small>前受金{x.amount < 0 ? "の振り替え・返金" : "の入金（まだ売上にならないお金）"}</small>
+                      </span>
+                      <b className={x.amount >= 0 ? "plus" : "minus"}>{signed(x.amount)}</b>
+                      <span className="fixed">臨時</span>
+                    </li>
+                  ),
+                )}
+              </ul>
             ) : (
               <p className="note">一度きりの収入・支出はありません。</p>
             )}
