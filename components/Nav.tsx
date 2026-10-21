@@ -27,6 +27,7 @@ const GROUPS: Group[] = [
       { href: "/shikomi", label: "📆 週間予定" },
       { href: "/menu", label: "🍽️ メニュー" },
       { href: "/menu-admin", label: "✏️ メニュー編集" },
+      { href: "/buppan", label: "👕 物販登録" },
       { href: "/food", label: "🍳 レシピ" },
       { href: "/purchase", label: "📋 発注リスト" },
       { href: "/orders", label: "📬 購入メール" },
