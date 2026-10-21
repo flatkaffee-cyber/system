@@ -8,6 +8,17 @@
 // 在庫は店のレジと共通。店頭で売れた分もネットの在庫から減る。
 
 import { listCategories, createCategory, listItems } from "@/lib/squareCatalog";
+import { checkPin, hasPin } from "@/lib/menuAdmin";
+
+/**
+ * 書き込んでよいか。メニュー編集の checkPin は暗証番号が未設定だと誰でも通すが、
+ * 物販登録は未設定なら止める（決めるのはメニュー編集の画面だけにする）。
+ */
+export async function goodsPinError(pin: string): Promise<string | null> {
+  if (!(await hasPin())) return "先にメニュー編集の画面で暗証番号を決めてください";
+  if (!(await checkPin(pin))) return "暗証番号が違います";
+  return null;
+}
 
 const API = "https://connect.squareup.com/v2";
 const SQUARE_VERSION = "2024-11-20";

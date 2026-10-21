@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkPin } from "@/lib/menuAdmin";
-import { createGoods, listGoods, validateGoods, type GoodsInput } from "@/lib/squareGoods";
+import { createGoods, goodsPinError, listGoods, validateGoods, type GoodsInput } from "@/lib/squareGoods";
 
 export const runtime = "nodejs";
 
@@ -27,9 +26,8 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: "不正なリクエスト" }, { status: 400 });
   }
-  if (!(await checkPin(b.pin ?? ""))) {
-    return NextResponse.json({ error: "暗証番号が違います" }, { status: 401 });
-  }
+  const pinErr = await goodsPinError(b.pin ?? "");
+  if (pinErr) return NextResponse.json({ error: pinErr }, { status: 401 });
   const bad = validateGoods(b);
   if (bad) return NextResponse.json({ error: bad }, { status: 400 });
 

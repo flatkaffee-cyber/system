@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkPin } from "@/lib/menuAdmin";
-import { attachGoodsImage } from "@/lib/squareGoods";
+import { attachGoodsImage, goodsPinError } from "@/lib/squareGoods";
 
 export const runtime = "nodejs";
 
@@ -17,9 +16,8 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: "写真を受け取れませんでした" }, { status: 400 });
   }
-  if (!(await checkPin(String(form.get("pin") ?? "")))) {
-    return NextResponse.json({ error: "暗証番号が違います" }, { status: 401 });
-  }
+  const pinErr = await goodsPinError(String(form.get("pin") ?? ""));
+  if (pinErr) return NextResponse.json({ error: pinErr }, { status: 401 });
   const itemId = String(form.get("itemId") ?? "");
   const file = form.get("file");
   if (!itemId) return NextResponse.json({ error: "itemId が必要です" }, { status: 400 });
