@@ -17,6 +17,9 @@ type Advance = {
 };
 type PayerSummary = { total: number; unpaid: number; count: number; unpaidCount: number };
 type TagSummary = { tag: string; amount: number };
+type Payment = { date: string; amount: number; remaining: number };
+type Person = { person: string; advanced: number; repaid: number; balance: number; plan: Payment[] };
+type Rule = { monthly: number; day: number; prepayThreshold: number };
 type Summary = {
   totalAmount: number;
   totalCount: number;
@@ -31,6 +34,9 @@ export default function KariirePage() {
   const [filterPayer, setFilterPayer] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [persons, setPersons] = useState<Person[] | null>(null);
+  const [rule, setRule] = useState<Rule | null>(null);
+  const [openPlan, setOpenPlan] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -38,6 +44,8 @@ export default function KariirePage() {
       const data = await res.json();
       setAdvances(data.advances || []);
       setSummary(data.summary || null);
+      setPersons(data.persons ?? null);
+      setRule(data.rule ?? null);
     } catch { /* */ } finally {
       setLoading(false);
     }
@@ -57,12 +65,13 @@ export default function KariirePage() {
   const filteredTotal = filtered.reduce((s, a) => s + a.total, 0);
 
   const fmt = (n: number) => `¥${n.toLocaleString()}`;
+  const ymd = (d: string) => d.replace(/-/g, "/");
 
   return (
     <div className="wrap">
       <header>
         <h1>💴 役員借入金（立替）</h1>
-        <p>誰がいくら何を立て替えたか</p>
+        <p>誰にいくら返すか、いつ返し終わるか</p>
       </header>
 
       {loading ? (
@@ -71,29 +80,99 @@ export default function KariirePage() {
         <p>データなし</p>
       ) : (
         <>
-          {/* 立替者ごとのサマリー */}
-          <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+          {/* 人ごとの残りと返済予定（freee の役員借入金から） */}
+          <div className="card" style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 15, fontWeight: 700 }}>立替の残りと返済予定</div>
+            {rule && (
+              <div style={{ fontSize: 12, color: "var(--muted)", margin: "4px 0 12px" }}>
+                毎月{rule.day}日に{fmt(rule.monthly)}ずつ返す。役員報酬と業務委託費を払ったあとも口座に
+                {fmt(rule.prepayThreshold)}以上残る月は、前倒しで多めに返す（額はその都度決める）
+              </div>
+            )}
+            {!persons ? (
+              <p style={{ fontSize: 13, color: "var(--muted)" }}>freee の数字が読めませんでした</p>
+            ) : (
+              persons.map((p) => {
+                const last = p.plan[p.plan.length - 1];
+                const open = openPlan === p.person;
+                return (
+                  <div key={p.person} style={{ borderTop: "1px solid var(--line)", padding: "10px 0" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+                      <span style={{ fontWeight: 700 }}>{p.person}</span>
+                      <span style={{ fontSize: 20, fontWeight: 700, color: p.balance < 0 ? "#b22" : undefined }}>
+                        {p.balance < 0 ? `返しすぎ ${fmt(-p.balance)}` : `残り ${fmt(p.balance)}`}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
+                      立て替えた額 {fmt(p.advanced)}　返した額 {fmt(p.repaid)}
+                    </div>
+                    {p.plan.length > 0 && (
+                      <div style={{ fontSize: 13, marginTop: 4 }}>
+                        次回 {ymd(p.plan[0].date)} {fmt(p.plan[0].amount)}　／　
+                        {p.plan.length}回で {ymd(last.date)} に終わる予定
+                        <button
+                          type="button"
+                          className="sub-tab"
+                          style={{ marginLeft: 8, fontSize: 12 }}
+                          onClick={() => setOpenPlan(open ? null : p.person)}
+                        >
+                          {open ? "閉じる" : "予定を見る"}
+                        </button>
+                      </div>
+                    )}
+                    {open && (
+                      <table style={{ width: "100%", fontSize: 12, marginTop: 8, borderCollapse: "collapse" }}>
+                        <thead>
+                          <tr style={{ color: "var(--muted)", textAlign: "right" }}>
+                            <th style={{ textAlign: "left", fontWeight: 400 }}>回</th>
+                            <th style={{ textAlign: "left", fontWeight: 400 }}>日付</th>
+                            <th style={{ fontWeight: 400 }}>返す額</th>
+                            <th style={{ fontWeight: 400 }}>残り</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {p.plan.map((x, i) => (
+                            <tr key={x.date} style={{ textAlign: "right", borderTop: "1px solid var(--line)" }}>
+                              <td style={{ textAlign: "left", padding: "3px 0" }}>{i + 1}</td>
+                              <td style={{ textAlign: "left" }}>{ymd(x.date)}</td>
+                              <td>{fmt(x.amount)}</td>
+                              <td>{fmt(x.remaining)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* レシートの立替者ごと（絞り込み） */}
+          <div style={{ fontSize: 13, fontWeight: 700, margin: "4px 0 8px" }}>保存した立替レシート</div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
             {payers.map((p) => {
               const s = summary.byPayer[p];
               return (
-                <div
+                <button
                   key={p}
+                  type="button"
                   className="card"
                   style={{
-                    flex: 1, textAlign: "center", padding: 14, cursor: "pointer",
+                    flex: "1 1 120px", textAlign: "center", padding: 10, cursor: "pointer",
                     border: filterPayer === p ? "2px solid var(--accent)" : undefined,
                   }}
                   onClick={() => setFilterPayer(filterPayer === p ? "all" : p)}
                 >
                   <div style={{ fontSize: 13, fontWeight: 700 }}>{p}</div>
-                  <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>{fmt(s.total)}</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, marginTop: 2 }}>{fmt(s.total)}</div>
                   <div style={{ fontSize: 11, color: "var(--muted)" }}>{s.count}件</div>
                   {s.unpaid > 0 && (
                     <div style={{ fontSize: 11, color: "#b22", marginTop: 2 }}>
-                      未返済 {fmt(s.unpaid)}（{s.unpaidCount}件）
+                      freee 未登録 {fmt(s.unpaid)}（{s.unpaidCount}件）
                     </div>
                   )}
-                </div>
+                </button>
               );
             })}
           </div>
@@ -115,8 +194,8 @@ export default function KariirePage() {
           <div className="sub-tabs" style={{ marginBottom: 12 }}>
             {[
               { key: "all", label: "全件" },
-              { key: "unpaid", label: "未返済" },
-              { key: "paid", label: "返済済" },
+              { key: "unpaid", label: "freee 未登録" },
+              { key: "paid", label: "freee 登録済み" },
             ].map((f) => (
               <button
                 key={f.key}
@@ -130,7 +209,7 @@ export default function KariirePage() {
 
           <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 8 }}>
             {filterPayer !== "all" && `${filterPayer}の`}
-            {filterStatus === "unpaid" ? "未返済" : filterStatus === "paid" ? "返済済" : "全"}立替: {filtered.length}件 / {fmt(filteredTotal)}
+            {filterStatus === "unpaid" ? "freee 未登録の" : filterStatus === "paid" ? "freee 登録済みの" : ""}立替: {filtered.length}件 / {fmt(filteredTotal)}
           </div>
 
           {/* 明細リスト */}

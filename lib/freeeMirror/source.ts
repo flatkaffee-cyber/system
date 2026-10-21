@@ -22,7 +22,14 @@ export type TrialPlResponse = { trial_pl: { balances: TrialPlBalance[] }; up_to_
 export type TrialBsBalance = {
   account_item_id?: number;
   closing_balance?: number;
-  partners?: { id: number; name: string; closing_balance: number }[];
+  partners?: {
+    id: number;
+    name: string;
+    closing_balance: number;
+    opening_balance?: number;
+    debit_amount?: number;
+    credit_amount?: number;
+  }[];
 };
 export type TrialBsPartnerResponse = { trial_bs: { balances: TrialBsBalance[] }; up_to_date: boolean };
 

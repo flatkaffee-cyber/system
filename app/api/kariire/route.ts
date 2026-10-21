@@ -1,12 +1,13 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getReceipts, receiptLines } from "@/lib/receipts";
+import { personAdvances, REPAY_MONTHLY, REPAY_DAY, PREPAY_THRESHOLD } from "@/lib/kariire";
 
 export const runtime = "nodejs";
 
-// GET: 役員借入金（立替）の詳細一覧
-export async function GET() {
+// GET: 役員借入金（立替）の人ごとの残りと返済予定、レシートの一覧
+export async function GET(req: NextRequest) {
   try {
-    const receipts = await getReceipts();
+    const [receipts, persons] = await Promise.all([getReceipts(), personAdvances(req)]);
 
     // 立替（expenseKind === "company"）のみ抽出
     const advances = receipts
@@ -65,6 +66,8 @@ export async function GET() {
           .map(([tag, amount]) => ({ tag, amount })),
       },
       advances,
+      persons,
+      rule: { monthly: REPAY_MONTHLY, day: REPAY_DAY, prepayThreshold: PREPAY_THRESHOLD },
     });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "エラー" }, { status: 500 });

@@ -1,94 +1,90 @@
 import { NextRequest, NextResponse } from "next/server";
-import { passAuth } from "@/lib/internalFetch";
 import { getStaffLineIds, pushLine } from "@/lib/staffLine";
-import { getBills, getPayments } from "@/lib/bills";
-import { paymentsIn } from "@/lib/loans";
+import { freeeGet, FREEE_COMPANY_ID } from "@/lib/freee";
+import { pickSource } from "@/lib/freeeMirror/source";
+import { getReceipts } from "@/lib/receipts";
+import { personAdvances, PAYROLL_ON_PAYDAY, PREPAY_THRESHOLD, REPAY_DAY } from "@/lib/kariire";
+import { nextPayday } from "@/lib/keiri/advances";
+import { buildRemindMessage, type RemindInput } from "@/lib/keiri/remind";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
-// 週2回（月・木の朝）、経理でやることをLINEで知らせる。
-// 明細が溜まってから気づくと腰が重くなるので、少ないうちに片付けてもらう。
-// 送るのは坂本だけ（経理を触るのが坂本のため）。
+// 毎朝、経理で坂本さんにしかできないことを LINE で知らせる（2026-10-21 坂本さんの希望で毎日に）。
+// 明細の消込やレシートとの突き合わせは、その前に Claude が毎朝片付ける（このパソコンの定期タスク）。
+// ここに出すのは、レシートが無い支払い・freee に入っていない立替レシート・判断が要る明細・6日の返済。
+// 頼むことが無い日は送らない。?force=1 で送らずに文面だけ返す（確かめ用）。
 const TARGET = "坂本";
 const BASE = "https://flat-keihi.vercel.app";
-
-const jstNow = () => new Date(Date.now() + 9 * 3600_000);
+const BANK = 4808679; // GMOあおぞら 普通預金
 
 export async function GET(req: NextRequest) {
   try {
-    const now = jstNow();
-    const day = now.getUTCDay(); // 0=日 1=月 4=木
-    const force = req.nextUrl.searchParams.get("force") === "1";
-    if (!force && day !== 1 && day !== 4) {
-      return NextResponse.json({ skipped: true, reason: "月曜・木曜ではありません" });
-    }
-    const today = now.toISOString().slice(0, 10);
-    const month = today.slice(0, 7);
+    const dryRun = req.nextUrl.searchParams.get("force") === "1";
+    const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+    const from = new Date(Date.now() + 9 * 3600_000 - 90 * 86400_000).toISOString().slice(0, 10);
+    const src = await pickSource(req);
 
-    // 未処理の銀行明細
-    let txnLines: string[] = [];
-    let txnCount = 0;
+    const input: RemindInput = { today, base: BASE, unprocessed: [], noReceipt: [], unregisteredAdvances: [] };
+
     try {
-      const res = await fetch(`${req.nextUrl.origin}/api/freee/unprocessed`, {
-        cache: "no-store",
-        headers: passAuth(req),
-      });
-      const d = await res.json();
-      const txns: { date: string; amount: number; description: string }[] = d?.txns ?? [];
-      txnCount = txns.length;
-      txnLines = txns
-        .slice(0, 5)
-        .map((t) => `・${t.date.slice(5)} ¥${t.amount.toLocaleString()} ${t.description.slice(0, 18)}`);
+      const txns = await src.walletTxns({ from: "2026-06-01", to: today }, { walletableTypes: ["bank_account"], status: 1 });
+      input.unprocessed = txns.map((t) => ({ date: t.date, amount: t.amount, description: t.description }));
     } catch {
-      /* freeeが落ちていても他は知らせる */
+      /* freee が読めなくても他は知らせる */
     }
 
-    // 今月まだ払っていない定期請求
-    let billLines: string[] = [];
     try {
-      const [bills, payments] = await Promise.all([getBills(), getPayments()]);
-      const paid = new Set(
-        payments.filter((p) => p.month === month && p.paidAt).map((p) => p.billId),
-      );
-      billLines = bills
-        .filter((b) => b.active && b.startMonth <= month && !paid.has(b.id))
-        .map((b) => `・${b.payee} ¥${b.amount.toLocaleString()}${b.dueDay ? `（${b.dueDay}日）` : ""}`);
+      const [deals, partners] = await Promise.all([src.deals({ from, to: today }), src.partners()]);
+      const name = new Map(partners.map((p) => [p.id, p.name]));
+      input.noReceipt = deals
+        .filter((d) => d.details.some((l) => (l.description ?? "").includes("詳細未登録")))
+        .map((d) => ({
+          date: d.issue_date,
+          amount: d.amount ?? d.details.reduce((s, l) => s + l.amount, 0),
+          partner: (d.partner_id && name.get(d.partner_id)) || "（取引先なし）",
+        }))
+        .sort((a, b) => a.date.localeCompare(b.date));
     } catch {
-      /* 定期請求が読めなくても続ける */
+      /* 同上 */
     }
 
-    // 今月の借入返済
-    const loans = paymentsIn(month);
-    const loanTotal = loans.reduce((s, p) => s + p.total, 0);
-
-    const parts: string[] = ["【flat. 経理】やることの確認です"];
-    if (txnCount > 0) {
-      parts.push(
-        "",
-        `■ 未処理の銀行明細 ${txnCount}件`,
-        ...txnLines,
-        ...(txnCount > 5 ? [`ほか${txnCount - 5}件`] : []),
-        `${BASE}/meisai`,
-      );
-    }
-    if (billLines.length > 0) {
-      parts.push("", `■ ${month} の支払いでまだのもの`, ...billLines, `${BASE}/bills`);
-    }
-    if (loans.length > 0) {
-      parts.push(
-        "",
-        `■ 公庫の引き落とし ${loans[0].date.slice(5)}　¥${loanTotal.toLocaleString()}`,
-        "口座の残高を確認してください",
-      );
-    }
-    if (parts.length === 1) {
-      parts.push("", "未処理の明細も、払い忘れもありません。きれいです✨");
+    try {
+      input.unregisteredAdvances = (await getReceipts())
+        .filter((r) => (r.expenseKind ?? "company") === "company" && !r.registered && !/重複/.test(r.memo ?? ""))
+        .map((r) => ({ date: r.date, amount: r.total, payer: r.payer || "不明", vendor: (r.vendor || "").slice(0, 12) }))
+        .sort((a, b) => a.date.localeCompare(b.date));
+    } catch {
+      /* 同上 */
     }
 
-    const message = parts.join("\n");
-    const ids = await getStaffLineIds();
-    const id = ids[TARGET];
+    // 返済日の前の5日間だけ、次の返済と前倒しの見込みを出す
+    const payday = nextPayday(today, REPAY_DAY);
+    const daysTo = (Date.parse(payday) - Date.parse(today)) / 86400_000;
+    if (daysTo <= 5) {
+      const persons = await personAdvances(req);
+      const items = (persons ?? [])
+        .filter((p) => p.plan[0]?.date === payday)
+        .map((p) => ({ person: p.person, amount: p.plan[0].amount }));
+      let afterPayroll: number | null = null;
+      try {
+        const { walletables } = await freeeGet<{ walletables: { id: number; last_balance?: number }[] }>(
+          "/api/1/walletables",
+          { company_id: FREEE_COMPANY_ID, with_balance: "true" },
+        );
+        const bank = walletables.find((w) => w.id === BANK)?.last_balance;
+        if (typeof bank === "number") afterPayroll = bank - PAYROLL_ON_PAYDAY;
+      } catch {
+        /* 残高が分からなければ見込みは出さない */
+      }
+      input.repay = { date: payday, items, afterPayroll, prepayThreshold: PREPAY_THRESHOLD };
+    }
+
+    const message = buildRemindMessage(input);
+    if (!message) return NextResponse.json({ ok: true, sent: false, reason: "頼むことはありません" });
+    if (dryRun) return NextResponse.json({ ok: true, sent: false, message });
+
+    const id = (await getStaffLineIds())[TARGET];
     if (!id) {
       return NextResponse.json({
         ok: false,
@@ -97,11 +93,8 @@ export async function GET(req: NextRequest) {
       });
     }
     await pushLine(id, message);
-    return NextResponse.json({ ok: true, txnCount, bills: billLines.length, message });
+    return NextResponse.json({ ok: true, sent: true, message });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "エラー" },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: e instanceof Error ? e.message : "エラー" }, { status: 500 });
   }
 }
