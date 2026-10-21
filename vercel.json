@@ -13,10 +13,6 @@
       "schedule": "30 21 * * *"
     },
     {
-      "path": "/api/cron/square-deals",
-      "schedule": "0 22 * * 0"
-    },
-    {
       "path": "/api/cron/keiri-remind",
       "schedule": "0 0 * * *"
     },
