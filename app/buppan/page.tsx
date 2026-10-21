@@ -12,15 +12,18 @@ import Nav from "@/components/Nav";
 
 const PIN_STORE = "flat:menuPin"; // メニュー編集と同じ暗証番号
 const DEFAULT_SIZES = ["S", "M", "L", "XL"];
+const DEFAULT_COLORS = ["白"];
 const MAX_EDGE = 1600; // 写真の長い辺。ネットショップの表示には十分で、1枚1MB前後に収まる
 
-type SizeRow = { key: number; name: string; qty: string };
+type Row = { key: number; name: string };
 type Photo = { key: number; file: File; url: string };
 type ListItem = {
   id: string;
   name: string;
   sizes: { id: string; name: string; price: number | null; qty: number | null }[];
 };
+/** 在庫の表の1マス。色と枚数の組で持つ（キーは「色のkey:サイズのkey」） */
+type QtyMap = Record<string, string>;
 type Done = {
   itemId: string;
   name: string;
@@ -31,7 +34,16 @@ type Done = {
 
 let seq = 0;
 const nextKey = () => ++seq;
-const freshSizes = (): SizeRow[] => DEFAULT_SIZES.map((name) => ({ key: nextKey(), name, qty: "0" }));
+const freshRows = (names: string[]): Row[] => names.map((name) => ({ key: nextKey(), name }));
+const cell = (c: Row, s: Row) => `${c.key}:${s.key}`;
+/** Square の種類の名前。色が1つで空なら、サイズだけにする */
+const variationName = (colors: Row[], c: Row, s: Row) =>
+  colors.length === 1 && !c.name.trim() ? s.name.trim() : `${c.name.trim()} / ${s.name.trim()}`;
+/** 「白 / M」を色とサイズに分ける。区切りが無ければ色なし */
+const splitName = (n: string) => {
+  const i = n.lastIndexOf(" / ");
+  return i < 0 ? { color: "", size: n } : { color: n.slice(0, i), size: n.slice(i + 3) };
+};
 
 /** 写真を長い辺 MAX_EDGE の JPEG に縮める。読めない形式（HEIC など）はそのまま返す */
 async function shrink(file: File): Promise<Blob> {
@@ -63,11 +75,11 @@ const GUIDE_STEPS: { title: string; body: string }[] = [
   },
   {
     title: "商品名と値段を入れる",
-    body: "色ちがいは1色ずつ別の商品にします（例：flat. ロゴ Tシャツ（白））。名前に「Tシャツ」を入れておくと、売上で物販に分けて数えられます。値段は税込です。",
+    body: "同じ柄の色ちがいは1つの商品にまとめます（例：CLASSIC MELT Tシャツ）。名前に「Tシャツ」を入れておくと、売上で物販に分けて数えられます。値段は税込です。",
   },
   {
-    title: "サイズと枚数を入れる",
-    body: "サイズごとに、いま手元にある枚数を入れます。在庫は店のレジと共通で、店頭で売れた分もネットの在庫から減ります。使わないサイズは × で消します。",
+    title: "色・サイズ・枚数を入れる",
+    body: "色（例：白・サックス・オリーブ）とサイズを並べ、表のマスに色×サイズごとの枚数を入れます。Square には「白 / M」のような種類として入り、在庫もそれぞれ別に数えます。在庫は店のレジと共通です。",
   },
   {
     title: "写真を選んで登録する",
@@ -78,6 +90,144 @@ const GUIDE_STEPS: { title: string; body: string }[] = [
     body: "ここだけ Square で手作業です。登録後に出る［Square でこの商品を開く］を押し、販売チャネルの「Square オンライン」をオンにして保存します。オンにするまでネットショップには出ません。",
   },
 ];
+
+/** 色やサイズの名前を並べて直す欄。行を足す・消すもここ */
+function RowEditor(props: {
+  title: string;
+  rows: Row[];
+  addLabel: string;
+  placeholder: string;
+  onRename: (key: number, name: string) => void;
+  onRemove: (key: number) => void;
+  onAdd: () => void;
+}) {
+  return (
+    <div>
+      <div style={{ margin: "14px 0 6px", fontSize: 12, color: "var(--muted)" }}>{props.title}</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        {props.rows.map((r, i) => (
+          <div key={r.key} style={{ display: "flex", alignItems: "center", gap: 2, flex: "1 1 120px", maxWidth: 180 }}>
+            <input
+              aria-label={`${props.title} ${i + 1}`}
+              value={r.name}
+              placeholder={props.placeholder}
+              onChange={(e) => props.onRename(r.key, e.target.value)}
+              style={{ minWidth: 0 }}
+            />
+            <button
+              type="button"
+              className="ghost"
+              aria-label={`${props.title}「${r.name || i + 1}」を消す`}
+              disabled={props.rows.length <= 1}
+              onClick={() => props.onRemove(r.key)}
+              style={{ padding: 0, width: 36, height: 44, fontSize: 18, flexShrink: 0 }}
+            >
+              ×
+            </button>
+          </div>
+        ))}
+      </div>
+      <button type="button" className="ghost" onClick={props.onAdd} style={{ color: "var(--accent)" }}>
+        {props.addLabel}
+      </button>
+    </div>
+  );
+}
+
+/**
+ * 登録済みの商品の在庫を、色×サイズの表で直す。
+ * 入れた数は「いま手元にある数」として Square に棚卸しで書く（レジの在庫も同じ数になる）。
+ */
+function StockEditor({ item, pin, onSaved }: { item: ListItem; pin: string; onSaved: () => void }) {
+  const parts = item.sizes.map((v) => ({ ...v, ...splitName(v.name) }));
+  const colorNames = [...new Set(parts.map((p) => p.color))];
+  const sizeNames = [...new Set(parts.map((p) => p.size))];
+  const find = (c: string, s: string) => parts.find((p) => p.color === c && p.size === s);
+
+  const [edit, setEdit] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const changed = Object.entries(edit).filter(([id, v]) => {
+    const cur = item.sizes.find((x) => x.id === id)?.qty;
+    return v !== "" && Number(v) !== cur;
+  });
+
+  async function save() {
+    setBusy(true);
+    setMsg("");
+    try {
+      const r = await fetch("/api/buppan/stock", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin, changes: changed.map(([variationId, v]) => ({ variationId, qty: Number(v) })) }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || "在庫を保存できませんでした");
+      setEdit({});
+      setMsg(`${changed.length}か所の在庫を保存しました`);
+      onSaved();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "在庫を保存できませんでした");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ marginTop: 6 }}>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ borderCollapse: "collapse", fontSize: 13, fontVariantNumeric: "tabular-nums" }}>
+          <thead>
+            <tr>
+              <th scope="col" style={{ textAlign: "left", padding: "4px 8px 4px 0", fontWeight: 500, color: "var(--muted)" }}>在庫</th>
+              {sizeNames.map((s) => (
+                <th key={s} scope="col" style={{ padding: "4px 4px", fontWeight: 500, color: "var(--muted)", minWidth: 52 }}>{s}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {colorNames.map((c) => (
+              <tr key={c}>
+                <th scope="row" style={{ textAlign: "left", padding: "4px 8px 4px 0", whiteSpace: "nowrap" }}>{c || "—"}</th>
+                {sizeNames.map((s) => {
+                  const v = find(c, s);
+                  if (!v) return <td key={s} />;
+                  const val = edit[v.id] ?? (v.qty == null ? "" : String(v.qty));
+                  const low = v.qty != null && v.qty <= 1;
+                  return (
+                    <td key={s} style={{ padding: "3px 4px" }}>
+                      <input
+                        aria-label={`${item.name} ${v.name} の在庫`}
+                        inputMode="numeric"
+                        value={val}
+                        placeholder="—"
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => setEdit((cur) => ({ ...cur, [v.id]: e.target.value.replace(/[^\d]/g, "") }))}
+                        style={{
+                          textAlign: "right",
+                          padding: "6px 8px",
+                          fontSize: 14,
+                          minWidth: 48,
+                          borderColor: edit[v.id] !== undefined ? "var(--accent)" : low ? "#e2a9a0" : undefined,
+                        }}
+                      />
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {changed.length > 0 && (
+        <button type="button" className="primary" onClick={save} disabled={busy} style={{ marginTop: 8, padding: "10px 14px", fontSize: 14 }}>
+          {busy ? "保存しています…" : `在庫を保存する（${changed.length}か所）`}
+        </button>
+      )}
+      {msg && <p className="hint" role="status">{msg}</p>}
+    </div>
+  );
+}
 
 /** 登録の手引き。初めての人向けに開いておき、閉じた状態はこの端末で覚える */
 function Guide() {
@@ -121,7 +271,9 @@ function Guide() {
             ))}
           </ol>
           <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid var(--line)", fontSize: 12.5, lineHeight: 1.7, color: "var(--ink)" }}>
-            <strong>あとから直すとき</strong>：在庫を足す・値段を変える・写真を足す・消すは、いまは Square データの［商品とサービス］→［商品ライブラリ］でやります。
+            <strong>在庫を直すとき</strong>：下の「登録済みの物販」の表で数を書きかえ、［在庫を保存する］を押します。入れた数がそのまま「いまの在庫」になります。
+            <br />
+            <strong>ほかを直すとき</strong>：値段を変える・写真を足す・色やサイズを足す・消すは、いまは Square データの［商品とサービス］→［商品ライブラリ］でやります。
             <br />
             <strong>店頭で売らないもの</strong>：レジと注文画面にも出るので、出したくないときはメニュー編集で非表示にします。
           </div>
@@ -139,7 +291,9 @@ export default function Buppan() {
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
   const [desc, setDesc] = useState("");
-  const [sizes, setSizes] = useState<SizeRow[]>(freshSizes);
+  const [colors, setColors] = useState<Row[]>(() => freshRows(DEFAULT_COLORS));
+  const [sizes, setSizes] = useState<Row[]>(() => freshRows(DEFAULT_SIZES));
+  const [qty, setQty] = useState<QtyMap>({});
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -219,21 +373,37 @@ export default function Buppan() {
     });
   }
 
-  function updateSize(key: number, patch: Partial<SizeRow>) {
-    setSizes((cur) => cur.map((s) => (s.key === key ? { ...s, ...patch } : s)));
+  function rename(set: typeof setSizes, key: number, name: string) {
+    set((cur) => cur.map((r) => (r.key === key ? { ...r, name } : r)));
     setConfirming(false);
   }
+  function remove(set: typeof setSizes, key: number) {
+    set((cur) => cur.filter((r) => r.key !== key));
+    setConfirming(false);
+  }
+  const qtyOf = (c: Row, s: Row) => qty[cell(c, s)] ?? "0";
+  function setCell(c: Row, s: Row, v: string) {
+    setQty((cur) => ({ ...cur, [cell(c, s)]: v.replace(/[^\d]/g, "") }));
+    setConfirming(false);
+  }
+  /** 送る形：色×サイズを Square の種類1つずつに */
+  const variants = () =>
+    colors.flatMap((c) => sizes.map((s) => ({ name: variationName(colors, c, s), qty: Number(qtyOf(c, s) || 0) })));
 
   // 画面側でも先に確かめて、Square に送る前に止める
   function problem(): string | null {
     if (!name.trim()) return "商品名を入れてください";
     const p = Number(price);
     if (!Number.isInteger(p) || p <= 0) return "値段は1円以上の整数で入れてください";
+    if (!colors.length) return "色を1つ以上入れてください";
     if (!sizes.length) return "サイズを1つ以上入れてください";
-    const names = sizes.map((s) => s.name.trim());
-    if (names.some((n) => !n)) return "サイズの名前が空の行があります";
-    if (new Set(names).size !== names.length) return "同じ名前のサイズが2つあります";
-    if (sizes.some((s) => !/^\d+$/.test(s.qty.trim()))) return "在庫は0以上の整数で入れてください";
+    const cn = colors.map((c) => c.name.trim());
+    if (colors.length > 1 && cn.some((n) => !n)) return "色の名前が空の行があります";
+    if (new Set(cn).size !== cn.length) return "同じ名前の色が2つあります";
+    const sn = sizes.map((s) => s.name.trim());
+    if (sn.some((n) => !n)) return "サイズの名前が空の行があります";
+    if (new Set(sn).size !== sn.length) return "同じ名前のサイズが2つあります";
+    if (colors.some((c) => sizes.some((s) => !/^\d+$/.test(qtyOf(c, s))))) return "在庫は0以上の整数で入れてください";
     return null;
   }
 
@@ -256,7 +426,7 @@ export default function Buppan() {
           name: name.trim(),
           price: Number(price),
           description: desc,
-          sizes: sizes.map((s) => ({ name: s.name.trim(), qty: Number(s.qty) })),
+          sizes: variants(),
         }),
       });
       const j = await r.json();
@@ -284,7 +454,9 @@ export default function Buppan() {
       setName("");
       setPrice("");
       setDesc("");
-      setSizes(freshSizes());
+      setColors(freshRows(DEFAULT_COLORS));
+      setSizes(freshRows(DEFAULT_SIZES));
+      setQty({});
       photos.forEach((p) => URL.revokeObjectURL(p.url));
       setPhotos([]);
       setConfirming(false);
@@ -325,14 +497,14 @@ export default function Buppan() {
     );
   }
 
-  const total = sizes.reduce((s, r) => s + (Number(r.qty) || 0), 0);
+  const total = variants().reduce((n, v) => n + v.qty, 0);
 
   return (
     <main className="wrap">
       <Nav />
       <h2 style={{ fontSize: 18, margin: "4px 0 2px" }}>👕 物販登録</h2>
       <p style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 12 }}>
-        Tシャツなどを Square に登録します。レジと注文画面にもそのまま出ます。色ちがいは1色ずつ別の商品にしてください。
+        Tシャツなどを Square に登録します。レジと注文画面にもそのまま出ます。色ちがいは1つの商品にまとめ、色とサイズごとに在庫を持ちます。
       </p>
 
       <Guide />
@@ -377,7 +549,7 @@ export default function Buppan() {
             setName(e.target.value);
             setConfirming(false);
           }}
-          placeholder="例：flat. ロゴ Tシャツ（白）"
+          placeholder="例：CLASSIC MELT Tシャツ"
         />
 
         <label htmlFor="g-price">値段（税込・円）</label>
@@ -413,48 +585,61 @@ export default function Buppan() {
           }}
         />
 
-        <div style={{ margin: "14px 0 4px", fontSize: 12, color: "var(--muted)" }}>サイズと在庫の枚数</div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {sizes.map((s, i) => (
-            <div key={s.key} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 44px", gap: 8, alignItems: "center" }}>
-              <input
-                aria-label={`サイズ ${i + 1} の名前`}
-                value={s.name}
-                onChange={(e) => updateSize(s.key, { name: e.target.value })}
-              />
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <input
-                  aria-label={`${s.name || `サイズ ${i + 1}`} の在庫`}
-                  inputMode="numeric"
-                  value={s.qty}
-                  onChange={(e) => updateSize(s.key, { qty: e.target.value.replace(/[^\d]/g, "") })}
-                  style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}
-                />
-                <span style={{ fontSize: 13, color: "var(--muted)" }}>枚</span>
-              </div>
-              <button
-                type="button"
-                className="ghost"
-                aria-label={`${s.name || `サイズ ${i + 1}`} の行を消す`}
-                onClick={() => {
-                  setSizes((cur) => cur.filter((x) => x.key !== s.key));
-                  setConfirming(false);
-                }}
-                style={{ padding: 0, height: 44, fontSize: 18 }}
-              >
-                ×
-              </button>
-            </div>
-          ))}
+        <RowEditor
+          title="色"
+          rows={colors}
+          addLabel="＋ 色を足す"
+          placeholder="例：サックス"
+          onRename={(k, v) => rename(setColors, k, v)}
+          onRemove={(k) => remove(setColors, k)}
+          onAdd={() => setColors((cur) => [...cur, { key: nextKey(), name: "" }])}
+        />
+        <RowEditor
+          title="サイズ"
+          rows={sizes}
+          addLabel="＋ サイズを足す"
+          placeholder="例：XXL"
+          onRename={(k, v) => rename(setSizes, k, v)}
+          onRemove={(k) => remove(setSizes, k)}
+          onAdd={() => setSizes((cur) => [...cur, { key: nextKey(), name: "" }])}
+        />
+
+        <div style={{ margin: "14px 0 6px", fontSize: 12, color: "var(--muted)" }}>在庫の枚数（いま手元にある数）</div>
+        <div style={{ overflowX: "auto", border: "1px solid var(--line)", borderRadius: 10 }}>
+          <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 14, fontVariantNumeric: "tabular-nums" }}>
+            <thead>
+              <tr>
+                <th scope="col" style={{ textAlign: "left", padding: "8px 10px", fontSize: 12, color: "var(--muted)", fontWeight: 500, borderBottom: "1px solid var(--line)" }}>色</th>
+                {sizes.map((s) => (
+                  <th key={s.key} scope="col" style={{ padding: "8px 4px", fontSize: 12, color: "var(--muted)", fontWeight: 500, borderBottom: "1px solid var(--line)", minWidth: 58 }}>
+                    {s.name.trim() || "—"}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {colors.map((c) => (
+                <tr key={c.key}>
+                  <th scope="row" style={{ textAlign: "left", padding: "6px 10px", fontWeight: 700, whiteSpace: "nowrap", borderBottom: "1px solid var(--line)" }}>
+                    {c.name.trim() || "（色なし）"}
+                  </th>
+                  {sizes.map((s) => (
+                    <td key={s.key} style={{ padding: "6px 4px", borderBottom: "1px solid var(--line)" }}>
+                      <input
+                        aria-label={`${c.name.trim() || "色なし"} ${s.name.trim()} の在庫`}
+                        inputMode="numeric"
+                        value={qtyOf(c, s)}
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => setCell(c, s, e.target.value)}
+                        style={{ textAlign: "right", padding: "8px 8px", minWidth: 50 }}
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-        <button
-          type="button"
-          className="ghost"
-          onClick={() => setSizes((cur) => [...cur, { key: nextKey(), name: "", qty: "0" }])}
-          style={{ color: "var(--accent)" }}
-        >
-          ＋ サイズを足す
-        </button>
 
         <div style={{ margin: "10px 0 4px", fontSize: 12, color: "var(--muted)" }}>
           写真（1枚目がネットショップの一覧に出ます）
@@ -535,7 +720,7 @@ export default function Buppan() {
             <p style={{ margin: 0, fontSize: 14, lineHeight: 1.8 }}>
               {name.trim()}　{yen(Number(price))}
               <br />
-              {sizes.map((s) => `${s.name.trim()} ${s.qty}枚`).join("・")}（計 {total} 枚）
+              {colors.map((c) => `${c.name.trim() || "色なし"}：${sizes.map((s) => `${s.name.trim()} ${qtyOf(c, s)}`).join("・")}`).join("　")}（計 {total} 枚）
               <br />
               写真 {photos.length} 枚{photos.length === 0 && "（あとから Square で足せます）"}
             </p>
@@ -566,7 +751,7 @@ export default function Buppan() {
         {listErr && <p className="err">{listErr}</p>}
         {!list && !listErr && <p className="hint">読み込み中…</p>}
         {list && list.length === 0 && (
-          <p className="hint">まだありません。上から登録すると、ここにサイズごとの在庫が出ます。</p>
+          <p className="hint">まだありません。上から登録すると、ここに色とサイズごとの在庫が出て、数を直せます。</p>
         )}
         {list?.map((it) => (
           <div key={it.id} style={{ padding: "10px 0", borderTop: "1px solid var(--line)" }}>
@@ -574,9 +759,7 @@ export default function Buppan() {
               <span style={{ fontWeight: 700, fontSize: 14 }}>{it.name}</span>
               <span style={{ fontSize: 14, fontVariantNumeric: "tabular-nums" }}>{yen(it.sizes[0]?.price ?? null)}</span>
             </div>
-            <div style={{ fontSize: 13, color: "var(--muted)", fontVariantNumeric: "tabular-nums" }}>
-              {it.sizes.map((s) => `${s.name} ${s.qty ?? "—"}`).join("・")}
-            </div>
+            <StockEditor item={it} pin={pin} onSaved={loadList} />
             <a
               href={`https://app.squareup.com/dashboard/items/library/${it.id}`}
               target="_blank"

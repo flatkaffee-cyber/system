@@ -199,6 +199,35 @@ export async function attachGoodsImage(
   return { imageId: data.image?.id, url: data.image?.image_data?.url ?? null };
 }
 
+/**
+ * 在庫を「いまの数」に直す。種類（色×サイズ）ごとに棚卸しとして書くので、
+ * 足し引きではなく、入れた数がそのまま在庫になる。
+ */
+export async function setGoodsStock(changes: { variationId: string; qty: number }[]): Promise<void> {
+  if (!changes.length) return;
+  const loc = await locationId();
+  const now = new Date().toISOString();
+  for (let i = 0; i < changes.length; i += 100) {
+    await call("/inventory/changes/batch-create", {
+      method: "POST",
+      body: JSON.stringify({
+        idempotency_key: `goodsfix_${Date.now().toString(36)}_${i}`,
+        ignore_unchanged_counts: false,
+        changes: changes.slice(i, i + 100).map((c) => ({
+          type: "PHYSICAL_COUNT",
+          physical_count: {
+            catalog_object_id: c.variationId,
+            state: "IN_STOCK",
+            location_id: loc,
+            quantity: String(c.qty),
+            occurred_at: now,
+          },
+        })),
+      }),
+    });
+  }
+}
+
 export type GoodsListItem = {
   id: string;
   name: string;
