@@ -56,6 +56,81 @@ async function shrink(file: File): Promise<Blob> {
 
 const yen = (n: number | null) => (n == null ? "—" : `¥${n.toLocaleString("ja-JP")}`);
 
+const GUIDE_STEPS: { title: string; body: string }[] = [
+  {
+    title: "写真を用意する",
+    body: "スマホで正方形に撮ります。1つの柄につき、前・後ろ・着用・プリントのアップ・サイズ感の4〜5枚。1枚目（平置きの前）がネットショップの一覧に出ます。",
+  },
+  {
+    title: "商品名と値段を入れる",
+    body: "色ちがいは1色ずつ別の商品にします（例：flat. ロゴ Tシャツ（白））。名前に「Tシャツ」を入れておくと、売上で物販に分けて数えられます。値段は税込です。",
+  },
+  {
+    title: "サイズと枚数を入れる",
+    body: "サイズごとに、いま手元にある枚数を入れます。在庫は店のレジと共通で、店頭で売れた分もネットの在庫から減ります。使わないサイズは × で消します。",
+  },
+  {
+    title: "写真を選んで登録する",
+    body: "［写真を選ぶ］で写真を足し、◀ ▶ で並べ替えます。［内容を確かめる］→［Square に登録する］で、商品・写真・在庫が Square に入ります。",
+  },
+  {
+    title: "ネットショップでオンにする",
+    body: "ここだけ Square で手作業です。登録後に出る［Square でこの商品を開く］を押し、販売チャネルの「Square オンライン」をオンにして保存します。オンにするまでネットショップには出ません。",
+  },
+];
+
+/** 登録の手引き。初めての人向けに開いておき、閉じた状態はこの端末で覚える */
+function Guide() {
+  const KEY = "buppan:guide";
+  const [open, setOpen] = useState(true);
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(KEY) === "closed") setOpen(false);
+    } catch {}
+  }, []);
+  const toggle = (next: boolean) => {
+    setOpen(next);
+    try {
+      localStorage.setItem(KEY, next ? "open" : "closed");
+    } catch {}
+  };
+
+  return (
+    <section className="card" aria-labelledby="buppan-guide" style={{ background: "var(--accent-weak)", borderColor: "var(--accent-weak)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+        <h3 id="buppan-guide" style={{ fontSize: 15, margin: 0 }}>登録の手引き</h3>
+        <button
+          type="button"
+          className="ghost"
+          aria-expanded={open}
+          aria-controls="buppan-guide-body"
+          onClick={() => toggle(!open)}
+          style={{ fontSize: 13, color: "var(--accent)", padding: "4px 0" }}
+        >
+          {open ? "閉じる" : "開く"}
+        </button>
+      </div>
+      {open && (
+        <div id="buppan-guide-body">
+          <ol style={{ margin: "10px 0 0", paddingLeft: "1.3em", display: "flex", flexDirection: "column", gap: 10 }}>
+            {GUIDE_STEPS.map((s) => (
+              <li key={s.title} style={{ fontSize: 13.5, lineHeight: 1.7 }}>
+                <strong style={{ display: "block", fontSize: 14 }}>{s.title}</strong>
+                {s.body}
+              </li>
+            ))}
+          </ol>
+          <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid var(--line)", fontSize: 12.5, lineHeight: 1.7, color: "var(--ink)" }}>
+            <strong>あとから直すとき</strong>：在庫を足す・値段を変える・写真を足す・消すは、いまは Square データの［商品とサービス］→［商品ライブラリ］でやります。
+            <br />
+            <strong>店頭で売らないもの</strong>：レジと注文画面にも出るので、出したくないときはメニュー編集で非表示にします。
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function Buppan() {
   const [pin, setPin] = useState("");
   const [authed, setAuthed] = useState(false);
@@ -259,6 +334,8 @@ export default function Buppan() {
       <p style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 12 }}>
         Tシャツなどを Square に登録します。レジと注文画面にもそのまま出ます。色ちがいは1色ずつ別の商品にしてください。
       </p>
+
+      <Guide />
 
       {done && (
         <div className="card" style={{ borderColor: "var(--ok)", background: "#eef7ef" }}>
