@@ -144,6 +144,52 @@ export const SEED_ITEMS: Item[] = [
   { id: "drink-carrier", name: "ドリンクキャリア", group: "消耗品・包材", par: 20, unit: "個" },
   { id: "paper-bag", name: "手提紙袋", group: "消耗品・包材", par: 20, unit: "枚" },
   { id: "straw", name: "ストロー", group: "消耗品・包材", par: 100, unit: "本" },
+  // 2026-10-23 追加：レシートで繰り返し買っているもの・レシピの材料から。いらなければ画面で消す（数は仮）
+  // フード（調味料・スープ材料など）
+  { id: "mustard", name: "マスタード", group: "フード", par: 1, unit: "本" },
+  { id: "mayo", name: "マヨネーズ", group: "フード", par: 1, unit: "本" },
+  { id: "ketchup", name: "ケチャップ", group: "フード", par: 1, unit: "本" },
+  { id: "margarine", name: "マーガリン", group: "フード", par: 1, unit: "個" },
+  { id: "genovese", name: "ジェノベーゼソース", group: "フード", par: 1, unit: "個" },
+  { id: "honey", name: "はちみつ", group: "フード", par: 1, unit: "本" },
+  { id: "pumpkin-puree", name: "パンプキンピューレ（冷凍）", group: "フード", par: 1, unit: "袋", note: "スープ1回で1袋" },
+  { id: "cut-onion", name: "カット玉ねぎ（冷凍）", group: "フード", par: 1, unit: "袋", note: "スープ1回で1袋" },
+  { id: "consomme", name: "コンソメ", group: "フード", par: 1, unit: "袋", note: "スープ1回で40g" },
+  { id: "shiso", name: "大葉", group: "フード", par: 1, unit: "袋", note: "あみえびクリームチーズは提供時にのせる" },
+  { id: "amiebi-umani", name: "あみえびうま煮", group: "フード", par: 1, unit: "個" },
+  { id: "soy-milk", name: "豆乳", group: "フード", par: 1, unit: "本" },
+  { id: "whip", name: "ホイップクリーム", group: "フード", par: 1, unit: "本" },
+  { id: "sugar", name: "砂糖", group: "フード", par: 1, unit: "袋" },
+  // コーヒー・茶
+  { id: "drip-beans", name: "ドリップ用コーヒー豆", group: "コーヒー・茶", par: 1, unit: "kg" },
+  { id: "chai", name: "チャイの茶葉", group: "コーヒー・茶", par: 1, unit: "袋" },
+  { id: "green-tea", name: "緑茶", group: "コーヒー・茶", par: 2, unit: "本" },
+  { id: "jasmine-tea", name: "ジャスミン茶", group: "コーヒー・茶", par: 2, unit: "本" },
+  // ドリンク（シロップ・割り材）
+  { id: "ume-syrup", name: "梅シロップ", group: "ドリンク（ノンアル）", par: 1, unit: "本" },
+  { id: "vanilla-syrup", name: "バニラシロップ", group: "ドリンク（ノンアル）", par: 1, unit: "本" },
+  { id: "blackberry-syrup", name: "ブラックベリーシロップ", group: "ドリンク（ノンアル）", par: 1, unit: "本" },
+  { id: "grenadine", name: "グレナデンシロップ", group: "ドリンク（酒）", par: 1, unit: "本" },
+  { id: "cassis", name: "カシスリキュール", group: "ドリンク（酒）", par: 1, unit: "本" },
+  // 仕込み品（作ったものの在庫）
+  { id: "hotsand-classic", name: "冷凍ホットサンド（クラシック）", group: "仕込み品", par: 5, unit: "個", madeInHouse: true, note: "水曜・日曜に仕込む。日曜は5個以上あれば仕込まない" },
+  { id: "hotsand-garden", name: "冷凍ホットサンド（ガーデン）", group: "仕込み品", par: 5, unit: "個", madeInHouse: true, note: "水曜・日曜に仕込む。日曜は5個以上あれば仕込まない" },
+  { id: "soup-base", name: "スープベース（冷凍・100g）", group: "仕込み品", par: 4, unit: "個", madeInHouse: true, note: "2週に1回、A週の木曜に16個仕込む" },
+  // 消耗品・包材
+  { id: "takeout-cup", name: "テイクアウトカップ（ふた付き）", group: "消耗品・包材", par: 50, unit: "個" },
+  { id: "wrap", name: "ラップ", group: "消耗品・包材", par: 1, unit: "本" },
+  { id: "muddler", name: "マドラー", group: "消耗品・包材", par: 50, unit: "本" },
+  { id: "wet-tissue", name: "ウェットティッシュ", group: "消耗品・包材", par: 2, unit: "個" },
+  { id: "trash-bag", name: "ゴミ袋", group: "消耗品・包材", par: 10, unit: "枚" },
+  { id: "gloves", name: "ニトリル手袋", group: "消耗品・包材", par: 1, unit: "箱" },
+  { id: "dish-soap", name: "食器用洗剤", group: "消耗品・包材", par: 1, unit: "本" },
+  { id: "sponge", name: "スポンジ", group: "消耗品・包材", par: 3, unit: "個" },
+  { id: "haiter", name: "ハイター", group: "消耗品・包材", par: 1, unit: "本", note: "ダスター類を毎晩つける" },
+  { id: "alcohol-spray", name: "アルコールスプレー", group: "消耗品・包材", par: 1, unit: "本" },
+  { id: "hand-soap", name: "ハンドソープ", group: "消耗品・包材", par: 1, unit: "本" },
+  { id: "toilet-paper", name: "トイレットペーパー", group: "消耗品・包材", par: 4, unit: "ロール" },
+  { id: "tissue", name: "ティッシュ", group: "消耗品・包材", par: 1, unit: "箱" },
+  { id: "gas-can", name: "カセットガス", group: "消耗品・包材", par: 3, unit: "本" },
 ];
 
 /** 「補充した」か「倉庫に無くて補充できなかった」か */

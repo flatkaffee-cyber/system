@@ -34,6 +34,11 @@ export type Task = {
   everyDays?: number;
   /** 決まった曜日だけの作業。0=日。複数の曜日なら配列 */
   weekday?: number | number[];
+  /**
+   * 2週に1回の作業。A週（WEEK_A_START から2週ごと）の、weekday の日だけに出す。
+   * 生ハムの仕入れとスープの仕込みのように、隔週のものは同じ週にまとめる
+   */
+  biweekly?: boolean;
   /** 夜にワッフルの残数を入力する作業 */
   waffleCount?: boolean;
   /** 前夜の残数を見て、朝焼くかどうかを出す作業 */
@@ -58,6 +63,35 @@ export type Task = {
   /** その日の勤怠をシフトから作る作業 */
   kintai?: boolean;
 };
+
+/** A週の始まり（月曜）。ここから2週ごとがA週 */
+export const WEEK_A_START = "2026-10-26";
+
+/** その日を含む週の月曜 */
+export function mondayOf(date: string): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
+}
+
+/** A週かどうか。WEEK_A_START より前の週も2週ごとに数える */
+export function isWeekA(date: string): boolean {
+  const weeks = Math.round(
+    (new Date(`${mondayOf(date)}T00:00:00Z`).getTime() -
+      new Date(`${WEEK_A_START}T00:00:00Z`).getTime()) /
+      (7 * 86_400_000),
+  );
+  return ((weeks % 2) + 2) % 2 === 0;
+}
+
+/** 曜日の決まった作業が、その日にあるか */
+export function weekdayDue(t: Task, date: string): boolean {
+  if (t.weekday === undefined) return false;
+  const wd = new Date(`${date}T00:00:00Z`).getUTCDay();
+  const wds = Array.isArray(t.weekday) ? t.weekday : [t.weekday];
+  if (!wds.includes(wd)) return false;
+  return t.biweekly ? isWeekA(date) : true;
+}
 
 export const TASKS: Task[] = [
   {
@@ -176,8 +210,9 @@ export const TASKS: Task[] = [
     phase: "営業中",
     name: "ストックルームの補充",
     detail:
-      "倉庫からストックルームへ補充する。倉庫に無くて補充できなかったものが発注するもの。「📦 ストック確認」のページで記録する",
-    everyDays: 3,
+      "倉庫からストックルームへ補充する。倉庫に無くて補充できなかったものが発注するもの。「📦 ストック確認」のページで記録する。" +
+      "2026-10-26からは毎週月曜にまとめてやる（発注を曜日で固定するため）",
+    weekday: 1,
   },
   {
     id: "order-reconcile",
@@ -191,8 +226,8 @@ export const TASKS: Task[] = [
     phase: "営業中",
     name: "足りないものを発注する",
     detail:
-      "ストック確認で倉庫に無かったものが「📋 発注リスト」に並ぶ。数を決めて買い、「発注済みにする」を押す",
-    everyDays: 3,
+      "ストック確認で倉庫に無かったものが「📋 発注リスト」に並ぶ。数を決めて買い、「発注済みにする」を押す。毎週月曜にまとめて発注する",
+    weekday: 1,
     orderList: true,
   },
   {
@@ -227,11 +262,22 @@ export const TASKS: Task[] = [
   // 2026-10-14〜 ホットサンドは水曜と日曜にまとめて仕込む。
   // それまでは冷凍庫の残りを見て「翌日仕込む」を決めていたが、曜日固定に変えた。
   {
+    id: "hotsand-sunday-check",
+    phase: "朝",
+    name: "ホットサンドの残数を見て、今日仕込むか決める",
+    detail:
+      "日曜の仕込みは、月曜・水曜の2営業日分。冷凍庫にクラシック5・ガーデン5以上残っていれば今日は仕込まない" +
+      "（金曜にイベントで多めに仕込んだ週など）。「今回は仕込まない」を押すと、今日のタネと仕込みの作業が消える",
+    weekday: 0,
+    choices: ["日曜も仕込む", "今回は仕込まない"],
+  },
+  {
     id: "hotsand-tane",
     phase: "朝",
     name: "午前中にホットサンドのタネを仕込む",
     detail:
-      "水曜と日曜はホットサンドをまとめて仕込む日。午前中にタネ（具材）を作っておき、午後に挟んで焼く",
+      "水曜と日曜はホットサンドをまとめて仕込む日。午前中にタネ（具材）を作っておき、午後に挟んで焼く。" +
+      "水曜の基本はクラシック12食（食パン4斤）・ガーデン6食（2斤）。日曜は月・水の2日分",
     weekday: [3, 0],
   },
   {
@@ -239,8 +285,27 @@ export const TASKS: Task[] = [
     phase: "営業中",
     name: "午後にホットサンドの仕込みを完了させる",
     detail:
-      "クラシックメルトとガーデンメルトを作って冷凍庫へ。次の仕込み日（水曜→日曜、日曜→水曜）まで持つ数を作る",
+      "クラシックメルトとガーデンメルトを作って冷凍庫へ。水曜の基本はクラシック12食（4斤）・ガーデン6食（2斤）。" +
+      "日曜は月・水の2日分。次の仕込み日（水曜→日曜、日曜→水曜）まで持つ数を作る",
     weekday: [3, 0],
+  },
+  {
+    id: "prosciutto-buy",
+    phase: "営業中",
+    name: "アミカで生ハムを仕入れる",
+    detail: "2週に1回、A週の月曜に買う（アミカの店頭）。在庫確認の生ハムの数も見てから行く",
+    weekday: 1,
+    biweekly: true,
+  },
+  {
+    id: "soup-prep",
+    phase: "営業中",
+    name: "スープのベースを仕込む",
+    detail:
+      "2週に1回、A週の木曜（一番暇な曜日）。今はパンプキンスープ：1回で16個分（100gずつ冷凍）。" +
+      "作り方は「🍳 レシピ」のパンプキンスープ",
+    weekday: 4,
+    biweekly: true,
   },
   {
     id: "hotsand-bread-order",

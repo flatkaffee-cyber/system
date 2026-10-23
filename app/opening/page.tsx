@@ -14,6 +14,8 @@ type Task = {
   detail?: string;
   everyDays?: number;
   weekday?: number | number[];
+  biweekly?: boolean;
+  weekA?: boolean;
   waffleCount?: boolean;
   waffleMorning?: boolean;
   orderList?: boolean;
@@ -32,6 +34,12 @@ type Task = {
 };
 
 type Slot = "morning" | "afternoon" | "evening";
+
+type WeekItem = { name: string; phase: string; kind: "fixed" | "interval"; note?: string };
+type Week = { monday: string; weekA: boolean; days: { date: string; weekday: number; items: WeekItem[] }[] };
+const WD_JA = ["日", "月", "火", "水", "木", "金", "土"];
+/** 週間スケジュールに出す作業。毎週の掃除などは数が多いので、仕入れ・仕込みを先に並べる */
+const isPrep = (name: string) => /仕込|仕入|手配|発注|在庫|ストック/.test(name);
 
 type DailyItem = {
   id: string; name: string; kind: "count" | "full";
@@ -69,6 +77,9 @@ export default function OpeningPage() {
   } | null>(null);
   // 発注したがまだ届いていないもの
   const [pendingOrders, setPendingOrders] = useState<PendingOrder[]>([]);
+  // 今週（月〜日）の予定
+  const [week, setWeek] = useState<Week | null>(null);
+  const [weekOpen, setWeekOpen] = useState(true);
   const [wBusy, setWBusy] = useState(false);
   // ホットサンドの在庫。朝と夕方で別々に数える
   // 牛乳・コールドブリュー・アメリカーノ用の水
@@ -129,6 +140,7 @@ export default function OpeningPage() {
       setDoneCount(d.doneCount || 0);
       setWaffle(d.waffle || null);
       setPendingOrders(d.pendingOrders || []);
+      setWeek(d.week || null);
       setDaily(d.daily || null);
       setKin(d.kintai || null);
       if (d.waffle?.today) {
@@ -327,7 +339,7 @@ export default function OpeningPage() {
                 background: t.due ? "#fdf0e6" : "#eef1f4",
                 color: t.due ? "#9c5f22" : "var(--muted)",
               }}>
-                毎週{(Array.isArray(t.weekday) ? t.weekday : [t.weekday]).map((w) => ["日","月","火","水","木","金","土"][w]).join("・")}曜{t.due ? "・今日やる" : "・今日はなし"}
+                {t.biweekly ? "2週に1回（A週）の" : "毎週"}{(Array.isArray(t.weekday) ? t.weekday : [t.weekday]).map((w) => ["日","月","火","水","木","金","土"][w]).join("・")}曜{t.due ? "・今日やる" : "・今日はなし"}
               </span>
             )}
             {t.everyDays && (
@@ -666,6 +678,64 @@ export default function OpeningPage() {
       </div>
 
       {loading && <div className="card" style={{ textAlign: "center", color: "var(--muted)" }}>読み込み中…</div>}
+
+      {!loading && week && (
+        <div className="card" style={{ padding: "12px 14px" }}>
+          <div
+            className="cat-title"
+            onClick={() => setWeekOpen(!weekOpen)}
+            style={{ cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+          >
+            <span>
+              📅 今週のスケジュール（{week.monday.slice(5).replace("-", "/")}〜）
+              <span style={{
+                marginLeft: 8, fontSize: 11, padding: "2px 7px", borderRadius: 4,
+                background: week.weekA ? "#e6f2ea" : "#eef1f4", color: week.weekA ? "#1f6b3a" : "var(--muted)",
+              }}>
+                {week.weekA ? "A週（生ハム・スープの週）" : "B週"}
+              </span>
+            </span>
+            <span style={{ fontSize: 12, color: "var(--muted)" }}>{weekOpen ? "閉じる" : "開く"}</span>
+          </div>
+          {weekOpen && week.days.map((d) => {
+            const isToday = d.date === date;
+            const closed = d.weekday === 2;
+            const prep = d.items.filter((it) => it.kind === "interval" || isPrep(it.name));
+            const other = d.items.filter((it) => !(it.kind === "interval" || isPrep(it.name)));
+            return (
+              <div key={d.date} style={{
+                display: "grid", gridTemplateColumns: "54px 1fr", gap: 10, padding: "9px 6px",
+                borderTop: "1px solid var(--line-soft, #eee)",
+                background: isToday ? "#fdf6ec" : "transparent", borderRadius: isToday ? 8 : 0,
+              }}>
+                <div style={{ fontWeight: 800, fontSize: 14, color: d.weekday === 0 ? "#c0392b" : d.weekday === 6 ? "#2d6a9f" : "var(--ink)" }}>
+                  {Number(d.date.slice(8))}日（{WD_JA[d.weekday]}）
+                  {isToday && <div style={{ fontSize: 10.5, color: "#9c5f22" }}>今日</div>}
+                </div>
+                <div style={{ fontSize: 13, lineHeight: 1.6 }}>
+                  {closed && d.items.length === 0 && <span style={{ color: "var(--muted)" }}>定休日</span>}
+                  {prep.map((it, i) => (
+                    <div key={`p${i}`}>
+                      <strong>・{it.name}</strong>
+                      {it.note && <span style={{ fontSize: 11, color: it.note.includes("過ぎ") ? "#c0392b" : "var(--muted)", marginLeft: 6 }}>{it.note}</span>}
+                    </div>
+                  ))}
+                  {other.map((it, i) => (
+                    <div key={`o${i}`} style={{ color: "var(--muted)" }}>・{it.name}</div>
+                  ))}
+                  {!closed && d.items.length === 0 && <span style={{ color: "var(--muted)" }}>決まった作業はなし</span>}
+                </div>
+              </div>
+            );
+          })}
+          {weekOpen && (
+            <p className="hint" style={{ marginTop: 8 }}>
+              太字は仕入れ・仕込み、灰色は週1の掃除など。マッシュポテト・あみえびクリームチーズ・ザワークラウトなどは
+              「📆 週間予定」で仕込んだ日を記録すると、そこから数えた日にここに出ます。
+            </p>
+          )}
+        </div>
+      )}
 
       {!loading && (["朝", "営業中", "夜前", "締め", "週次"] as const).map((phase) => {
         const list = tasks.filter((t) => t.phase === phase);

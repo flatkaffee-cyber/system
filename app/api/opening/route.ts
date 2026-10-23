@@ -9,6 +9,9 @@ import {
   morningPlan,
   nightPlan,
   getChoices,
+  mondayOf,
+  isWeekA,
+  weekdayDue,
   saveChoice,
   saveWaffleCount,
   setWaffleBaked,
@@ -17,6 +20,10 @@ import {
   yesterdayOf,
 } from "@/lib/opening";
 import { openOrders } from "@/lib/purchase";
+import { buildStates as buildShikomiStates, getRecords as getShikomiRecords } from "@/lib/shikomi";
+
+// 週間スケジュールに出さない仕込み（毎日の作業で見ているもの）
+const WEEK_SKIP_SHIKOMI = ["cold-brew", "stock-check"];
 import { getShifts } from "@/lib/shift";
 import { getKintai } from "@/lib/kintai";
 import type { Slot } from "@/lib/dailycheck";
@@ -100,13 +107,26 @@ export async function GET(req: NextRequest) {
           };
         }
         if (t.choices) {
-          return { ...t, done: done.includes(t.id), answer: choices[t.id] ?? null };
+          return {
+            ...t,
+            done: done.includes(t.id),
+            answer: choices[t.id] ?? null,
+            ...(t.weekday !== undefined ? { due: weekdayDue(t, date) } : {}),
+          };
         }
         if (t.weekday !== undefined) {
-          // 曜日が決まっている作業。その曜日以外は「今日はなし」
+          // 曜日が決まっている作業。その曜日以外は「今日はなし」。隔週のものはA週だけ
+          let due = weekdayDue(t, date);
+          // 日曜の朝に「今回は仕込まない」を選んだら、日曜のタネと仕込みは出さない
           const wd = new Date(`${date}T00:00:00Z`).getUTCDay();
-          const wds = Array.isArray(t.weekday) ? t.weekday : [t.weekday];
-          return { ...t, done: done.includes(t.id), due: wds.includes(wd) };
+          if (
+            wd === 0 &&
+            (t.id === "hotsand-tane" || t.id === "hotsand-prep") &&
+            choices["hotsand-sunday-check"] === "今回は仕込まない"
+          ) {
+            due = false;
+          }
+          return { ...t, done: done.includes(t.id), due, ...(t.biweekly ? { weekA: isWeekA(date) } : {}) };
         }
         if (!t.everyDays) return { ...t, done: done.includes(t.id) };
         // 何日おきの作業は、前回からの経過で今日やるべきか判断する
@@ -124,6 +144,31 @@ export async function GET(req: NextRequest) {
 
     // きょう必要な作業のうち、終わった数
     const need = tasks.filter((t) => !("due" in t) || t.due);
+
+    // 今週（月〜日）の予定。曜日の決まった作業と、📆 週間予定の「前回から何日」で来る仕込み
+    const monday = mondayOf(date);
+    const states = buildShikomiStates(await getShikomiRecords(), date);
+    const week = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(`${monday}T00:00:00Z`);
+      d.setUTCDate(d.getUTCDate() + i);
+      const day = d.toISOString().slice(0, 10);
+      const items: { name: string; phase: string; kind: "fixed" | "interval"; note?: string }[] = TASKS
+        .filter((t) => weekdayDue(t, day) && t.id !== "hotsand-sunday-check")
+        .map((t) => ({ name: t.name, phase: t.phase, kind: "fixed" as const, ...(t.biweekly ? { note: "隔週・A週" } : {}) }));
+      for (const s of states) {
+        if (WEEK_SKIP_SHIKOMI.includes(s.id) || !s.nextDate) continue;
+        // 予定日を過ぎているものは今日（今週でなければ月曜）に寄せる
+        const target = s.nextDate < monday ? (date >= monday ? date : monday) : s.nextDate;
+        if (target !== day) continue;
+        items.push({
+          name: s.name,
+          phase: "仕込み",
+          kind: "interval",
+          note: s.nextDate < day ? `予定日 ${s.nextDate.slice(5)} を過ぎています` : `前回 ${s.lastDate?.slice(5)}から${s.intervalDays}日`,
+        });
+      }
+      return { date: day, weekday: d.getUTCDay(), items };
+    });
     return NextResponse.json({
       date,
       tasks,
@@ -146,6 +191,7 @@ export async function GET(req: NextRequest) {
         shifts: shifts.filter((x) => x.date === date).map((x) => ({ staff: x.staff, start: x.start, end: x.end })),
         filled: kin.filter((x) => x.date === date).map((x) => x.member || x.name),
       },
+      week: { monday, weekA: isWeekA(date), days: week },
       total: need.length,
       doneCount: need.filter((t) => t.done).length,
     });
