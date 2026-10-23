@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   getEvents, getItems, createEvent, deleteEvent,
   addItem, updateItem, deleteItem, resetChecks, setDone,
+  getTemplates, saveTemplate, deleteTemplate,
 } from "@/lib/shutten";
 
 export const runtime = "nodejs";
@@ -17,8 +18,13 @@ export async function GET(req: NextRequest) {
       events.find((e) => e.date >= today)?.id ||
       events[events.length - 1]?.id ||
       "";
-    const items = id ? await getItems(id) : [];
-    return NextResponse.json({ events, id, items });
+    const [items, templates] = await Promise.all([id ? getItems(id) : [], getTemplates()]);
+    return NextResponse.json({
+      events,
+      id,
+      items,
+      templates: templates.map((t) => ({ id: t.id, name: t.name, count: t.items.length, updatedAt: t.updatedAt })),
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "取得に失敗";
     return NextResponse.json({ error: msg }, { status: 500 });
@@ -33,6 +39,7 @@ type Body = {
   date?: string;
   memo?: string;
   copyFrom?: string;
+  templateId?: string;
   cat?: string;
   name?: string;
   qty?: string;
@@ -56,10 +63,19 @@ export async function POST(req: NextRequest) {
         }
         const ev = await createEvent(
           { title: b.title.trim(), date: b.date, memo: b.memo?.trim() || undefined },
-          b.copyFrom || undefined,
+          { copyFrom: b.copyFrom || undefined, templateId: b.templateId || undefined },
         );
         return NextResponse.json({ ok: true, id: ev.id });
       }
+      case "saveTemplate": {
+        if (!b.id || !b.name?.trim()) break;
+        const tpl = await saveTemplate(b.name.trim(), b.id);
+        return NextResponse.json({ ok: true, templateId: tpl.id });
+      }
+      case "deleteTemplate":
+        if (!b.templateId) break;
+        await deleteTemplate(b.templateId);
+        return NextResponse.json({ ok: true });
       case "deleteEvent":
         if (!b.id) break;
         await deleteEvent(b.id);

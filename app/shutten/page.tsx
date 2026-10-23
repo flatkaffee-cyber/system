@@ -8,8 +8,10 @@ import Nav from "@/components/Nav";
 
 type Ev = { id: string; title: string; date: string; memo?: string };
 type Item = { id: string; cat: string; name: string; qty?: string; note?: string; done: boolean };
+type Tpl = { id: string; name: string; count: number; updatedAt: string };
 
 const CATEGORIES = [
+  "テント・設備", "火・調理", "衛生", "ホットサンド・ワッフル", "ドリンクの道具", "ドリンクの中身", "お金・書類",
   "書類・お金", "テントまわり", "火まわり", "ホットサンド", "スープ", "ワッフル",
   "コーヒー", "ソフトドリンク", "冷やすもの", "衛生", "ゴミ", "その他",
 ];
@@ -46,7 +48,10 @@ export default function ShuttenPage() {
   const [newTitle, setNewTitle] = useState("");
   const [newDate, setNewDate] = useState("");
   const [newMemo, setNewMemo] = useState("");
+  // 持ち物のもと。"tpl:<テンプレートid>" か "ev:<イベントid>"、空なら空から作る
   const [copyFrom, setCopyFrom] = useState("");
+  const [templates, setTemplates] = useState<Tpl[]>([]);
+  const [tplName, setTplName] = useState("");
 
   const load = useCallback(async (target?: string) => {
     try {
@@ -56,6 +61,7 @@ export default function ShuttenPage() {
       setEvents(d.events || []);
       setId(d.id || "");
       setItems(d.items || []);
+      setTemplates(d.templates || []);
       setErr("");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "読み込みに失敗しました");
@@ -120,7 +126,12 @@ export default function ShuttenPage() {
   const handleCreateEvent = async () => {
     if (!newTitle.trim() || !newDate) return;
     try {
-      const d = await post({ action: "createEvent", title: newTitle, date: newDate, memo: newMemo, copyFrom });
+      const [kind, srcId] = copyFrom.split(":");
+      const d = await post({
+        action: "createEvent", title: newTitle, date: newDate, memo: newMemo,
+        templateId: kind === "tpl" ? srcId : undefined,
+        copyFrom: kind === "ev" ? srcId : undefined,
+      });
       setShowNew(false); setNewTitle(""); setNewDate(""); setNewMemo(""); setCopyFrom("");
       await load(d.id);
     } catch (e) {
@@ -158,7 +169,7 @@ export default function ShuttenPage() {
             </select>
           </div>
           <div style={{ flex: "0 0 auto" }}>
-            <button onClick={() => { setShowNew(!showNew); setCopyFrom(id); }}>＋ イベントを追加</button>
+            <button onClick={() => { setShowNew(!showNew); setCopyFrom(templates[0] ? `tpl:${templates[0].id}` : id ? `ev:${id}` : ""); }}>＋ イベントを追加</button>
           </div>
         </div>
         {current?.memo && <p className="hint" style={{ marginTop: 10 }}>{current.memo}</p>}
@@ -173,12 +184,21 @@ export default function ShuttenPage() {
                 <input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} />
               </div>
               <div>
-                <label>持ち物をコピーする元</label>
+                <label>持ち物のもと</label>
                 <select value={copyFrom} onChange={(e) => setCopyFrom(e.target.value)}>
-                  <option value="">コピーしない（空から作る）</option>
-                  {events.map((e) => (
-                    <option key={e.id} value={e.id}>{dateLabel(e.date)} {e.title}</option>
-                  ))}
+                  {templates.length > 0 && (
+                    <optgroup label="テンプレート">
+                      {templates.map((t) => (
+                        <option key={t.id} value={`tpl:${t.id}`}>{t.name}（{t.count}項目）</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  <optgroup label="過去のイベントからコピー">
+                    {events.map((e) => (
+                      <option key={e.id} value={`ev:${e.id}`}>{dateLabel(e.date)} {e.title}</option>
+                    ))}
+                  </optgroup>
+                  <option value="">空から作る</option>
                 </select>
               </div>
             </div>
@@ -319,6 +339,37 @@ export default function ShuttenPage() {
             </select>
           </div>
 
+          <div className="card">
+            <label style={{ marginTop: 0 }}>テンプレート</label>
+            <p className="hint" style={{ marginTop: 0 }}>
+              このイベントの持ち物を、次のイベントのもとにするテンプレートとして保存できます。同じ名前なら上書きします。
+            </p>
+            <div className="sh-tpl-save">
+              <input value={tplName} onChange={(e) => setTplName(e.target.value)} placeholder="例：出店の基本セット（11月版）" />
+              <button
+                disabled={!tplName.trim()}
+                onClick={() => run({ action: "saveTemplate", name: tplName }, () => setTplName(""))}
+              >
+                保存
+              </button>
+            </div>
+            {templates.map((t) => (
+              <div key={t.id} className="sh-tpl-row">
+                <span>{t.name}<small>{t.count}項目・{t.updatedAt.slice(0, 10)}</small></span>
+                <button
+                  className="small danger"
+                  onClick={() => {
+                    if (confirm(`テンプレート「${t.name}」を消しますか？（作ったイベントの持ち物は消えません）`)) {
+                      run({ action: "deleteTemplate", templateId: t.id });
+                    }
+                  }}
+                >
+                  削除
+                </button>
+              </div>
+            ))}
+          </div>
+
           <div style={{ textAlign: "center", margin: "18px 0 30px" }}>
             <button
               className="small danger"
@@ -336,6 +387,10 @@ export default function ShuttenPage() {
 
       <style jsx>{`
         .new-ev { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line); }
+        .sh-tpl-save { display: flex; gap: 6px; margin-bottom: 8px; }
+        .sh-tpl-save input { flex: 1; }
+        .sh-tpl-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 14px; }
+        .sh-tpl-row small { display: block; color: var(--muted); font-size: 12px; }
         .progress-card { padding: 14px 16px; }
         .progress-top { display: flex; justify-content: space-between; font-size: 15px; }
         .progress-top span { color: var(--muted); }

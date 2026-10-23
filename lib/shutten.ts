@@ -5,6 +5,8 @@
 // チェックは何人かが同時に押すので、リスト全体を書き直さずに1項目ずつ記録する。
 
 const EVENTS_KEY = "shutten:events";
+const SEEDED_KEY = "shutten:seeded"; // 初期データを入れ終えたイベント・テンプレートのid（消しても復活させないため）
+const TEMPLATES_KEY = "shutten:templates";
 const itemsKey = (id: string) => `shutten:items:${id}`;
 const doneKey = (id: string) => `shutten:done:${id}`;
 
@@ -33,8 +35,26 @@ export type PackItem = {
   done: boolean;
 };
 
+export type TemplateItem = { cat: string; name: string; qty?: string; note?: string };
+
+// 新しいイベントの持ち物のもとにするリスト
+export type ShuttenTemplate = {
+  id: string;
+  name: string;
+  items: TemplateItem[];
+  updatedAt: string;
+};
+
 // 分類の並び順。リストはこの順に出す。
+// 前半は滋大祭（2026-10）から使っている分け方、後半はひこねいろ文化祭のときの分け方。
 export const CATEGORIES = [
+  "テント・設備",
+  "火・調理",
+  "衛生",
+  "ホットサンド・ワッフル",
+  "ドリンクの道具",
+  "ドリンクの中身",
+  "お金・書類",
   "書類・お金",
   "テントまわり",
   "火まわり",
@@ -116,6 +136,77 @@ const HIKONEIRO_SEED: Seed[] = [
   ["その他", "雨対策のビニール・タオル", "", "小雨決行"],
 ];
 
+// 滋大祭（2026-10-24・25）の持ち物。2026-10-22 に坂本さんと詰めた最終版。
+const SHIDAISAI_SEED: Seed[] = [
+  ["テント・設備", "テント", "", ""],
+  ["テント・設備", "テーブル", "3つ", "長机は主催者からも借りられる"],
+  ["テント・設備", "簡易シンク", "", ""],
+  ["テント・設備", "耐熱石膏ボード", "", "買う。コンロの下に敷く（主催者の指定）"],
+  ["テント・設備", "メニュー", "", ""],
+  ["テント・設備", "ワッフル展示用のまな板・クリアケース", "", "買う"],
+  ["テント・設備", "PayPayのQRコード", "", ""],
+  ["テント・設備", "チラシ（フライヤー）", "", ""],
+  ["テント・設備", "延長コード・電源タップ", "", "トースター用（電気は申請済み）"],
+  ["テント・設備", "照明", "", "24日は19:00まで営業"],
+  ["火・調理", "ガスコンロ", "2台", "並べずに離して置く"],
+  ["火・調理", "ガスカセット", "", "予備も"],
+  ["火・調理", "ホットサンドプレート", "", ""],
+  ["火・調理", "トースター", "", "ワッフルを注文ごとに温め直す"],
+  ["火・調理", "包丁", "", ""],
+  ["火・調理", "まな板", "", ""],
+  ["衛生", "アルコール消毒", "", ""],
+  ["衛生", "洗剤", "", ""],
+  ["衛生", "石鹸", "", ""],
+  ["衛生", "ダスター", "青2枚・赤2枚", ""],
+  ["衛生", "手拭きタオル", "", ""],
+  ["衛生", "ニトリル手袋", "", ""],
+  ["衛生", "ゴミ袋", "", "調理のゴミは自分で持ち帰る"],
+  ["ホットサンド・ワッフル", "ホットサンド", "24日 クラシック36・ツナ30／25日 クラシック24・ツナ20", "25日分は店の冷蔵庫へ。余りは店で冷凍"],
+  ["ホットサンド・ワッフル", "ワッフル", "24日 プレーン15・チョコ15／25日 プレーン10・チョコ10", "余りは店に置いて売る"],
+  ["ホットサンド・ワッフル", "バーガー紙", "", ""],
+  ["ホットサンド・ワッフル", "マーガリン・バターナイフ", "", ""],
+  ["ホットサンド・ワッフル", "トング", "", ""],
+  ["ホットサンド・ワッフル", "キッチンペーパー", "", "プレートを拭く"],
+  ["ホットサンド・ワッフル", "保温バッグ", "", "焼いたホットサンドを種類ごとにストック"],
+  ["ホットサンド・ワッフル", "シュガーパウダー・チョコソース", "", ""],
+  ["ホットサンド・ワッフル", "クーラーボックス・保冷剤", "", ""],
+  ["ドリンクの道具", "コーヒーの砂糖・ガムシロップ", "", ""],
+  ["ドリンクの道具", "ポット", "ホット用・アイス用", "7:00に店で抽出して運ぶ"],
+  ["ドリンクの道具", "マドラー・プッシャー", "", ""],
+  ["ドリンクの道具", "ストロー", "", ""],
+  ["ドリンクの道具", "アイススコップ・氷を入れる容器", "", ""],
+  ["ドリンクの道具", "カップ：クリアカップ・ホット用カップ・ふた", "", ""],
+  ["ドリンクの道具", "氷", "", "店のもの"],
+  ["ドリンクの中身", "ドリップコーヒー", "", ""],
+  ["ドリンクの中身", "オレンジジュース", "", "箱で持って行く"],
+  ["ドリンクの中身", "グアバジュース", "", "箱で持って行く"],
+  ["ドリンクの中身", "コーラ（缶）", "", "箱で持って行く"],
+  ["ドリンクの中身", "ジンジャーエール（缶）", "", "梅ライムソーダ・ゆずレモネードにも使う"],
+  ["ドリンクの中身", "梅ライムソーダ：梅シロップ・ライムジュース・ライム・ミント", "", ""],
+  ["ドリンクの中身", "ゆずレモネード：ゆずシロップ", "", ""],
+  ["お金・書類", "現金小口（釣り銭）", "", "支払いはPayPayと現金"],
+  ["お金・書類", "主催者のマニュアルと段取り表", "", "段取り表の6ページ目が記録シート"],
+  ["お金・書類", "ペン・ポスカ", "", "記録シート・看板の書き足し"],
+];
+
+// 毎回のもとにする基本の持ち物。滋大祭の最終版から、そのイベントだけの数や注意を外したもの。
+const BASE_TEMPLATE: ShuttenTemplate = {
+  id: "tpl-base",
+  name: "出店の基本セット（滋大祭10月版）",
+  updatedAt: "2026-10-23T00:00:00.000Z",
+  items: SHIDAISAI_SEED.map(([cat, name, qty, note]) => {
+    if (name === "ホットサンド") return { cat, name, qty: "種類ごとの枚数を書く", note: "前々日にたね、前日に組み立て。余りは店で冷凍" };
+    if (name === "ワッフル") return { cat, name, qty: "種類ごとの枚数を書く", note: "前日の昼過ぎから約3時間で焼く。余りは店に置いて売る" };
+    if (name === "照明") return { cat, name, note: "夕方以降も営業するとき" };
+    if (name === "耐熱石膏ボード") return { cat, name, note: "主催者の指定があるとき。コンロの下に敷く" };
+    if (name === "ワッフル展示用のまな板・クリアケース") return { cat, name };
+    if (name === "延長コード・電源タップ") return { cat, name, note: "トースター用。電気を申請したときだけ使える" };
+    if (name === "ポット") return { cat, name, qty: qty || undefined, note: "コーヒーは店で抽出して運ぶ" };
+    if (name === "主催者のマニュアルと段取り表") return { cat, name };
+    return { cat, name, qty: qty || undefined, note: note || undefined };
+  }),
+};
+
 const SEED_EVENTS: { event: ShuttenEvent; items: Seed[] }[] = [
   {
     event: {
@@ -125,6 +216,15 @@ const SEED_EVENTS: { event: ShuttenEvent; items: Seed[] }[] = [
       memo: "荒神山公園 10:00-15:00（小雨決行）。搬入8:00-9:00／搬出15:30-16:30。担当 田中 080-8513-2254、当日朝 森 090-4277-9969",
     },
     items: HIKONEIRO_SEED,
+  },
+  {
+    event: {
+      id: "2026-10-24-shidaisai",
+      title: "滋大祭",
+      date: "2026-10-24",
+      memo: "滋賀大学 裏グラウンド（からあげ たっちゃんの隣）。24日 9:30-19:00／25日 9:30-16:00、受付8:00。駐車場ハピネスひこね。緊急連絡 岩月 080-9298-4956・須藤 090-6645-4400",
+    },
+    items: SHIDAISAI_SEED,
   },
 ];
 
@@ -143,12 +243,20 @@ const fromSeed = (seed: Seed[]): PackItem[] =>
 export async function getEvents(): Promise<ShuttenEvent[]> {
   const store = await kv();
   if (!store) return SEED_EVENTS.map((s) => s.event);
-  const list = await store.get<ShuttenEvent[]>(EVENTS_KEY);
-  if (list) return list;
-  // 初回だけ登録済みのイベントを入れる
-  const seeded = SEED_EVENTS.map((s) => s.event);
-  await store.set(EVENTS_KEY, seeded);
-  return seeded;
+  const list = (await store.get<ShuttenEvent[]>(EVENTS_KEY)) ?? [];
+  // 初期データのうち、まだ入れていないものだけ足す。一度入れたものは、消しても戻さない
+  const seeded = new Set((await store.smembers(SEEDED_KEY)) ?? []);
+  const add = SEED_EVENTS.map((s) => s.event).filter(
+    (e) => !seeded.has(e.id) && !list.some((x) => x.id === e.id),
+  );
+  const marks = SEED_EVENTS.map((s) => s.event.id).filter((id) => !seeded.has(id));
+  if (add.length) {
+    list.push(...add);
+    list.sort((a, b) => a.date.localeCompare(b.date));
+    await store.set(EVENTS_KEY, list);
+  }
+  if (marks.length) await store.sadd(SEEDED_KEY, marks[0], ...marks.slice(1));
+  return list;
 }
 
 async function getList(id: string): Promise<PackItem[]> {
@@ -177,10 +285,11 @@ async function saveItems(id: string, items: PackItem[]) {
   await store.set(itemsKey(id), items.map((it) => ({ ...it, done: false })));
 }
 
-// 新しいイベントを作る。copyFrom があれば、そのイベントの持ち物をチェックを外して写す。
+// 新しいイベントを作る。持ち物のもとは、テンプレート（templateId）か過去のイベント（copyFrom）。
+// どちらもチェックは外して写す。
 export async function createEvent(
   ev: Omit<ShuttenEvent, "id">,
-  copyFrom?: string,
+  from: { copyFrom?: string; templateId?: string } = {},
 ): Promise<ShuttenEvent> {
   const store = await kv();
   if (!store) throw new Error("KV未設定");
@@ -190,12 +299,59 @@ export async function createEvent(
   events.push(created);
   events.sort((a, b) => a.date.localeCompare(b.date));
   await store.set(EVENTS_KEY, events);
-  const base = copyFrom ? await getItems(copyFrom) : [];
+  let base: TemplateItem[] = [];
+  if (from.templateId) {
+    const tpl = (await getTemplates()).find((t) => t.id === from.templateId);
+    if (!tpl) throw new Error("テンプレートが見つかりません");
+    base = tpl.items;
+  } else if (from.copyFrom) {
+    base = await getItems(from.copyFrom);
+  }
   await saveItems(
     id,
-    base.map((it) => ({ ...it, id: newId(), done: false })),
+    base.map((it) => ({ cat: it.cat, name: it.name, qty: it.qty, note: it.note, id: newId(), done: false })),
   );
   return created;
+}
+
+export async function getTemplates(): Promise<ShuttenTemplate[]> {
+  const store = await kv();
+  if (!store) return [BASE_TEMPLATE];
+  const list = (await store.get<ShuttenTemplate[]>(TEMPLATES_KEY)) ?? [];
+  const seeded = await store.sismember(SEEDED_KEY, BASE_TEMPLATE.id);
+  if (!seeded && !list.some((t) => t.id === BASE_TEMPLATE.id)) {
+    list.unshift(BASE_TEMPLATE);
+    await store.set(TEMPLATES_KEY, list);
+  }
+  if (!seeded) await store.sadd(SEEDED_KEY, BASE_TEMPLATE.id);
+  return list;
+}
+
+// イベントの今の持ち物を、テンプレートとして保存する。同じ名前があれば上書き
+export async function saveTemplate(name: string, eventId: string): Promise<ShuttenTemplate> {
+  const store = await kv();
+  if (!store) throw new Error("KV未設定");
+  const items = (await getList(eventId)).map(({ cat, name, qty, note }) => ({ cat, name, qty, note }));
+  if (!items.length) throw new Error("持ち物が空なので保存できません");
+  const list = await getTemplates();
+  const i = list.findIndex((t) => t.name === name);
+  const tpl: ShuttenTemplate = {
+    id: i >= 0 ? list[i].id : `tpl_${Date.now().toString(36)}`,
+    name,
+    items,
+    updatedAt: new Date().toISOString(),
+  };
+  if (i >= 0) list[i] = tpl;
+  else list.push(tpl);
+  await store.set(TEMPLATES_KEY, list);
+  return tpl;
+}
+
+export async function deleteTemplate(templateId: string): Promise<void> {
+  const store = await kv();
+  if (!store) throw new Error("KV未設定");
+  const list = await getTemplates();
+  await store.set(TEMPLATES_KEY, list.filter((t) => t.id !== templateId));
 }
 
 export async function deleteEvent(id: string): Promise<void> {
