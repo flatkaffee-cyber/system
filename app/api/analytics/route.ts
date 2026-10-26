@@ -144,6 +144,14 @@ export async function GET(req: NextRequest) {
         byProduct[name].qty += qty;
         byProduct[name].amount += li.total_money?.amount || 0;
         byProduct[name].cost += (costByName[name] || 0) * qty;
+        // セット（スープセット・ドリンクセット・フルセット）の中のホットサンドも、ホットサンドの数に入れる。
+        // 金額はセットの行に付いているので、ここでは数と原価だけ足す
+        const v = li.variation_name || "";
+        if (v !== name && (v === "クラシックメルト" || v === "ガーデンメルト")) {
+          byProduct[v] = byProduct[v] || { qty: 0, amount: 0, cost: 0 };
+          byProduct[v].qty += qty;
+          byProduct[v].cost += (costByName[v] || 0) * qty;
+        }
       }
       for (const t of o.tenders || []) {
         const key = t.type === "CASH" ? "現金" : t.type === "CARD" ? "カード"

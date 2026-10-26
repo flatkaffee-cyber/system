@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import Nav from "@/components/Nav";
+import { SET_DRINKS, SET_WITH_DRINK, setNote } from "@/lib/setMenu";
 
 type MenuItem = {
   id: string;
@@ -158,6 +159,8 @@ export default function TablePage() {
   const [msg, setMsg] = useState("");
   const [hotIcePending, setHotIcePending] = useState<MenuItem | null>(null);
   const [variantPending, setVariantPending] = useState<MenuItem | null>(null);
+  // ドリンクセット・フルセットで、ホットサンドを選んだあとにドリンクを選ぶところ
+  const [drinkPending, setDrinkPending] = useState<{ item: MenuItem; hotsand: string } | null>(null);
   const [soyPending, setSoyPending] = useState<{ item: MenuItem; note: string } | null>(null);
   const [payMode, setPayMode] = useState(false);
   // PayPayの会計画面（お客さんにQRと金額を見せる）
@@ -455,8 +458,21 @@ export default function TablePage() {
 
   const selectVariant = (choice: string) => {
     if (variantPending) {
+      // ドリンクも選ぶセットは、続けてドリンクを選ぶ
+      if (SET_WITH_DRINK.has(variantPending.name)) {
+        setDrinkPending({ item: variantPending, hotsand: choice });
+        setVariantPending(null);
+        return;
+      }
       addToCart(variantPending, choice);
       setVariantPending(null);
+    }
+  };
+
+  const selectDrink = (drink: string) => {
+    if (drinkPending) {
+      addToCart(drinkPending.item, setNote(drinkPending.hotsand, drink));
+      setDrinkPending(null);
     }
   };
 
@@ -908,6 +924,21 @@ export default function TablePage() {
                   stock={stock}
                   onPick={selectVariant}
                   onClose={() => setVariantPending(null)}
+                />
+              )}
+
+              {/* セットのドリンク選択（ホットサンドを選んだあと） */}
+              {drinkPending && (
+                <VariantPicker
+                  item={{
+                    id: "set-drink",
+                    name: `${drinkPending.item.name}（${drinkPending.hotsand}）のドリンク`,
+                    category: "",
+                    variations: SET_DRINKS.map((n) => ({ id: `drink-${n}`, name: n, price: 0 })),
+                  }}
+                  stock={stock}
+                  onPick={selectDrink}
+                  onClose={() => setDrinkPending(null)}
                 />
               )}
 
@@ -1719,6 +1750,21 @@ export default function TablePage() {
               stock={stock}
               onPick={selectVariant}
               onClose={() => setVariantPending(null)}
+            />
+          )}
+
+          {/* セットのドリンク選択（ホットサンドを選んだあと） */}
+          {drinkPending && (
+            <VariantPicker
+              item={{
+                id: "set-drink",
+                name: `${drinkPending.item.name}（${drinkPending.hotsand}）のドリンク`,
+                category: "",
+                variations: SET_DRINKS.map((n) => ({ id: `drink-${n}`, name: n, price: 0 })),
+              }}
+              stock={stock}
+              onPick={selectDrink}
+              onClose={() => setDrinkPending(null)}
             />
           )}
 
