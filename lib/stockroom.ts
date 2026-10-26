@@ -155,7 +155,7 @@ export const SEED_ITEMS: Item[] = [
   { id: "pumpkin-puree", name: "パンプキンピューレ（冷凍）", group: "フード", par: 1, unit: "袋", note: "スープ1回で1袋" },
   { id: "cut-onion", name: "カット玉ねぎ（冷凍）", group: "フード", par: 1, unit: "袋", note: "スープ1回で1袋" },
   { id: "consomme", name: "コンソメ", group: "フード", par: 1, unit: "袋", note: "スープ1回で40g" },
-  { id: "shiso", name: "大葉", group: "フード", par: 1, unit: "袋", note: "あみえびクリームチーズは提供時にのせる" },
+  { id: "shiso", name: "大葉", group: "フード", par: 1, unit: "袋", note: "あみえびクリームチーズに最初から混ぜる" },
   { id: "amiebi-umani", name: "あみえびうま煮", group: "フード", par: 1, unit: "個", note: "賞味期限が約1週間なので、買ったら小分けにして冷凍する" },
   { id: "soy-milk", name: "豆乳", group: "フード", par: 1, unit: "本" },
   { id: "whip", name: "ホイップクリーム", group: "フード", par: 1, unit: "本" },
