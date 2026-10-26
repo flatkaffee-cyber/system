@@ -168,9 +168,12 @@ export default function CostReview({ onChanged }: { onChanged?: () => void }) {
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10, alignItems: "center" }}>
               {r.latest && r.diffPct !== 0 && (
                 <button
-                  className="primary"
+                  // 大きくずれているものは量の違う品のことが多いので、目立たせずに確かめてから入れる
+                  className={r.bigGap ? undefined : "primary"}
                   disabled={isBusy}
                   onClick={() =>
+                    (!r.bigGap ||
+                      confirm(`${r.name}の仕入値を ${yen(r.latest!.unitPrice)} にしますか？\n容量（${r.capacity}${r.unit}）と同じ量の品か確かめてください。`)) &&
                     post(
                       {
                         name: r.name,
