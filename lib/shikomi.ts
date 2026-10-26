@@ -245,6 +245,14 @@ export const TASKS: Task[] = [
       "あみえびうま煮は冷凍のタッパから使う分だけ出し、残りはそのまま冷凍に戻す（全部は解凍しない）。" +
       "大葉は最初から混ぜる。容器に仕込んだ日付を書く",
     minutes: 15,
+    // 2026-10-26 坂本さん: 提供は1食35g。分量はクリームチーズ32g・大葉3枚・あみえび12g・醤油2g・鰹節1.5g
+    scale: [
+      { name: "クリームチーズ", amount: 32, unit: "g" },
+      { name: "大葉", amount: 3, unit: "枚" },
+      { name: "あみえびうま煮", amount: 12, unit: "g" },
+      { name: "醤油", amount: 2, unit: "g" },
+      { name: "鰹節", amount: 1.5, unit: "g" },
+    ],
   },
   {
     id: "sauerkraut",
