@@ -19,7 +19,17 @@ export type PrepGuideItem = {
   materials?: string;
   note?: string;
   photo?: { src: string; caption?: string };
+  /** 分量の計算（基準の1回分）。どれかの量を入れると、ほかが同じ割合で出る */
+  scale?: { name: string; amount: number | null; unit: string }[];
 };
+
+/** 量の見せ方。10未満は小数1桁まで、それ以上は整数。末尾の .0 は消す */
+function fmtAmount(v: number): string {
+  if (!Number.isFinite(v)) return "";
+  const r = v < 10 ? Math.round(v * 10) / 10 : Math.round(v);
+  return String(r);
+}
+
 
 export default function PrepGuide({
   item,
@@ -39,6 +49,10 @@ export default function PrepGuide({
   const [qty, setQty] = useState(item.batchNum != null ? String(item.batchNum) : "");
   const [date, setDate] = useState(today);
   const [done, setDone] = useState<number[]>([]);
+  // 分量の計算。基準の何倍かと、いま打っている行（打った文字のまま見せる）
+  const [factor, setFactor] = useState(1);
+  const [sEdit, setSEdit] = useState<{ i: number; text: string } | null>(null);
+  const scale = item.scale ?? [];
   const steps = item.steps ?? [];
 
   // 開いている間は後ろをスクロールさせない。Esc で閉じる
@@ -120,6 +134,54 @@ export default function PrepGuide({
             )}
             {steps.length > 0 && <p className="pg-hint">終わった手順を押すと印が付きます。</p>}
           </section>
+
+          {scale.some((r) => r.amount != null) && (
+            <section className="pg-sec">
+              <h3>
+                分量の計算
+                {factor !== 1 && (
+                  <button
+                    type="button"
+                    className="pg-reset"
+                    onClick={() => { setFactor(1); setSEdit(null); }}
+                  >
+                    基準に戻す
+                  </button>
+                )}
+              </h3>
+              <p className="pg-hint pg-hint-top">
+                どれか1つに量を入れると、ほかの量が同じ割合で出ます。
+              </p>
+              <div className="pg-scale">
+                {scale.map((r, i) => (
+                  <div key={r.name} className="pg-scale-row">
+                    <span className="pg-scale-name">{r.name}</span>
+                    {r.amount == null ? (
+                      <span className="pg-scale-fixed">{r.unit}</span>
+                    ) : (
+                      <span className="pg-scale-val">
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          aria-label={`${r.name}（${r.unit}）`}
+                          value={sEdit?.i === i ? sEdit.text : fmtAmount(r.amount * factor)}
+                          onFocus={(e) => e.currentTarget.select()}
+                          onChange={(e) => {
+                            const text = e.target.value;
+                            setSEdit({ i, text });
+                            const n = parseFloat(text);
+                            if (n > 0 && r.amount) setFactor(n / r.amount);
+                          }}
+                          onBlur={() => setSEdit(null)}
+                        />
+                        <span className="pg-scale-unit">{r.unit}</span>
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           {item.photo && (
             <section className="pg-sec">
@@ -216,6 +278,15 @@ export default function PrepGuide({
         .pg-draft { font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 4px; background: #fdf0e6; color: #9c5f22; letter-spacing: 0; }
         .pg-empty { color: var(--muted); }
         .pg-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+        .pg-scale { display: flex; flex-direction: column; gap: 6px; }
+        .pg-scale-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+        .pg-scale-name { flex: 1; min-width: 0; font-size: 14px; }
+        .pg-scale-val { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+        .pg-scale-val input { width: 88px; text-align: right; font-size: 16px; padding: 6px 8px; font-variant-numeric: tabular-nums; }
+        .pg-scale-unit { width: 40px; font-size: 13px; color: var(--muted); }
+        .pg-scale-fixed { font-size: 13px; color: var(--muted); padding-right: 46px; }
+        .pg-reset { margin-left: 8px; font-size: 11px; padding: 2px 8px; font-weight: 600; width: auto; }
+        .pg-hint-top { margin: 0 0 8px; }
         .pg-step {
           width: 100%; display: flex; gap: 12px; align-items: flex-start; text-align: left;
           padding: 12px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card);

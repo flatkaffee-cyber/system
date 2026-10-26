@@ -34,6 +34,7 @@ type State = {
   steps?: string[];
   stepsDraft?: boolean;
   photo?: { src: string; caption?: string };
+  scale?: { name: string; amount: number | null; unit: string }[];
   todayQty: number | null;
   unit?: string;
   doneToday: boolean;
@@ -333,6 +334,7 @@ export default function ShikomiPage() {
             materials: guide.materials,
             note: guide.note,
             photo: guide.photo,
+            scale: guide.scale,
           }}
           busy={busy === `${guide.id}:made`}
           today={d!.today}

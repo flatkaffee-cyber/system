@@ -312,7 +312,7 @@ export async function GET(req: NextRequest) {
           id: x.id, name: x.name, batch: x.todayBatch, reasons: x.dueReasons,
           batchNum: x.todayBatchNum, unit: x.unit ?? "", qty: x.todayQty,
           steps: x.steps, stepsDraft: x.stepsDraft,
-          doneToday: x.doneToday, materials: x.materials, note: x.note, photo: x.photo,
+          doneToday: x.doneToday, materials: x.materials, note: x.note, photo: x.photo, scale: x.scale,
         })),
         items: shikomiStates
           .filter((x) => !x.openingTask)

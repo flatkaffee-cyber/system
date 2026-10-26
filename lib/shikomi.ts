@@ -59,7 +59,15 @@ export type Task = {
   openingTask?: string;
   /** 仕上がりの写真（public/ 以下のパス）。仕込むときの画面に出す */
   photo?: { src: string; caption?: string };
+  /**
+   * 分量の計算に使う材料と量（基準の1回分）。仕込むときの画面で、どれか1つの量を
+   * 入れると、ほかが同じ割合で出る（キャベツのgから塩、塩からキャベツ、など）。
+   * amount が null のもの（適量・少々）は計算せずに並べるだけ。
+   */
+  scale?: ScaleIngredient[];
 };
+
+export type ScaleIngredient = { name: string; amount: number | null; unit: string };
 
 /**
  * 定期作業の一覧。増やすときはここに足す。
@@ -96,6 +104,15 @@ export const TASKS: Task[] = [
     stepsDraft: true,
     note: "午前にタネ、午後に挟んで焼いて冷凍。冷凍で10日",
     minutes: 90,
+    scale: [
+      { name: "個数", amount: 1, unit: "個" },
+      { name: "食パン", amount: 2, unit: "枚" },
+      { name: "切り落としハム", amount: 40, unit: "g" },
+      { name: "クリームチーズ", amount: 15, unit: "g" },
+      { name: "マスタード", amount: 10, unit: "g" },
+      { name: "ケチャップ", amount: 10, unit: "g" },
+      { name: "マーガリン", amount: 10, unit: "g" },
+    ],
   },
   {
     id: "hotsand-garden",
@@ -119,6 +136,17 @@ export const TASKS: Task[] = [
     stepsDraft: true,
     note: "クラシックと同じ日にまとめて仕込む。冷凍で10日",
     minutes: 60,
+    scale: [
+      { name: "個数", amount: 1, unit: "個" },
+      { name: "食パン", amount: 2, unit: "枚" },
+      { name: "ツナ", amount: 1 / 3, unit: "缶" },
+      { name: "冷凍ブロッコリー", amount: 30, unit: "g" },
+      { name: "マヨネーズ", amount: 15, unit: "g" },
+      { name: "シュレッダーチーズ", amount: 30, unit: "g" },
+      { name: "ジェノベーゼ", amount: 5, unit: "g" },
+      { name: "マスタード", amount: 5, unit: "g" },
+      { name: "マーガリン", amount: 10, unit: "g" },
+    ],
   },
   {
     id: "soup-base",
@@ -143,6 +171,15 @@ export const TASKS: Task[] = [
     qty: "100gずつ冷凍",
     note: "2週に1回、A週の木曜。作り方は「🍳 レシピ」のパンプキンスープ。冷凍の日持ちは仮で30日",
     minutes: 60,
+    scale: [
+      { name: "仕上がり（100gずつ）", amount: 16, unit: "個" },
+      { name: "パンプキンピューレ（冷凍）", amount: 1, unit: "袋" },
+      { name: "みじん切り玉ねぎ（冷凍）", amount: 1, unit: "袋" },
+      { name: "バター", amount: 100, unit: "g" },
+      { name: "水", amount: 400, unit: "ml" },
+      { name: "粒状コンソメ", amount: 40, unit: "g" },
+      { name: "塩", amount: null, unit: "少々" },
+    ],
   },
   {
     id: "mashed-potato",
@@ -171,6 +208,15 @@ export const TASKS: Task[] = [
       caption: "表面を平らにならし、ラップをぴったり貼りつけた状態",
     },
     minutes: 15,
+    scale: [
+      { name: "仕上がり", amount: 305, unit: "g" },
+      { name: "ポテトフレーク", amount: 56, unit: "g" },
+      { name: "水", amount: 150, unit: "ml" },
+      { name: "牛乳", amount: 150, unit: "ml" },
+      { name: "バター", amount: 15, unit: "g" },
+      { name: "塩", amount: 2, unit: "g" },
+      { name: "胡椒", amount: 2, unit: "g" },
+    ],
   },
   {
     id: "amiebi-cream-cheese",
@@ -222,6 +268,12 @@ export const TASKS: Task[] = [
     note:
       "千切りにして塩で揉み、汁ごと容器に詰めて液面の下に沈める。常温で発酵（夏3日・冬7日）させてから冷蔵。冷蔵で2ヶ月もつ",
     minutes: 20,
+    scale: [
+      { name: "キャベツ", amount: 1000, unit: "g" },
+      { name: "塩（キャベツの2%）", amount: 20, unit: "g" },
+      { name: "ピンクペッパー", amount: null, unit: "適量" },
+      { name: "ローリエ", amount: null, unit: "適量" },
+    ],
   },
   {
     id: "ajillo-set",
@@ -241,6 +293,15 @@ export const TASKS: Task[] = [
     ],
     note: "セットにして冷凍保存。提供時はスキレットで火を入れるだけにする",
     minutes: 30,
+    scale: [
+      { name: "セット数", amount: 1, unit: "セット" },
+      { name: "オリーブオイル", amount: 50, unit: "ml" },
+      { name: "ミニトマト", amount: 2, unit: "個" },
+      { name: "マッシュルーム", amount: 1, unit: "個" },
+      { name: "ブロッコリー", amount: 2, unit: "個" },
+      { name: "殻付き大アサリ", amount: 2, unit: "個" },
+      { name: "むき海老", amount: 2, unit: "尾" },
+    ],
   },
   {
     id: "cold-brew",

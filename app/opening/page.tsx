@@ -47,6 +47,7 @@ type ShikomiToday = {
   steps?: string[]; stepsDraft?: boolean;
   doneToday: boolean; materials?: string; note?: string;
   photo?: { src: string; caption?: string };
+  scale?: { name: string; amount: number | null; unit: string }[];
 };
 type ShikomiItem = { id: string; name: string; lastDate: string | null; expiresOn: string | null; outToday: boolean };
 type Week = { monday: string; weekA: boolean; days: { date: string; weekday: number; items: WeekItem[] }[] };
@@ -981,6 +982,7 @@ export default function OpeningPage() {
             materials: guide.materials,
             note: guide.note,
             photo: guide.photo,
+            scale: guide.scale,
           }}
           busy={sBusy === `${guide.id}:made`}
           today={date}
