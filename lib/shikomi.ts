@@ -57,6 +57,8 @@ export type Task = {
    * その作業にチェックすると仕込みとして記録するので、「今日の仕込み」の一覧には出さない
    */
   openingTask?: string;
+  /** 仕上がりの写真（public/ 以下のパス）。仕込むときの画面に出す */
+  photo?: { src: string; caption?: string };
 };
 
 /**
@@ -164,6 +166,10 @@ export const TASKS: Task[] = [
       "粗熱が取れたら、仕込んだ日付を書いて冷蔵",
     ],
     note: "表面にラップを密着させて空気に触れさせない（乾燥と変色を防ぐ）。容器に仕込んだ日付を書く",
+    photo: {
+      src: "/prep-photos/mashed-potato.jpg",
+      caption: "表面を平らにならし、ラップをぴったり貼りつけた状態",
+    },
     minutes: 15,
   },
   {

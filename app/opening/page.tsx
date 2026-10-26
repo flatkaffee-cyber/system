@@ -45,6 +45,7 @@ type ShikomiToday = {
   batchNum: number | null; unit: string; qty: number | null;
   steps?: string[]; stepsDraft?: boolean;
   doneToday: boolean; materials?: string; note?: string;
+  photo?: { src: string; caption?: string };
 };
 type ShikomiItem = { id: string; name: string; lastDate: string | null; expiresOn: string | null; outToday: boolean };
 type Week = { monday: string; weekA: boolean; days: { date: string; weekday: number; items: WeekItem[] }[] };
@@ -898,6 +899,7 @@ export default function OpeningPage() {
             stepsDraft: guide.stepsDraft,
             materials: guide.materials,
             note: guide.note,
+            photo: guide.photo,
           }}
           busy={sBusy === `${guide.id}:made`}
           onRecord={(qty) => recordShikomi(guide.id, "made", false, qty)}

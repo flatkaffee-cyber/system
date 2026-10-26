@@ -33,6 +33,7 @@ type State = {
   todayBatchNum: number | null;
   steps?: string[];
   stepsDraft?: boolean;
+  photo?: { src: string; caption?: string };
   todayQty: number | null;
   unit?: string;
   doneToday: boolean;
@@ -324,6 +325,7 @@ export default function ShikomiPage() {
             stepsDraft: guide.stepsDraft,
             materials: guide.materials,
             note: guide.note,
+            photo: guide.photo,
           }}
           busy={busy === `${guide.id}:made`}
           onRecord={(qty) => record(guide.id, "made", qty)}

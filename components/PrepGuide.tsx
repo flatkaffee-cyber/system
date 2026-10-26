@@ -18,6 +18,7 @@ export type PrepGuideItem = {
   stepsDraft?: boolean;
   materials?: string;
   note?: string;
+  photo?: { src: string; caption?: string };
 };
 
 export default function PrepGuide({
@@ -114,6 +115,19 @@ export default function PrepGuide({
             )}
             {steps.length > 0 && <p className="pg-hint">終わった手順を押すと印が付きます。</p>}
           </section>
+
+          {item.photo && (
+            <section className="pg-sec">
+              <h3>仕上がり</h3>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={item.photo.src}
+                alt={item.photo.caption ?? `${item.name}の仕上がり`}
+                style={{ width: "100%", maxWidth: 360, borderRadius: 10, display: "block" }}
+              />
+              {item.photo.caption && <p className="pg-hint">{item.photo.caption}</p>}
+            </section>
+          )}
 
           {item.note && (
             <section className="pg-sec">
