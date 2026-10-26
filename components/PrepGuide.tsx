@@ -24,16 +24,20 @@ export type PrepGuideItem = {
 export default function PrepGuide({
   item,
   busy,
+  today,
   onRecord,
   onClose,
 }: {
   item: PrepGuideItem;
   busy: boolean;
-  /** 仕込んだ量を記録する。単位の無い品目は qty なし */
-  onRecord: (qty?: number) => void;
+  /** 営業日（朝6時切替）。仕込んだ日の初期値で、これより先の日は選べない */
+  today: string;
+  /** 仕込んだ量と日を記録する。単位の無い品目は qty なし。記録し忘れた日の分は date を前の日にする */
+  onRecord: (qty: number | undefined, date: string) => void;
   onClose: () => void;
 }) {
   const [qty, setQty] = useState(item.batchNum != null ? String(item.batchNum) : "");
+  const [date, setDate] = useState(today);
   const [done, setDone] = useState<number[]>([]);
   const steps = item.steps ?? [];
 
@@ -51,10 +55,11 @@ export default function PrepGuide({
 
   const submit = (e: { preventDefault: () => void }) => {
     e.preventDefault();
-    if (!item.unit) return onRecord();
+    if (!date || date > today) return;
+    if (!item.unit) return onRecord(undefined, date);
     const n = Number(qty);
     if (qty.trim() === "" || Number.isNaN(n) || n <= 0) return;
-    onRecord(n);
+    onRecord(n, date);
   };
 
   return (
@@ -138,6 +143,21 @@ export default function PrepGuide({
         </div>
 
         <form className="pg-foot" onSubmit={submit}>
+          <div className="pg-day">
+            <label htmlFor="pg-date">仕込んだ日</label>
+            <input
+              id="pg-date"
+              type="date"
+              value={date}
+              max={today}
+              onChange={(e) => setDate(e.target.value)}
+            />
+            {date !== today && (
+              <span className="pg-past">
+                {Number(date.slice(5, 7))}/{Number(date.slice(8, 10))}の記録として入れます（記録し忘れた分）
+              </span>
+            )}
+          </div>
           {item.unit ? (
             <>
               <label htmlFor="pg-qty">仕込んだ量</label>
@@ -217,6 +237,9 @@ export default function PrepGuide({
           border-top: 1px solid var(--line); background: var(--card); border-radius: 0 0 16px 16px;
         }
         .pg-foot label { margin: 0; font-size: 13px; font-weight: 700; }
+        .pg-day { width: 100%; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .pg-foot .pg-day input { width: auto; font-size: 15px; font-weight: 600; text-align: left; padding: 6px 8px; }
+        .pg-past { font-size: 12px; color: #9c5f22; font-weight: 700; }
         .pg-foot input { width: 96px; font-size: 18px; font-weight: 700; text-align: right; padding: 8px 10px; font-variant-numeric: tabular-nums; }
         .pg-unit { font-size: 14px; color: var(--muted); }
         .pg-rec {

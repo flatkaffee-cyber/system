@@ -176,7 +176,7 @@ export default function OpeningPage() {
   useEffect(() => { load(); }, [load]);
 
   // 仕込んだ／切れたを記録する。undo なら取り消す。日付は業務チェックの日（朝6時切替）
-  const recordShikomi = async (taskId: string, type: "made" | "out", undo: boolean, qty?: number) => {
+  const recordShikomi = async (taskId: string, type: "made" | "out", undo: boolean, qty?: number, onDate?: string) => {
     setSBusy(`${taskId}:${type}`);
     setErr("");
     try {
@@ -185,7 +185,7 @@ export default function OpeningPage() {
         : await fetch("/api/shikomi", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ taskId, type, date, by: "業務チェック", ...(qty !== undefined ? { qty } : {}) }),
+            body: JSON.stringify({ taskId, type, date: onDate || date, by: "業務チェック", ...(qty !== undefined ? { qty } : {}) }),
           });
       if (!res.ok) throw new Error((await res.json()).error || "保存に失敗");
       setGuide(null);
@@ -902,7 +902,8 @@ export default function OpeningPage() {
             photo: guide.photo,
           }}
           busy={sBusy === `${guide.id}:made`}
-          onRecord={(qty) => recordShikomi(guide.id, "made", false, qty)}
+          today={date}
+          onRecord={(qty, d) => recordShikomi(guide.id, "made", false, qty, d)}
           onClose={() => setGuide(null)}
         />
       )}

@@ -89,13 +89,13 @@ export default function ShikomiPage() {
     load();
   }, [load]);
 
-  const record = async (taskId: string, type: "made" | "out", qty?: number) => {
+  const record = async (taskId: string, type: "made" | "out", qty?: number, date?: string) => {
     setBusy(`${taskId}:${type}`);
     try {
       await fetch("/api/shikomi", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ taskId, type, ...(qty !== undefined ? { qty } : {}) }),
+        body: JSON.stringify({ taskId, type, ...(qty !== undefined ? { qty } : {}), ...(date ? { date } : {}) }),
       });
       setGuide(null);
       await load();
@@ -221,6 +221,13 @@ export default function ShikomiPage() {
                     {busy === `${s.id}:made` ? "…" : prep ? "仕込んだ" : "やった"}
                   </button>
                 )}
+                {prep && (
+                  // 仕込み方はいつでも見られるように（仕込んだあとや、仕込む日でなくても）。
+                  // 記録し忘れた日の分も、ここから日付を選んで入れられる
+                  <button onClick={() => setGuide(s)} disabled={!!busy} style={{ fontSize: 11, whiteSpace: "nowrap" }}>
+                    仕込み方
+                  </button>
+                )}
                 {prep && s.lastDate && (
                   <button
                     onClick={() => (s.outToday ? undo(s.id, d!.today, "out") : record(s.id, "out"))}
@@ -328,7 +335,8 @@ export default function ShikomiPage() {
             photo: guide.photo,
           }}
           busy={busy === `${guide.id}:made`}
-          onRecord={(qty) => record(guide.id, "made", qty)}
+          today={d!.today}
+          onRecord={(qty, date) => record(guide.id, "made", qty, date)}
           onClose={() => setGuide(null)}
         />
       )}
