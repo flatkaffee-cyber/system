@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Nav from "@/components/Nav";
 
-// ストックルームの在庫確認。3日に1回、倉庫から補充する作業のためのリスト。
+// ストックルームの在庫確認。月曜・土曜（水・日の仕込みの前）に、倉庫から補充する作業のためのリスト。
+// 上に「次の仕込み日に仕込むもの」と使う材料を出し、材料が足りるかも一緒に見る。
 // 「補充した」か「倉庫に無かった」を押していく。
 // 倉庫に無かったものが、そのまま発注すべきものになる。
 
@@ -39,6 +40,12 @@ type Current = {
 type Result = "ok" | "short";
 /** 発注済みでまだ届いていないもの */
 type Pending = { orderedAt: string; qty: number; unit: string; days: number };
+/** 次の仕込み日（水・日）に仕込むものと、使う材料 */
+type NextPrep = {
+  date: string;
+  weekday: string;
+  items: { id: string; name: string; batch: string; reasons: string[]; needs: { id: string; name: string }[] }[];
+};
 /** 過去のストック確認 */
 type HistEntry = { date: string; short: number; total: number; note?: string; updatedAt?: string };
 type HistRow = {
@@ -61,6 +68,7 @@ export default function StockroomPage() {
   const [results, setResults] = useState<Record<string, Result>>({});
   const [pending, setPending] = useState<Record<string, Pending>>({});
   const [madeAt, setMadeAt] = useState<Record<string, MadeAt>>({});
+  const [nextPrep, setNextPrep] = useState<NextPrep | null>(null);
   const [current, setCurrent] = useState<Current | null>(null);
   const [lastDate, setLastDate] = useState<string | null>(null);
   const [daysSince, setDaysSince] = useState<number | null>(null);
@@ -93,6 +101,7 @@ export default function StockroomPage() {
       setItems(d.items || []);
       setPending(d.pending || {});
       setMadeAt(d.madeAt || {});
+      setNextPrep(d.nextPrep || null);
       setCurrent(d.current || null);
       setLastDate(d.lastDate);
       setDaysSince(d.daysSince);
@@ -213,10 +222,13 @@ export default function StockroomPage() {
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "保存失敗");
+      const planned: string[] = d.planned || [];
+      const buy = d.short - planned.length;
       setMsg(
-        d.short > 0
-          ? `記録しました。倉庫に無かった ${d.short}件 が発注するものです。`
-          : "記録しました。すべて補充できています。",
+        [
+          buy > 0 ? `倉庫に無かった ${buy}件 が発注するものです。` : "",
+          planned.length ? `${planned.join("・")}は、次の営業日の業務チェック「今日の仕込み」に入れました。` : "",
+        ].filter(Boolean).join("") || "記録しました。すべて補充できています。",
       );
       setResults({});
       setNote("");
@@ -232,7 +244,7 @@ export default function StockroomPage() {
     <div className="wrap">
       <header>
         <h1>📦 ストックルーム確認</h1>
-        <p>3日に1回、倉庫からストックルームへ補充します</p>
+        <p>毎週月曜・土曜（水・日の仕込みの前）に、倉庫からストックルームへ補充します</p>
       </header>
       <Nav />
 
@@ -249,6 +261,52 @@ export default function StockroomPage() {
             : "まだ一度も記録していません"}
         </div>
       </div>
+
+      {nextPrep && (
+        <div className="card" style={{ padding: "12px 14px" }}>
+          <div className="cat-title">
+            次の仕込み日 {nextPrep.date.slice(5).replace("-", "/")}（{nextPrep.weekday}）に仕込むもの
+          </div>
+          {nextPrep.items.length === 0 ? (
+            <p className="hint" style={{ margin: "4px 0 0" }}>この日に仕込むものはありません</p>
+          ) : (
+            <>
+              <p className="hint" style={{ margin: "4px 0 6px" }}>
+                材料が足りるかをこの確認で見てください。下の一覧で「倉庫にない」を押した材料は赤くなります。
+              </p>
+              {nextPrep.items.map((p) => (
+                <div key={p.id} style={{ padding: "8px 0", borderTop: "1px solid var(--line-soft, #eee)" }}>
+                  <div style={{ fontSize: 14, fontWeight: 700 }}>
+                    {p.name}
+                    <span style={{ marginLeft: 6, color: "#9c5f22" }}>{p.batch}</span>
+                  </div>
+                  <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 1 }}>{p.reasons.join("・")}</div>
+                  {p.needs.length > 0 && (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 6 }}>
+                      {p.needs.map((n) => {
+                        const r = results[n.id];
+                        return (
+                          <span
+                            key={n.id}
+                            style={{
+                              fontSize: 12, padding: "3px 9px", borderRadius: 999, fontWeight: r ? 700 : 400,
+                              border: `1px solid ${r === "short" ? "#e0b4b4" : r === "ok" ? "#b7dfc0" : "var(--line)"}`,
+                              background: r === "short" ? "#fde8e8" : r === "ok" ? "#eaf6ec" : "#fff",
+                              color: r === "short" ? "#c0392b" : r === "ok" ? "var(--ok)" : "var(--ink)",
+                            }}
+                          >
+                            {r === "short" ? "✕ " : r === "ok" ? "✓ " : ""}{n.name}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      )}
 
       {current?.active && current.rows.length > 0 && (
         <div className="card" style={{ padding: "12px 14px", borderColor: "#e8d5b0", background: "#fdf6ec" }}>
@@ -548,9 +606,9 @@ export default function StockroomPage() {
         <strong style={{ color: "#c0392b" }}>倉庫にない</strong> を押してください。<br />
         「倉庫にない」を押したものが、そのまま<strong>発注するもの</strong>になります。
         数を変えたいときは数字をタップすると直せます。<br />
-        <strong>仕込み品</strong>（マッシュポテト・あみえびクリームチーズなど）は
-        <strong style={{ color: "#c0392b" }}>半分を切っていたらその日に仕込みます</strong>。
-        日持ちを過ぎているものは、残っていても仕込み直してください。
+        <strong>仕込み品</strong>（ザワークラウト・マッシュポテトなど）は、残りが少ない・日持ちが近いなど
+        仕込み時なら<strong style={{ color: "#c0392b" }}>「仕込む」</strong>を押します。
+        記録すると、<strong>次の営業日の業務チェック</strong>（今日の仕込み）に出ます。
       </div>
 
       {GROUPS.map((g) => {
@@ -636,7 +694,7 @@ export default function StockroomPage() {
                           background: r === "ok" ? "#eaf6ec" : "#fff",
                           color: r === "ok" ? "var(--ok)" : "var(--muted)",
                         }}
-                      >{i.madeInHouse ? "半分以上ある" : "補充OK"}</button>
+                      >{i.madeInHouse ? "まだある" : "補充OK"}</button>
                       <button
                         onClick={() => set(i.id, "short")}
                         style={{
@@ -645,7 +703,7 @@ export default function StockroomPage() {
                           background: r === "short" ? "#fde8e8" : "#fff",
                           color: r === "short" ? "#c0392b" : "var(--muted)",
                         }}
-                      >{i.madeInHouse ? "半分を切った" : "倉庫にない"}</button>
+                      >{i.madeInHouse ? "仕込む" : "倉庫にない"}</button>
                     </div>
                   </div>
                 </div>
@@ -661,7 +719,7 @@ export default function StockroomPage() {
           {shortItems.map((i) => (
             <div key={i.id} style={{ fontSize: 13.5, lineHeight: 1.9 }}>
               ・{i.name} <span style={{ color: "var(--muted)" }}>（{i.par}{i.unit}）</span>
-              {i.madeInHouse && <span style={{ color: "#9c5f22", fontWeight: 700 }}> ← 今日仕込む</span>}
+              {i.madeInHouse && <span style={{ color: "#9c5f22", fontWeight: 700 }}> ← 次の営業日に仕込む</span>}
             </div>
           ))}
         </div>

@@ -107,7 +107,7 @@ const summary = (t: Task) => {
     ? `${t.biweekly ? "2週に1回 " : "毎週 "}${t.weekday.map((w) => WD[w]).join("・")}`
     : `${t.intervalDays}日おき`;
   const by = t.batchByWeekday && Object.keys(t.batchByWeekday).length
-    ? Object.entries(t.batchByWeekday).map(([w, n]) => `${WD[Number(w)]}${n}`).join("・")
+    ? WD_ORDER.filter((w) => t.batchByWeekday![w] != null).map((w) => `${WD[w]}${t.batchByWeekday![w]}`).join("・")
     : t.batch != null ? `${t.batch}` : "—";
   return { qty: `${by}${t.unit ?? ""}`, life: t.shelfLifeDays ? `${t.shelfLifeDays}日` : "—", sched };
 };

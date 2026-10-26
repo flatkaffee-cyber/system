@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isAmountOnly } from "@/lib/posMatch";
+import { saveFix } from "@/lib/salesFix";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -34,6 +36,7 @@ type Order = {
   ticket_name?: string;
   total_money?: { amount: number };
   tenders?: unknown[];
+  line_items?: { name?: string; note?: string; quantity?: string; total_money?: { amount?: number } }[];
 };
 
 // ロケーションIDは環境変数ではなくAPIから引く（他の画面と同じ取り方に揃える）
@@ -137,7 +140,17 @@ export async function POST(req: NextRequest) {
             idempotency_key: `rec_${o.id.slice(-10)}_${Date.now().toString(36)}`,
           }),
         });
-        if (res.ok) Object.assign(row, { closed: true });
+        if (res.ok) {
+          Object.assign(row, { closed: true });
+          // レジで金額だけ打った会計なら、こちらの品目をそちらに写す（売上の商品別に「金額入力」と出ないように）。
+          // 2026-10-26 まではここで写しておらず、閉じた注文の品目が売上から消えていた
+          if (isAmountOnly(hit)) {
+            const items = (o.line_items ?? [])
+              .filter((li) => li.name)
+              .map((li) => ({ name: String(li.name), qty: parseInt(li.quantity ?? "1") || 1, amount: li.total_money?.amount ?? 0 }));
+            if (items.length) await saveFix(hit.id, items).catch(() => {});
+          }
+        }
         else {
           const d = await res.json().catch(() => ({}));
           Object.assign(row, { error: d.errors?.[0]?.detail || `失敗(${res.status})` });

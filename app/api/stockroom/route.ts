@@ -10,7 +10,25 @@ import {
   type Item,
 } from "@/lib/stockroom";
 import { getOrders, openOrders } from "@/lib/purchase";
-import { getTasks as getShikomiTasks, getRecords } from "@/lib/shikomi";
+import {
+  addRecord as addShikomiRecord,
+  buildStates as buildShikomiStates,
+  getTasks as getShikomiTasks,
+  getRecords,
+  nextBizDay,
+} from "@/lib/shikomi";
+
+const WD = ["日", "月", "火", "水", "木", "金", "土"];
+
+/** 次の仕込み日（水曜・日曜のうち、今日以降でいちばん早い日） */
+function nextPrepDay(today: string): string {
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(`${today}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + i);
+    if ([3, 0].includes(d.getUTCDay())) return d.toISOString().slice(0, 10);
+  }
+  return today;
+}
 import { getInventoryItems } from "@/lib/inventory";
 
 export const runtime = "nodejs";
@@ -142,15 +160,35 @@ export async function GET(req: NextRequest) {
         }
       : null;
 
+    // 次の仕込み日（水・日）に仕込むもの。その日の時点で期限・切れた・決まった曜日に当たるものを並べ、
+    // 使う材料（needs）も添える。仕込みの前の在庫確認（月・土）で、材料が足りるかを一緒に見られるように
+    const prepDay = nextPrepDay(today);
+    const nameById = new Map(items.map((i) => [i.id, i.name]));
+    const nextPrep = {
+      date: prepDay,
+      weekday: WD[new Date(`${prepDay}T00:00:00Z`).getUTCDay()],
+      items: buildShikomiStates(records, prepDay, shikomiTasks)
+        .filter((st) => st.kind === "仕込み" && !st.openingTask && st.dueReasons.length > 0)
+        .map((st) => ({
+          id: st.id,
+          name: st.name,
+          batch: st.todayBatch,
+          reasons: st.dueReasons.map((r) => r.text),
+          needs: (st.needs ?? []).map((id) => ({ id, name: nameById.get(id) ?? id })),
+        })),
+    };
+
     return NextResponse.json({
       today,
       items,
       pending,
       madeAt,
+      nextPrep,
       current,
       lastDate: last?.date ?? null,
       daysSince: since,
-      due: since === null || since >= 3,
+      // 月曜・土曜（水・日の仕込みの前）にやる。間が空きすぎたときも出す
+      due: since === null || since >= 7 || [1, 6].includes(new Date(`${today}T00:00:00Z`).getUTCDay()),
       shortages: shortIds.map((id) => byId.get(id)).filter(Boolean),
       history: checks.slice(0, 60).map((c) => ({
         date: c.date,
@@ -217,8 +255,10 @@ export async function POST(req: NextRequest) {
         updatedAt: new Date().toISOString(),
       };
       await saveCheck(c);
+      // 仕込み品で「仕込む」を押したものは、次の営業日の業務チェック（今日の仕込み）に出す
+      const planned = await planShikomi(c.date, Object.entries(c.results).filter(([, v]) => v === "short").map(([id]) => id));
       const short = Object.values(c.results).filter((v) => v === "short").length;
-      return NextResponse.json({ ok: true, date: c.date, short });
+      return NextResponse.json({ ok: true, date: c.date, short, planned });
     }
 
     return NextResponse.json({ error: "itemかcheckが必要です" }, { status: 400 });
@@ -256,6 +296,7 @@ export async function PATCH(req: NextRequest) {
       updatedAt: new Date().toISOString(),
     };
     await saveCheck(next);
+    await planShikomi(next.date, Object.entries(b.results ?? {}).filter(([, v]) => v === "short").map(([id]) => id));
     return NextResponse.json({
       ok: true,
       date: next.date,
@@ -268,4 +309,15 @@ export async function PATCH(req: NextRequest) {
       { status: 500 },
     );
   }
+}
+
+/** 在庫確認で「仕込む」を押した仕込み品を、次の営業日に仕込む予定として記録する。記録した仕込みの名前を返す */
+async function planShikomi(checkDate: string, shortIds: string[]): Promise<string[]> {
+  const items = await getItems();
+  const targets = items.filter((i) => shortIds.includes(i.id) && i.madeInHouse && i.shikomiId);
+  const date = nextBizDay(checkDate);
+  for (const i of targets) {
+    await addShikomiRecord({ taskId: i.shikomiId!, date, type: "plan", by: "在庫確認" });
+  }
+  return targets.map((i) => i.name);
 }

@@ -37,13 +37,13 @@ export async function GET() {
   }
 }
 
-// POST /api/shikomi { taskId, type?: "made"|"out", qty?, date?, note?, by? }
-//   → 仕込んだ（made）か、切れた（out）かを記録
+// POST /api/shikomi { taskId, type?: "made"|"out"|"plan", qty?, date?, note?, by? }
+//   → 仕込んだ（made）・切れた（out）・在庫確認で仕込むと決めた（plan、date は仕込む日）を記録
 export async function POST(req: NextRequest) {
   try {
     const b = (await req.json()) as {
       taskId?: string;
-      type?: "made" | "out";
+      type?: "made" | "out" | "plan";
       qty?: number;
       date?: string;
       note?: string;
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     await addRecord({
       taskId: b.taskId,
       date: b.date || todayJST(),
-      ...(b.type === "out" ? { type: "out" as const } : {}),
+      ...(b.type === "out" || b.type === "plan" ? { type: b.type } : {}),
       ...(typeof b.qty === "number" ? { qty: b.qty } : {}),
       note: b.note,
       by: b.by,
@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// DELETE /api/shikomi?taskId=..&date=..&type=made|out → 記録の取り消し
+// DELETE /api/shikomi?taskId=..&date=..&type=made|out|plan → 記録の取り消し
 export async function DELETE(req: NextRequest) {
   try {
     const sp = req.nextUrl.searchParams;
@@ -78,7 +78,8 @@ export async function DELETE(req: NextRequest) {
     if (!taskId || !date) {
       return NextResponse.json({ error: "taskId と date が必要です" }, { status: 400 });
     }
-    await removeRecord(taskId, date, sp.get("type") === "out" ? "out" : "made");
+    const type = sp.get("type");
+    await removeRecord(taskId, date, type === "out" || type === "plan" ? type : "made");
     return NextResponse.json({ ok: true, states: buildStates(await getRecords(), todayJST(), await getTasks()) });
   } catch (e) {
     return NextResponse.json(

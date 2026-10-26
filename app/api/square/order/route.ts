@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isAmountOnly } from "@/lib/posMatch";
 import { decrementStock } from "@/lib/stock";
 import { buildTaxes, type OrderType } from "@/lib/tax";
 import { cardPaidIds } from "@/lib/cardPaid";
@@ -85,6 +86,9 @@ export async function GET(req: NextRequest) {
     const paidIds = sinceMinutes > 0 ? await cardPaidIds() : new Set<string>();
     const orders = (data.orders || [])
       .filter((o: any) => o.state !== "CANCELED" || paidIds.has(o.id))
+      // カード会計でレジアプリが作る「金額だけ・品目なし」の注文は出さない。
+      // 品目はこちらの注文のほうにあり、KDS に「?」として二重に出ていたため
+      .filter((o: any) => !isAmountOnly(o))
       .map((o: any) => ({
       id: o.id,
       ticket_name: o.ticket_name || "",
