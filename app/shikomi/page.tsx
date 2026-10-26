@@ -29,6 +29,9 @@ type State = {
   status: "overdue" | "today" | "soon" | "ok" | "never";
   dueReasons: { reason: string; text: string }[];
   todayBatch: string;
+  todayBatchNum: number | null;
+  todayQty: number | null;
+  unit?: string;
   doneToday: boolean;
   outToday: boolean;
   history: DoneLog[];
@@ -64,6 +67,8 @@ export default function ShikomiPage() {
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState("");
   const [open, setOpen] = useState<string | null>(null);
+  // 仕込んだ量の入力中の品目。決まった量を初期値に入れ、その日に実際に仕込んだ量に直してもらう
+  const [entering, setEntering] = useState<{ id: string; value: string } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -80,14 +85,15 @@ export default function ShikomiPage() {
     load();
   }, [load]);
 
-  const record = async (taskId: string, type: "made" | "out") => {
+  const record = async (taskId: string, type: "made" | "out", qty?: number) => {
     setBusy(`${taskId}:${type}`);
     try {
       await fetch("/api/shikomi", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ taskId, type }),
+        body: JSON.stringify({ taskId, type, ...(qty !== undefined ? { qty } : {}) }),
       });
+      setEntering(null);
       await load();
     } finally {
       setBusy("");
@@ -171,7 +177,9 @@ export default function ShikomiPage() {
                 )}
                 <div style={{ fontSize: 12, marginTop: 5 }}>
                   {s.doneToday ? (
-                    <span style={{ color: "#3f7d58", fontWeight: 700 }}>✅ 今日仕込みました</span>
+                    <span style={{ color: "#3f7d58", fontWeight: 700 }}>
+                      ✅ 今日仕込みました{s.todayQty != null && `（${s.todayQty}${s.unit ?? ""}）`}
+                    </span>
                   ) : due ? (
                     <span style={{ color: "#c0392b", fontWeight: 700 }}>
                       今日仕込む（{s.dueReasons.map((r) => r.text).join("・")}）
@@ -198,7 +206,11 @@ export default function ShikomiPage() {
                 ) : (
                   <button
                     className="primary"
-                    onClick={() => record(s.id, "made")}
+                    onClick={() =>
+                      prep && s.unit
+                        ? setEntering(entering?.id === s.id ? null : { id: s.id, value: s.todayBatchNum != null ? String(s.todayBatchNum) : "" })
+                        : record(s.id, "made")
+                    }
                     disabled={!!busy}
                     style={{ fontSize: 12, whiteSpace: "nowrap" }}
                   >
@@ -225,6 +237,39 @@ export default function ShikomiPage() {
               </div>
             </div>
 
+            {entering?.id === s.id && (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const n = Number(entering.value);
+                  if (entering.value.trim() === "" || Number.isNaN(n) || n <= 0) return;
+                  record(s.id, "made", n);
+                }}
+                style={{
+                  marginTop: 10, padding: "10px 12px", borderRadius: 10,
+                  background: "#fdf6ec", border: "1px solid #e8d5b0",
+                  display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap",
+                }}
+              >
+                <label style={{ fontSize: 12.5, fontWeight: 700, margin: 0 }}>仕込んだ量</label>
+                <input
+                  autoFocus
+                  inputMode="decimal"
+                  value={entering.value}
+                  onChange={(e) => setEntering({ id: s.id, value: e.target.value })}
+                  style={{ width: 96, fontSize: 16, fontWeight: 700, textAlign: "right" }}
+                />
+                <span style={{ fontSize: 13 }}>{s.unit}</span>
+                <button type="submit" className="primary" disabled={!!busy} style={{ fontSize: 12.5 }}>
+                  {busy === `${s.id}:made` ? "…" : "記録する"}
+                </button>
+                <button type="button" onClick={() => setEntering(null)} style={{ fontSize: 12 }}>やめる</button>
+                <div style={{ width: "100%", fontSize: 11.5, color: "var(--muted)" }}>
+                  決まった量は {s.todayBatch}。違う量を仕込んだら書き換えてください
+                </div>
+              </form>
+            )}
+
             {isOpen && (
               <div style={{ marginTop: 8, borderTop: "1px solid var(--line-soft, #eee)", paddingTop: 6 }}>
                 {s.history.map((h, i) => (
@@ -234,7 +279,7 @@ export default function ShikomiPage() {
                       <span style={{ marginLeft: 8, color: h.type === "out" ? "#c0392b" : "var(--ok)", fontWeight: 700 }}>
                         {h.type === "out" ? "切れた" : "仕込んだ"}
                       </span>
-                      {h.qty !== undefined && <span style={{ marginLeft: 6 }}>{h.qty}</span>}
+                      {h.qty !== undefined && <span style={{ marginLeft: 6 }}>{h.qty}{s.unit ?? ""}</span>}
                     </span>
                     <button onClick={() => undo(s.id, h.date, h.type === "out" ? "out" : "made")} style={{ fontSize: 10.5 }}>
                       削除

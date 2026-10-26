@@ -73,7 +73,7 @@ export const TASKS: Task[] = [
     // 水曜の分は水曜午後〜日曜昼（約15.9食）、日曜の分は日曜午後〜水曜昼（約7.3食）に1〜2割の余裕を足して斤で丸めた
     batch: 18,
     batchByWeekday: { 3: 18, 0: 9 },
-    unit: "食",
+    unit: "個",
     perLoaf: 3,
     shelfLifeDays: 10, // 冷凍。2026-10-26 坂本さん決定
     needs: ["bread", "ham", "cream-cheese", "mustard", "ketchup", "margarine"],
@@ -89,7 +89,7 @@ export const TASKS: Task[] = [
     // 水曜の分は約12.7食、日曜の分は約7.0食（店内＋Uber）。同じく余裕を足して斤で丸めた
     batch: 15,
     batchByWeekday: { 3: 15, 0: 9 },
-    unit: "食",
+    unit: "個",
     perLoaf: 3,
     shelfLifeDays: 10, // 冷凍。2026-10-26 坂本さん決定
     needs: ["bread", "tuna", "broccoli", "mayo", "shred-cheese", "genovese", "mustard", "margarine"],
@@ -134,8 +134,10 @@ export const TASKS: Task[] = [
     intervalDays: 7,
     weekday: [3],
     shelfLifeDays: 7,
-    batch: 2,
-    unit: "食分",
+    // 2026-10-26 量は食分ではなくgで持つ（仕込んだ量を毎回gで入れるため）。1食約30g×2食
+    batch: 60,
+    unit: "g",
+    qty: "約2食分",
     // 2026-10-26 坂本さん決定：大葉は最初から混ぜる（1か月半冷蔵しても水が出ず傷まなかった実績）。期限は7日のまま
     materials: "クリームチーズ・あみえびうま煮・大葉",
     needs: ["cream-cheese", "amiebi-umani", "shiso"],
@@ -407,8 +409,12 @@ export type TaskState = Task & {
   status: Status;
   /** 今日仕込む理由。今日の仕込み記録より前の状態で判断する（仕込んだあとも一覧に残すため） */
   dueReasons: { reason: DueReason; text: string }[];
-  /** 今日の量 */
+  /** 今日の量（表示用） */
   todayBatch: string;
+  /** 今日の量（数値）。仕込んだ量の入力欄の初期値 */
+  todayBatchNum: number | null;
+  /** 今日仕込んだ量（入れたとき） */
+  todayQty: number | null;
   doneToday: boolean;
   outToday: boolean;
   history: DoneLog[];
@@ -495,6 +501,8 @@ export function buildStates(all: DoneLog[], today = todayJST(), tasks: Task[] = 
       status,
       dueReasons: before.reasons,
       todayBatch: batchLabel(t, today),
+      todayBatchNum: batchOn(t, today) ?? null,
+      todayQty: history.find((r) => r.date === today && isMade(r))?.qty ?? null,
       doneToday: history.some((r) => r.date === today && isMade(r)),
       outToday: history.some((r) => r.date === today && isOut(r)),
       history: history.slice(0, 12),
