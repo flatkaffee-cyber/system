@@ -90,7 +90,10 @@ export default function OpeningPage() {
   // 発注したがまだ届いていないもの
   const [pendingOrders, setPendingOrders] = useState<PendingOrder[]>([]);
   // 今週（月〜日）の予定
-  const [week, setWeek] = useState<Week | null>(null);
+  // 今週・来週・再来週の予定。どの週を見ているか
+  const [weeks, setWeeks] = useState<Week[]>([]);
+  const [weekIdx, setWeekIdx] = useState(0);
+  const week = weeks[weekIdx] ?? weeks[0] ?? null;
   const [weekOpen, setWeekOpen] = useState(true);
   // 今日の仕込みと、切れたを押すための仕込み品の一覧
   const [shikomi, setShikomi] = useState<{ today: ShikomiToday[]; items: ShikomiItem[] } | null>(null);
@@ -157,7 +160,7 @@ export default function OpeningPage() {
       setDoneCount(d.doneCount || 0);
       setWaffle(d.waffle || null);
       setPendingOrders(d.pendingOrders || []);
-      setWeek(d.week || null);
+      setWeeks(d.weeks || (d.week ? [d.week] : []));
       setShikomi(d.shikomi || null);
       setDaily(d.daily || null);
       setKin(d.kintai || null);
@@ -807,7 +810,7 @@ export default function OpeningPage() {
             style={{ cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}
           >
             <span>
-              📅 今週のスケジュール（{week.monday.slice(5).replace("-", "/")}〜）
+              📅 {["今週", "来週", "再来週"][weekIdx] ?? "今週"}のスケジュール（{week.monday.slice(5).replace("-", "/")}〜）
               <span style={{
                 marginLeft: 8, fontSize: 11, padding: "2px 7px", borderRadius: 4,
                 background: week.weekA ? "#e6f2ea" : "#eef1f4", color: week.weekA ? "#1f6b3a" : "var(--muted)",
@@ -817,6 +820,19 @@ export default function OpeningPage() {
             </span>
             <span style={{ fontSize: 12, color: "var(--muted)" }}>{weekOpen ? "閉じる" : "開く"}</span>
           </div>
+          {weekOpen && weeks.length > 1 && (
+            <div className="sub-tabs" style={{ marginTop: 4 }}>
+              {weeks.map((w, i) => (
+                <button
+                  key={w.monday}
+                  className={`sub-tab ${weekIdx === i ? "active" : ""}`}
+                  onClick={() => setWeekIdx(i)}
+                >
+                  {["今週", "来週", "再来週"][i]}（{Number(w.monday.slice(5, 7))}/{Number(w.monday.slice(8))}〜）
+                </button>
+              ))}
+            </div>
+          )}
           {weekOpen && week.days.map((d) => {
             const isToday = d.date === date;
             const closed = d.weekday === 2;

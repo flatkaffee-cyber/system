@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Nav from "@/components/Nav";
 
-// ストックルームの在庫確認。月曜・土曜（水・日の仕込みの前）に、倉庫から補充する作業のためのリスト。
+// ストックルームの在庫確認。月曜・金曜（水・日の仕込みの前）に、倉庫から補充する作業のためのリスト。
 // 上に「次の仕込み日に仕込むもの」と使う材料を出し、材料が足りるかも一緒に見る。
 // 「補充した」か「倉庫に無かった」を押していく。
 // 倉庫に無かったものが、そのまま発注すべきものになる。
@@ -244,7 +244,7 @@ export default function StockroomPage() {
     <div className="wrap">
       <header>
         <h1>📦 ストックルーム確認</h1>
-        <p>毎週月曜・土曜（水・日の仕込みの前）に、倉庫からストックルームへ補充します</p>
+        <p>毎週月曜・金曜（水・日の仕込みの前）に、倉庫からストックルームへ補充します</p>
       </header>
       <Nav />
 

@@ -189,49 +189,59 @@ export async function GET(req: NextRequest) {
     // きょう必要な作業のうち、終わった数
     const need = tasks.filter((t) => !("due" in t) || t.due);
 
-    // 今週（月〜日）の予定。曜日の決まった作業と、仕込み（期限・切れた次の日・決まった曜日）。
-    // 過ぎた日は実際に仕込んだもの、今日は今日の仕込み、先の日は予定を出す
-    const monday = mondayOf(date);
+    // 今週・来週・再来週（月〜日）の予定。曜日の決まった作業と、仕込み（期限・切れた次の日・決まった曜日）。
+    // 過ぎた日は実際に仕込んだもの、今日は今日の仕込み、先の日は予定を出す。
+    // 先の週の「期限・切れた次の日」は、今の記録から出る次の1回だけ（その先は仕込んだ日で変わるので出さない）
+    const thisMonday = mondayOf(date);
     type WeekItem = { name: string; phase: string; kind: "fixed" | "interval" | "done"; note?: string };
-    const week = Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(`${monday}T00:00:00Z`);
-      d.setUTCDate(d.getUTCDate() + i);
-      const day = d.toISOString().slice(0, 10);
-      const items: WeekItem[] = TASKS
-        .filter((t) => weekdayDue(t, day) && t.id !== "hotsand-sunday-check")
-        .map((t) => ({ name: t.name, phase: t.phase, kind: "fixed" as const, ...(t.biweekly ? { note: "隔週・A週" } : {}) }));
-      for (const st of shikomiStates) {
-        if (st.openingTask) continue;
-        if (day < date) {
-          if (shikomiRecords.some((r) => r.taskId === st.id && r.date === day && r.type !== "out"))
-            items.push({ name: st.name, phase: "仕込み", kind: "done", note: "仕込んだ" });
-          continue;
-        }
-        if (day === date) {
-          if (st.doneToday) items.push({ name: st.name, phase: "仕込み", kind: "done", note: "今日仕込んだ" });
-          else if (st.dueReasons.length)
+    const buildWeek = (offset: number) => {
+      const monday = (() => {
+        const m = new Date(`${thisMonday}T00:00:00Z`);
+        m.setUTCDate(m.getUTCDate() + 7 * offset);
+        return m.toISOString().slice(0, 10);
+      })();
+      const days = Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(`${monday}T00:00:00Z`);
+        d.setUTCDate(d.getUTCDate() + i);
+        const day = d.toISOString().slice(0, 10);
+        const items: WeekItem[] = TASKS
+          .filter((t) => weekdayDue(t, day) && t.id !== "hotsand-sunday-check")
+          .map((t) => ({ name: t.name, phase: t.phase, kind: "fixed" as const, ...(t.biweekly ? { note: "隔週・A週" } : {}) }));
+        for (const st of shikomiStates) {
+          if (st.openingTask) continue;
+          if (day < date) {
+            if (shikomiRecords.some((r) => r.taskId === st.id && r.date === day && r.type !== "out"))
+              items.push({ name: st.name, phase: "仕込み", kind: "done", note: "仕込んだ" });
+            continue;
+          }
+          if (day === date) {
+            if (st.doneToday) items.push({ name: st.name, phase: "仕込み", kind: "done", note: "今日仕込んだ" });
+            else if (st.dueReasons.length)
+              items.push({
+                name: `${st.name} ${st.todayBatch}`,
+                phase: "仕込み",
+                kind: "interval",
+                note: st.dueReasons.map((r) => r.text).join("・"),
+              });
+            continue;
+          }
+          // 先の日：決まった曜日か、次に仕込む日（期限・切れた次の日）
+          const t = shikomiTasks.find((x) => x.id === st.id)!;
+          const onNext = st.nextDate === day && st.nextDate > date;
+          if (isScheduledDay(t, day) || onNext) {
             items.push({
-              name: `${st.name} ${st.todayBatch}`,
+              name: `${st.name} ${batchLabel(t, day)}`,
               phase: "仕込み",
               kind: "interval",
-              note: st.dueReasons.map((r) => r.text).join("・"),
+              note: isScheduledDay(t, day) ? undefined : st.expiresOn === day ? "期限の日" : "予定の日",
             });
-          continue;
+          }
         }
-        // 先の日：決まった曜日か、次に仕込む日（期限・切れた次の日）
-        const t = shikomiTasks.find((x) => x.id === st.id)!;
-        const onNext = st.nextDate === day && st.nextDate > date;
-        if (isScheduledDay(t, day) || onNext) {
-          items.push({
-            name: `${st.name} ${batchLabel(t, day)}`,
-            phase: "仕込み",
-            kind: "interval",
-            note: isScheduledDay(t, day) ? undefined : st.expiresOn === day ? "期限の日" : "予定の日",
-          });
-        }
-      }
-      return { date: day, weekday: d.getUTCDay(), items };
-    });
+        return { date: day, weekday: d.getUTCDay(), items };
+      });
+      return { monday, weekA: isWeekA(monday), days };
+    };
+    const weeks = [0, 1, 2].map(buildWeek);
     return NextResponse.json({
       date,
       tasks,
@@ -266,7 +276,8 @@ export async function GET(req: NextRequest) {
         shifts: shifts.filter((x) => x.date === date).map((x) => ({ staff: x.staff, start: x.start, end: x.end })),
         filled: kin.filter((x) => x.date === date).map((x) => x.member || x.name),
       },
-      week: { monday, weekA: isWeekA(date), days: week },
+      week: weeks[0],
+      weeks,
       total: need.length,
       doneCount: need.filter((t) => t.done).length,
     });

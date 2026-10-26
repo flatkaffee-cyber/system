@@ -161,7 +161,7 @@ export async function GET(req: NextRequest) {
       : null;
 
     // 次の仕込み日（水・日）に仕込むもの。その日の時点で期限・切れた・決まった曜日に当たるものを並べ、
-    // 使う材料（needs）も添える。仕込みの前の在庫確認（月・土）で、材料が足りるかを一緒に見られるように
+    // 使う材料（needs）も添える。仕込みの前の在庫確認（月・金）で、材料が足りるかを一緒に見られるように
     const prepDay = nextPrepDay(today);
     const nameById = new Map(items.map((i) => [i.id, i.name]));
     const nextPrep = {
@@ -187,8 +187,8 @@ export async function GET(req: NextRequest) {
       current,
       lastDate: last?.date ?? null,
       daysSince: since,
-      // 月曜・土曜（水・日の仕込みの前）にやる。間が空きすぎたときも出す
-      due: since === null || since >= 7 || [1, 6].includes(new Date(`${today}T00:00:00Z`).getUTCDay()),
+      // 月曜・金曜（水・日の仕込みの前）にやる。間が空きすぎたときも出す
+      due: since === null || since >= 7 || [1, 5].includes(new Date(`${today}T00:00:00Z`).getUTCDay()),
       shortages: shortIds.map((id) => byId.get(id)).filter(Boolean),
       history: checks.slice(0, 60).map((c) => ({
         date: c.date,
