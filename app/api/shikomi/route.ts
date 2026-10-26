@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isOffSeason, offSeasonNames } from "@/lib/menuAdmin";
 import {
   getRecords,
   addRecord,
@@ -15,7 +16,9 @@ export const runtime = "nodejs";
 export async function GET() {
   try {
     const today = todayJST();
-    const [records, tasks] = await Promise.all([getRecords(), getTasks()]);
+    const [records, allTasks, off] = await Promise.all([getRecords(), getTasks(), offSeasonNames()]);
+    // 販売期間の外のメニュー（例 10〜3月のコールドブリュー）の仕込みは出さない
+    const tasks = allTasks.filter((t) => !isOffSeason(off, t.menuName));
     const states = buildStates(records, today, tasks);
     const due = states.filter((s) => !s.doneToday && s.dueReasons.length > 0);
     return NextResponse.json({

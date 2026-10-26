@@ -44,6 +44,8 @@ export type Task = {
   note?: string;
   /** 目安の所要時間（分） */
   minutes?: number;
+  /** この名前のメニューが販売期間の外なら出さない（lib/menuAdmin の販売期間） */
+  menuName?: string;
   /** 使う材料（lib/stockroom の品目id）。在庫確認で「次の仕込みに要るもの」として並べる */
   needs?: string[];
   /**
@@ -184,7 +186,8 @@ export const TASKS: Task[] = [
     shelfLifeDays: 3, // 仮
     batch: 2,
     unit: "本",
-    note: "業務チェックの「コールドブリューを仕込む」にチェックすると、ここにも記録される",
+    note: "業務チェックの「コールドブリューを仕込む」にチェックすると、ここにも記録される。販売期間（メニュー編集）の外は出ない",
+    menuName: "コールドブリュー",
     minutes: 15,
     openingTask: "daily-prep",
   },

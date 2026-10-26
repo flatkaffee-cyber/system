@@ -6,6 +6,8 @@
 // 数えた結果、足りなければ業務チェックに手当ての作業が自動で出る。
 // 牛乳は買いに行く、コールドブリューは仕込む、と手当ての中身が違うので分けてある。
 
+import { isOffSeason } from "@/lib/menuAdmin";
+
 /** morning=開店前 / afternoon=17時 / evening=締め前 */
 export type Slot = "morning" | "afternoon" | "evening";
 
@@ -24,13 +26,15 @@ export type CheckItem = {
   actionText: string;
   /** いつ数えるか。書かなければ朝と夜 */
   slots?: Slot[];
+  /** この名前のメニューが販売期間の外なら数えない（lib/menuAdmin の販売期間） */
+  menuName?: string;
 };
 
 const DEFAULT_SLOTS: Slot[] = ["morning", "evening"];
 
-/** そのタイミングで数えるもの */
-export function itemsForSlot(slot: Slot): CheckItem[] {
-  return CHECK_ITEMS.filter((i) => (i.slots ?? DEFAULT_SLOTS).includes(slot));
+/** そのタイミングで数えるもの。off は販売期間の外にあるメニューの名前 */
+export function itemsForSlot(slot: Slot, off: string[] = []): CheckItem[] {
+  return CHECK_ITEMS.filter((i) => (i.slots ?? DEFAULT_SLOTS).includes(slot) && !isOffSeason(off, i.menuName));
 }
 
 export const CHECK_ITEMS: CheckItem[] = [
@@ -57,6 +61,8 @@ export const CHECK_ITEMS: CheckItem[] = [
     lowAt: 1,
     action: "prep",
     actionText: "抽出に時間がかかるので、その場ですぐ仕込む",
+    // 2026-10-26 コールドブリューは4〜9月だけ売る。期間外は数えない
+    menuName: "コールドブリュー",
   },
   {
     id: "bread",
@@ -128,10 +134,10 @@ export async function clearValues(date: string, slot: Slot): Promise<void> {
 export type Need = { id: string; name: string; action: CheckItem["action"]; text: string };
 
 /** 足りないもの。数えていなければ空 */
-export function needs(values: Values | undefined, slot?: Slot): Need[] {
+export function needs(values: Values | undefined, slot?: Slot, off: string[] = []): Need[] {
   if (!values) return [];
   const out: Need[] = [];
-  for (const it of slot ? itemsForSlot(slot) : CHECK_ITEMS) {
+  for (const it of slot ? itemsForSlot(slot, off) : CHECK_ITEMS.filter((i) => !isOffSeason(off, i.menuName))) {
     const v = values[it.id];
     if (v === undefined) continue;
     if (it.kind === "full") {
@@ -151,7 +157,7 @@ export function needs(values: Values | undefined, slot?: Slot): Need[] {
   return out;
 }
 
-export async function dayState(date: string) {
+export async function dayState(date: string, off: string[] = []) {
   const all = await getAll();
   const day = all[date] ?? {};
   const build = (slot: Slot) => {
@@ -159,12 +165,12 @@ export async function dayState(date: string) {
     return {
       counted: !!e,
       values: e?.values ?? null,
-      needs: needs(e?.values, slot),
-      items: itemsForSlot(slot),
+      needs: needs(e?.values, slot, off),
+      items: itemsForSlot(slot, off),
     };
   };
   return {
-    items: CHECK_ITEMS,
+    items: CHECK_ITEMS.filter((i) => !isOffSeason(off, i.menuName)),
     morning: build("morning"),
     afternoon: build("afternoon"),
     evening: build("evening"),

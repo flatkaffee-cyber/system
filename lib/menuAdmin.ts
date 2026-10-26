@@ -160,6 +160,25 @@ export function inSeason(season: Season | undefined, month: number): boolean {
 /** いまの月（日本時間） */
 export const jstMonth = () => new Date(Date.now() + 9 * 3600_000).getUTCMonth() + 1;
 
+/**
+ * いま販売期間の外にある商品の名前。業務チェックで、売っていない商品の作業（コールドブリューの残数・仕込み）を止めるのに使う。
+ * Squareに届かないときは空（＝止めない）を返す
+ */
+export async function offSeasonNames(month = jstMonth()): Promise<string[]> {
+  try {
+    const seasons = await getSeasons();
+    if (!Object.keys(seasons).length) return [];
+    const { listItems } = await import("@/lib/squareCatalog");
+    return (await listItems()).filter((i) => !inSeason(seasons[i.id], month)).map((i) => i.name);
+  } catch {
+    return [];
+  }
+}
+
+/** その商品名が期間外か（名前に含まれていればよい。「コールドブリュー」で「コールドブリュー（ICE）」なども拾う） */
+export const isOffSeason = (off: string[], menuName?: string) =>
+  !!menuName && off.some((n) => n === menuName || n.includes(menuName));
+
 /* ── 並び替え ───────────────────────────────── */
 
 /** 大分類の名前を、決めた順に並べる。順序表に無いものは後ろへ（名前順） */

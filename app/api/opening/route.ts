@@ -30,6 +30,7 @@ import {
   removeRecord as removeShikomiRecord,
 } from "@/lib/shikomi";
 import { getShifts } from "@/lib/shift";
+import { isOffSeason, offSeasonNames } from "@/lib/menuAdmin";
 import { getKintai } from "@/lib/kintai";
 import type { Slot } from "@/lib/dailycheck";
 import {
@@ -57,11 +58,13 @@ export async function GET(req: NextRequest) {
     const pending = await openOrders();
     const choices = await getChoices(date);
     // 前日の昼に「翌日仕込む」を押していたら、今日の朝に仕込みを出す
-    const daily = await dailyState(date);
+    // 販売期間の外のメニュー（例 10〜3月のコールドブリュー）の作業は出さない
+    const off = await offSeasonNames(Number(date.slice(5, 7)));
+    const daily = await dailyState(date, off);
     const [shifts, kin] = await Promise.all([getShifts(), getKintai()]);
     // 夜に足りなかったものは、翌朝の手当てとして持ち越す。
     // ただし今朝もう数えているなら、そちらが最新なので持ち越さない。
-    const yEvening = (await dailyState(yesterdayOf(date))).evening;
+    const yEvening = (await dailyState(yesterdayOf(date), off)).evening;
     const carried = daily.morning.counted ? [] : yEvening.needs;
     const dailyNeeds = [
       ...carried,
@@ -79,7 +82,8 @@ export async function GET(req: NextRequest) {
 
     // 今日の仕込み。期限・切れた次の日・決まった曜日から出る（lib/shikomi）。
     // 別の作業で出しているもの（コールドブリュー）と、確認の作業は除く
-    const [shikomiRecords, shikomiTasks] = await Promise.all([getShikomiRecords(), getShikomiTasks()]);
+    const [shikomiRecords, allShikomiTasks] = await Promise.all([getShikomiRecords(), getShikomiTasks()]);
+    const shikomiTasks = allShikomiTasks.filter((t) => !isOffSeason(off, t.menuName));
     const wdToday = new Date(`${date}T00:00:00Z`).getUTCDay();
     // 日曜の朝に「今回は仕込まない」を選んだら、日曜の予定としてのホットサンドは出さない（切れた・期限は残す）
     const skipSundayHotsand = wdToday === 0 && choices["hotsand-sunday-check"] === "今回は仕込まない";
@@ -171,6 +175,16 @@ export async function GET(req: NextRequest) {
         };
       }),
     );
+
+    // コールドブリューを売っていない時期は、仕込みの作業を外し、数える作業の名前からも外す
+    if (isOffSeason(off, "コールドブリュー")) {
+      const strip = (x?: string) => x?.replace(/コールドブリュー・/g, "").replace(/・コールドブリュー/g, "");
+      for (let i = tasks.length - 1; i >= 0; i--) {
+        const t = tasks[i];
+        if (t.dailyAction === "prep") tasks.splice(i, 1);
+        else if (t.daily) tasks[i] = { ...t, name: strip(t.name)!, detail: strip(t.detail) };
+      }
+    }
 
     // きょう必要な作業のうち、終わった数
     const need = tasks.filter((t) => !("due" in t) || t.due);
@@ -299,7 +313,7 @@ export async function POST(req: NextRequest) {
       const slot: Slot = b.dailyCount.slot === "evening" ? "evening" : "morning";
       await saveDaily(date, slot, b.dailyCount.values ?? {});
       await toggle(date, slot === "morning" ? "daily-morning" : "daily-evening", true);
-      return NextResponse.json({ ok: true, date, daily: await dailyState(date) });
+      return NextResponse.json({ ok: true, date, daily: await dailyState(date, await offSeasonNames(Number(date.slice(5, 7)))) });
     }
 
 
@@ -358,7 +372,7 @@ export async function DELETE(req: NextRequest) {
       b.dailySlot === "morning" ? "daily-morning" : "daily-evening",
       false,
     );
-    return NextResponse.json({ ok: true, daily: await dailyState(b.dailyDate) });
+    return NextResponse.json({ ok: true, daily: await dailyState(b.dailyDate, await offSeasonNames(Number(b.dailyDate.slice(5, 7)))) });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "削除に失敗" },
