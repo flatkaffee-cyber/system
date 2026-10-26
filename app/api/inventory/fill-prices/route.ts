@@ -3,22 +3,22 @@ import {
   gmailSearch,
   googleErrorPayload,
   isGoogleConnected,
-  sheetsGet,
-  sheetsUpdate,
   type Mail,
 } from "@/lib/google";
-import { SHEET_ID, SHEET_RANGE } from "@/lib/inventorySheet";
+import { listShiire, saveShiire } from "@/lib/shiireList";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 // 仕入れ表の価格が空の行を、購入メールから埋める。
+// 2026-10-26 から仕入れ表は Supabase（lib/shiireList）。メールを探すのに Gmail の連携だけは要る。
 //
 // 商品名は表とメールで表記が揺れる（表「ジンジャエール（缶）」/ メール「コカ・コーラ
 // カナダドライ ジンジャーエール 160ml缶×30本」）ので、行の名前ではなく
 // C列のURLに入っている商品名を手がかりにする。こちらは購入したページそのものなので確実。
 
-type Row = { row: number; name: string; supplier: string; url: string; price: string };
+/** row は仕入れ表の品目id */
+type Row = { row: number; name: string; supplier: string; url: string };
 
 // 表記揺れを吸収する。長音・中黒・空白・全半角を落として比較用の文字列にする。
 function norm(s: string): string {
@@ -123,20 +123,15 @@ type Result = {
   orderedAt?: string;
   qty?: number;
   product?: string;
-  cell?: string;
   reason?: string;
 };
 
 async function collect(): Promise<Result[]> {
-  const values = await sheetsGet(SHEET_ID, SHEET_RANGE);
-  const rows: Row[] = [];
-  values.forEach((r, i) => {
-    const c = (n: number) => (r[n] == null ? "" : String(r[n]).trim());
-    const [name, supplier, url, price] = [c(0), c(1), c(2), c(3)];
-    // 見出し行(A列だけ)と、すでに価格が入っている行は対象外
-    if (!name || !supplier || price) return;
-    rows.push({ row: i + 1, name, supplier, url, price });
-  });
+  // すでに価格が入っている品目は対象外
+  const rows: Row[] = (await listShiire())
+    .flatMap((s) => s.rows)
+    .filter((r) => r.price === null && r.supplier)
+    .map((r) => ({ row: r.id, name: r.name, supplier: r.supplier, url: r.url }));
 
   const results: Result[] = [];
   for (const row of rows) {
@@ -152,7 +147,6 @@ async function collect(): Promise<Result[]> {
             orderedAt: new Date(hit.date).toISOString().slice(0, 10),
             qty: hit.qty,
             product: hit.product,
-            cell: `シート1!D${row.row}`,
           }
         : { reason: row.url ? "購入メールが見つからない" : "URLが未登録" }),
     });
@@ -192,7 +186,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ dryRun: true, willWrite: targets });
     }
     for (const t of targets) {
-      await sheetsUpdate(SHEET_ID, t.cell!, [[String(t.price)]]);
+      await saveShiire({ id: t.row, price: t.price! });
     }
     return NextResponse.json({ ok: true, written: targets.length, targets });
   } catch (e) {
