@@ -51,6 +51,10 @@ export type Task = {
   choices?: [string, string];
   /** 冷凍庫から冷蔵庫へホットサンドを補充する作業（毎日） */
   hotsand?: "fridge";
+  /** 夜にホットサンドの残り（冷凍庫＋冷蔵庫）を数えて入れる作業 */
+  hotsandCount?: boolean;
+  /** ザワークラウトを常温の発酵から冷蔵庫に移す作業。仕込んだ日から数えて出す */
+  sauerkrautMove?: boolean;
   /** 牛乳・コールドブリュー・水を数える作業。朝か夜か */
   daily?: "morning" | "afternoon" | "evening";
   /** 数えた結果、足りないときだけ出す手当ての作業 */
@@ -202,8 +206,15 @@ export const TASKS: Task[] = [
   },
 
   {
-    // 仕込むと決めた日のうちに食パンを手配し、翌日に焼く。
-    // 冷凍庫を見るのは昼。夜に気づいても、食パンの手配が翌日の配達に間に合わない。
+    // 2026-10-26 坂本さん「毎晩ホットサンドの仕込みの数だけ記録してほしい」。
+    // 残りの数が毎晩わかれば、1日に何個出たか・仕込む量が合っているかが見える
+    id: "hotsand-count",
+    phase: "締め",
+    name: "ホットサンドの残りを数える",
+    detail: "冷凍庫と冷蔵庫を合わせた、クラシックとガーデンの数を入れる。冷蔵庫への補充の前に数える",
+    hotsandCount: true,
+  },
+  {
     id: "hotsand-fridge",
     // 2026-10-26 坂本さん決定：朝ではなく締めで、翌日の分を補充する
     phase: "締め",
@@ -245,6 +256,15 @@ export const TASKS: Task[] = [
       "期限が来たもの・前の日に切れたもの・決まった曜日のものが並ぶ。決まった量だけ仕込んで「仕込んだ」を押す。" +
       "押した日から次の期限を数える",
     shikomiList: true,
+  },
+  {
+    // 2026-10-26 坂本さん決定：ザワークラウトは仕込んだ3日後（4〜9月）・7日後（10〜3月）に冷蔵庫へ移す。
+    // チェックを付けるまで毎日出す（付けたらその回の分は終わり）
+    id: "sauerkraut-fridge",
+    phase: "営業中",
+    name: "ザワークラウトを冷蔵庫に移す",
+    detail: "常温で発酵させていたザワークラウトを冷蔵庫へ。仕込んだ日から、4〜9月は3日後・10〜3月は7日後",
+    sauerkrautMove: true,
   },
   {
     id: "prosciutto-buy",
@@ -528,6 +548,33 @@ export const WAFFLE_FLAVORS = ["プレーン", "チョコチップ", "抹茶"] a
  */
 type WaffleDay = { counts: Record<string, number>; bakedAt?: string; baked?: boolean };
 type WaffleMap = Record<string, WaffleDay>;
+
+/* ── ザワークラウトの発酵 ───────────────────── */
+
+/** 常温で発酵させる日数。4〜9月は3日、10〜3月は7日（仕込んだ日の月で決める） */
+export function fermentDays(madeDate: string): number {
+  const m = Number(madeDate.slice(5, 7));
+  return m >= 4 && m <= 9 ? 3 : 7;
+}
+
+/* ── ホットサンドの残り（毎晩） ───────────────── */
+
+const HOTSAND_KEY = "hotsand:counts";
+export type HotsandCount = { classic: number; garden: number; at: string };
+
+export async function getHotsandCounts(): Promise<Record<string, HotsandCount>> {
+  const store = await kv();
+  if (!store) return {};
+  return (await store.get<Record<string, HotsandCount>>(HOTSAND_KEY)) ?? {};
+}
+
+export async function saveHotsandCount(date: string, classic: number, garden: number): Promise<void> {
+  const store = await kv();
+  if (!store) throw new Error("KV未設定");
+  const all = await getHotsandCounts();
+  all[date] = { classic, garden, at: new Date().toISOString() };
+  await store.set(HOTSAND_KEY, all);
+}
 
 export async function getWaffleCounts(): Promise<WaffleMap> {
   const store = await kv();

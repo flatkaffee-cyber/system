@@ -9,6 +9,9 @@ import {
   morningPlan,
   nightPlan,
   getChoices,
+  getHotsandCounts,
+  fermentDays,
+  saveHotsandCount,
   mondayOf,
   isWeekA,
   weekdayDue,
@@ -100,8 +103,42 @@ export async function GET(req: NextRequest) {
       (s) => !s.openingTask && (s.dueReasons.length > 0 || s.doneToday),
     );
 
+    // 毎晩数えるホットサンドの残り。今日の分と、直近7日分
+    const hotsandCounts = await getHotsandCounts();
+    const hotsandRecent = Object.entries(hotsandCounts)
+      .filter(([d]) => d <= date)
+      .sort(([a], [b]) => (a < b ? 1 : -1))
+      .slice(0, 7)
+      .map(([d, v]) => ({ date: d, classic: v.classic, garden: v.garden }));
+
+    // ザワークラウトを冷蔵庫へ移す日。いちばん新しい仕込みから、発酵の日数（4〜9月は3日・10〜3月は7日）あと
+    const krautMade = shikomiRecords
+      .filter((r) => r.taskId === "sauerkraut" && (!r.type || r.type === "made") && r.date <= date)
+      .map((r) => r.date)
+      .sort()
+      .pop();
+    const krautDue = krautMade
+      ? new Date(Date.parse(`${krautMade}T00:00:00Z`) + fermentDays(krautMade) * 86_400_000).toISOString().slice(0, 10)
+      : null;
+    const krautMoved = await lastDoneDate("sauerkraut-fridge");
+    // 移したかどうか（今日チェックしたものは今日の一覧には残す）
+    const krautPending = !!krautDue && !(krautMoved && krautMoved >= krautDue && krautMoved !== date);
+
     const tasks = await Promise.all(
       TASKS.map(async (t) => {
+        if (t.sauerkrautMove) {
+          return {
+            ...t,
+            done: done.includes(t.id),
+            due: krautPending && date >= krautDue!,
+            ...(krautMade
+              ? { detail: `${Number(krautMade.slice(5, 7))}/${Number(krautMade.slice(8))}に仕込んだ分（常温で${fermentDays(krautMade)}日）。${t.detail}` }
+              : {}),
+          };
+        }
+        if (t.hotsandCount) {
+          return { ...t, done: done.includes(t.id) || !!hotsandCounts[date] };
+        }
         if (t.shikomiList) {
           // 並んだものを全部仕込んだら終わり。チェックは仕込みの記録から決まる
           return {
@@ -176,6 +213,12 @@ export async function GET(req: NextRequest) {
       }),
     );
 
+    // ザワークラウトを移す作業は、移す日（とその後まだ移していない日）だけ出す。普段の日は一覧に出さない
+    for (let i = tasks.length - 1; i >= 0; i--) {
+      const t = tasks[i] as { sauerkrautMove?: boolean; due?: boolean; done: boolean };
+      if (t.sauerkrautMove && !t.due && !t.done) tasks.splice(i, 1);
+    }
+
     // コールドブリューを売っていない時期は、仕込みの作業を外し、数える作業の名前からも外す
     if (isOffSeason(off, "コールドブリュー")) {
       const strip = (x?: string) => x?.replace(/コールドブリュー・/g, "").replace(/・コールドブリュー/g, "");
@@ -207,6 +250,10 @@ export async function GET(req: NextRequest) {
         const items: WeekItem[] = TASKS
           .filter((t) => weekdayDue(t, day) && t.id !== "hotsand-sunday-check")
           .map((t) => ({ name: t.name, phase: t.phase, kind: "fixed" as const, ...(t.biweekly ? { note: "隔週・A週" } : {}) }));
+        // ザワークラウトを冷蔵庫へ移す日（過ぎてまだ移していなければ今日に寄せる）
+        if (krautPending && krautDue && day >= date && (day === krautDue || (krautDue < date && day === date))) {
+          items.push({ name: "ザワークラウトを冷蔵庫に移す", phase: "仕込み", kind: "interval", note: krautDue < date ? "移す日を過ぎています" : `仕込んで${fermentDays(krautMade!)}日` });
+        }
         for (const st of shikomiStates) {
           if (st.openingTask) continue;
           if (day < date) {
@@ -258,6 +305,7 @@ export async function GET(req: NextRequest) {
         night,
       },
       pendingOrders: pending,
+      hotsand: { today: hotsandCounts[date] ?? null, recent: hotsandRecent },
       // 今日の仕込みと、切れたを押すための一覧
       shikomi: {
         today: shikomiToday.map((x) => ({
@@ -306,6 +354,7 @@ export async function POST(req: NextRequest) {
       waffleBaked?: boolean;
       choice?: { taskId?: string; answer?: string };
       dailyCount?: { slot?: Slot; values?: DailyValues };
+      hotsandCount?: { classic?: number; garden?: number };
     };
 
     if (b.choice?.taskId && b.choice.answer) {
@@ -318,6 +367,14 @@ export async function POST(req: NextRequest) {
       // どちらを選んでも「見た」ことに変わりはないので終わりにする
       await toggle(date, b.choice.taskId, true);
       return NextResponse.json({ ok: true, date, answers });
+    }
+
+    if (b.hotsandCount) {
+      const date = b.date || todayJST();
+      const n = (v: unknown) => Math.max(0, Math.round(Number(v) || 0));
+      await saveHotsandCount(date, n(b.hotsandCount.classic), n(b.hotsandCount.garden));
+      await toggle(date, "hotsand-count", true);
+      return NextResponse.json({ ok: true, date });
     }
 
     if (b.dailyCount) {

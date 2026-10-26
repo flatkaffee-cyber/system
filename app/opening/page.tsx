@@ -18,6 +18,7 @@ type Task = {
   biweekly?: boolean;
   weekA?: boolean;
   waffleCount?: boolean;
+  hotsandCount?: boolean;
   waffleMorning?: boolean;
   orderList?: boolean;
   pendingOrder?: boolean;
@@ -114,6 +115,13 @@ export default function OpeningPage() {
   const [kinBusy, setKinBusy] = useState(false);
   const [kinMsg, setKinMsg] = useState("");
   const [counts, setCounts] = useState<Record<string, string>>({});
+  // 毎晩のホットサンドの残り（冷凍庫＋冷蔵庫）
+  const [hotsand, setHotsand] = useState<{
+    today: { classic: number; garden: number } | null;
+    recent: { date: string; classic: number; garden: number }[];
+  } | null>(null);
+  const [hsIn, setHsIn] = useState<{ classic: string; garden: string }>({ classic: "", garden: "" });
+  const [hsBusy, setHsBusy] = useState(false);
   const [bakedAt, setBakedAt] = useState("");
   const [wSaving, setWSaving] = useState(false);
   const [wMsg, setWMsg] = useState("");
@@ -162,6 +170,8 @@ export default function OpeningPage() {
       setPendingOrders(d.pendingOrders || []);
       setWeeks(d.weeks || (d.week ? [d.week] : []));
       setShikomi(d.shikomi || null);
+      setHotsand(d.hotsand || null);
+      if (d.hotsand?.today) setHsIn({ classic: String(d.hotsand.today.classic), garden: String(d.hotsand.today.garden) });
       setDaily(d.daily || null);
       setKin(d.kintai || null);
       if (d.waffle?.today) {
@@ -197,6 +207,25 @@ export default function OpeningPage() {
       setErr(e instanceof Error ? e.message : "保存に失敗");
     } finally {
       setSBusy("");
+    }
+  };
+
+  const saveHotsand = async () => {
+    if (hsIn.classic.trim() === "" || hsIn.garden.trim() === "") return setErr("クラシックとガーデンの数を両方入れてください");
+    setHsBusy(true);
+    setErr("");
+    try {
+      const res = await fetch("/api/opening", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date, hotsandCount: { classic: Number(hsIn.classic), garden: Number(hsIn.garden) } }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || "保存に失敗");
+      await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "保存に失敗");
+    } finally {
+      setHsBusy(false);
     }
   };
 
@@ -697,6 +726,42 @@ export default function OpeningPage() {
                     </button>
                   </div>
                 ))
+              )}
+            </div>
+          )}
+          {t.hotsandCount && (
+            <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 8 }}>
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+                {([["classic", "クラシック"], ["garden", "ガーデン"]] as const).map(([k, label]) => (
+                  <label key={k} style={{ display: "flex", alignItems: "center", gap: 5, margin: 0, fontSize: 13 }}>
+                    {label}
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      value={hsIn[k]}
+                      onChange={(e) => setHsIn((p) => ({ ...p, [k]: e.target.value }))}
+                      style={{ width: 60, fontSize: 15, padding: "6px 8px", textAlign: "center" }}
+                    />
+                    個
+                  </label>
+                ))}
+                <button
+                  onClick={saveHotsand}
+                  disabled={hsBusy}
+                  style={{
+                    padding: "8px 16px", borderRadius: 8, border: "none",
+                    background: "var(--accent)", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer",
+                  }}
+                >
+                  {hsBusy ? "記録中…" : hotsand?.today ? "直す" : "記録する"}
+                </button>
+              </div>
+              {hotsand && hotsand.recent.length > 0 && (
+                <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 6, lineHeight: 1.7 }}>
+                  これまで：
+                  {hotsand.recent.map((r) => `${Number(r.date.slice(5, 7))}/${Number(r.date.slice(8))} C${r.classic}・G${r.garden}`).join("　")}
+                </div>
               )}
             </div>
           )}
