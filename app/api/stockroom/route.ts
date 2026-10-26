@@ -10,7 +10,7 @@ import {
   type Item,
 } from "@/lib/stockroom";
 import { getOrders, openOrders } from "@/lib/purchase";
-import { TASKS as SHIKOMI_TASKS, getRecords } from "@/lib/shikomi";
+import { getTasks as getShikomiTasks, getRecords } from "@/lib/shikomi";
 import { getInventoryItems } from "@/lib/inventory";
 
 export const runtime = "nodejs";
@@ -75,11 +75,11 @@ export async function GET(req: NextRequest) {
 
     // 仕込み品は「いつ仕込んだか」と「あと何日もつか」を出す。
     // 半分を切っていなくても、日持ちを過ぎていれば仕込み直す必要がある。
-    const records = await getRecords();
+    const [records, shikomiTasks] = await Promise.all([getRecords(), getShikomiTasks()]);
     const madeAt: Record<string, { date: string; daysAgo: number; keepDays: number; daysLeft: number }> = {};
     for (const i of items) {
       // 日持ちは仕込みの消費期限（lib/shikomi）を正とする。無ければ在庫側の keepDays
-      const keepDays = SHIKOMI_TASKS.find((t) => t.id === i.shikomiId)?.shelfLifeDays ?? i.keepDays;
+      const keepDays = shikomiTasks.find((t) => t.id === i.shikomiId)?.shelfLifeDays ?? i.keepDays;
       if (!i.shikomiId || !keepDays) continue;
       const days = records
         .filter((r) => r.taskId === i.shikomiId && r.type !== "out")

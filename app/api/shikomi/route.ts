@@ -5,6 +5,7 @@ import {
   removeRecord,
   buildStates,
   analyze,
+  getTasks,
   todayJST,
 } from "@/lib/shikomi";
 
@@ -14,14 +15,14 @@ export const runtime = "nodejs";
 export async function GET() {
   try {
     const today = todayJST();
-    const records = await getRecords();
-    const states = buildStates(records, today);
+    const [records, tasks] = await Promise.all([getRecords(), getTasks()]);
+    const states = buildStates(records, today, tasks);
     const due = states.filter((s) => !s.doneToday && s.dueReasons.length > 0);
     return NextResponse.json({
       today,
       states,
       due,
-      analysis: analyze(records, today),
+      analysis: analyze(records, today, tasks),
       summary: {
         due: due.length,
         dueMinutes: due.reduce((n, s) => n + (s.minutes ?? 0), 0),
@@ -59,7 +60,7 @@ export async function POST(req: NextRequest) {
       note: b.note,
       by: b.by,
     });
-    return NextResponse.json({ ok: true, states: buildStates(await getRecords()) });
+    return NextResponse.json({ ok: true, states: buildStates(await getRecords(), todayJST(), await getTasks()) });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "保存に失敗" },
@@ -78,7 +79,7 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: "taskId と date が必要です" }, { status: 400 });
     }
     await removeRecord(taskId, date, sp.get("type") === "out" ? "out" : "made");
-    return NextResponse.json({ ok: true, states: buildStates(await getRecords()) });
+    return NextResponse.json({ ok: true, states: buildStates(await getRecords(), todayJST(), await getTasks()) });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "取消に失敗" },

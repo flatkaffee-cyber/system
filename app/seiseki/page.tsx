@@ -16,7 +16,10 @@ type Data = {
     breakdown: { label: string; amount: number }[];
   };
   days: { total: number; done: number; left: number };
-  sales: { total: number; orderCount: number; avgPerDay: number; byDay: { day: string; sales: number; count: number }[] };
+  sales: {
+    total: number; orderCount: number; avgPerDay: number; byDay: { day: string; sales: number; count: number }[];
+    square?: number; uber?: { total: number; count: number; lastDate: string | null };
+  };
   target: number;
   achieveRate: number | null;
   needPerDay: number;
@@ -121,6 +124,11 @@ export default function Seiseki() {
               <div className="cap">今月の売上</div>
               <div className="num">{fmt(d.sales.total)}</div>
               <div className="sub">{d.sales.orderCount}件 ／ 1日平均 {fmt(d.sales.avgPerDay)}</div>
+              {d.sales.uber && d.sales.uber.total > 0 && (
+                <div className="sub">
+                  店内 {fmt(d.sales.square ?? 0)} ＋ Uber {fmt(d.sales.uber.total)}（{d.sales.uber.lastDate?.slice(5).replace("-", "/")}まで取り込み済み）
+                </div>
+              )}
             </div>
             <div className="big">
               <div className="cap">目標 {d.target ? fmt(d.target) : "未設定"}</div>

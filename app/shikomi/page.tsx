@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import Nav from "@/components/Nav";
 
 // 仕込みの予定と記録（内部用）。店に来たときに何を仕込むかが分かることが目的。
@@ -111,8 +112,8 @@ export default function ShikomiPage() {
   return (
     <div className="wrap">
       <header>
-        <h1>📆 週間予定</h1>
-        <p>仕込みの予定・記録と、予定とのずれ</p>
+        <h1>📆 仕込み</h1>
+        <p>仕込みの予定・記録と、予定とのずれ　<Link href="/shikomi/settings">設定を変える →</Link></p>
       </header>
       <Nav />
 
@@ -294,7 +295,7 @@ export default function ShikomiPage() {
 
       <p className="hint" style={{ textAlign: "center", marginTop: 12 }}>
         ※ 業務チェックの「今日の仕込み」「切れた仕込み品を記録する」と同じ記録です。<br />
-        消費期限・1回の量を変えるときは <code>lib/shikomi.ts</code> の TASKS を直します。
+        消費期限・1回の量・仕込む日は <Link href="/shikomi/settings">仕込みの設定</Link> で変えられます。
       </p>
     </div>
   );

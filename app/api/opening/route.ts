@@ -21,7 +21,7 @@ import {
 } from "@/lib/opening";
 import { openOrders } from "@/lib/purchase";
 import {
-  TASKS as SHIKOMI_TASKS,
+  getTasks as getShikomiTasks,
   addRecord as addShikomiRecord,
   batchLabel,
   buildStates as buildShikomiStates,
@@ -79,11 +79,11 @@ export async function GET(req: NextRequest) {
 
     // 今日の仕込み。期限・切れた次の日・決まった曜日から出る（lib/shikomi）。
     // 別の作業で出しているもの（コールドブリュー）と、確認の作業は除く
-    const shikomiRecords = await getShikomiRecords();
+    const [shikomiRecords, shikomiTasks] = await Promise.all([getShikomiRecords(), getShikomiTasks()]);
     const wdToday = new Date(`${date}T00:00:00Z`).getUTCDay();
     // 日曜の朝に「今回は仕込まない」を選んだら、日曜の予定としてのホットサンドは出さない（切れた・期限は残す）
     const skipSundayHotsand = wdToday === 0 && choices["hotsand-sunday-check"] === "今回は仕込まない";
-    const shikomiStates = buildShikomiStates(shikomiRecords, date)
+    const shikomiStates = buildShikomiStates(shikomiRecords, date, shikomiTasks)
       .filter((s) => s.kind === "仕込み")
       .map((s) => ({
         ...s,
@@ -205,7 +205,7 @@ export async function GET(req: NextRequest) {
           continue;
         }
         // 先の日：決まった曜日か、次に仕込む日（期限・切れた次の日）
-        const t = SHIKOMI_TASKS.find((x) => x.id === st.id)!;
+        const t = shikomiTasks.find((x) => x.id === st.id)!;
         const onNext = st.nextDate === day && st.nextDate > date;
         if (isScheduledDay(t, day) || onNext) {
           items.push({
@@ -331,7 +331,7 @@ export async function POST(req: NextRequest) {
     const date = b.date || todayJST();
     const done = await toggle(date, b.taskId, b.done !== false);
     // コールドブリューのように業務チェックの作業で仕込むものは、仕込みの記録にも残す（分析に使う）
-    for (const st of SHIKOMI_TASKS.filter((x) => x.openingTask === b.taskId)) {
+    for (const st of (await getShikomiTasks()).filter((x) => x.openingTask === b.taskId)) {
       if (b.done !== false) await addShikomiRecord({ taskId: st.id, date, by: "業務チェック" });
       else await removeShikomiRecord(st.id, date);
     }

@@ -1115,3 +1115,13 @@ button.ghost {
   margin: 0;
   color: var(--ink);
 }
+
+/* 全ページ共通の外枠（components/AppChrome.tsx）の分だけ中身をずらす。
+   スマホは上の帯（52px）、PCは左のサイドバー（232px） */
+body.has-ac { padding-top: calc(52px + env(safe-area-inset-top)); }
+@media (min-width: 900px) {
+  body.has-ac { padding-top: 0; padding-left: 232px; }
+}
+@media print {
+  body.has-ac { padding: 0; }
+}

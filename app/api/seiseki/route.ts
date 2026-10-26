@@ -3,6 +3,7 @@ import { passAuth } from "@/lib/internalFetch";
 import { getSettings, saveSettings, type Settings } from "@/lib/seiseki";
 import { paymentsIn } from "@/lib/loans";
 import { getOverrides, splitByCategory } from "@/lib/salesCategory";
+import { getUberOrders, isCompleted } from "@/lib/uber";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -10,7 +11,7 @@ export const maxDuration = 60;
 const jstToday = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 
 // GET /api/seiseki?month=2026-08
-//   今月の売上（Square実績）と、前提値から出した利益の見込みを返す。
+//   今月の売上（Square実績＋Uber Eats）と、前提値から出した利益の見込みを返す。
 export async function GET(req: NextRequest) {
   try {
     const today = jstToday();
@@ -31,9 +32,30 @@ export async function GET(req: NextRequest) {
     const catOverrides = await getOverrides().catch(() => ({}));
     const split = splitByCategory(a?.products ?? [], catOverrides);
 
-    const byDay: { day: string; sales: number; count: number }[] = a?.sales?.byDay ?? [];
-    const sales = a?.sales?.total ?? 0;
-    const orderCount = a?.sales?.orderCount ?? 0;
+    // Uber Eats は Square に入らないので、取り込んだ注文（毎週月曜に取り込み）を足す。
+    // 金額は商品の合計（手数料を引く前）。Squareの売上と同じく、売れた額で見る
+    const uberOrders = Object.values(await getUberOrders().catch(() => ({})))
+      .filter((o) => isCompleted(o) && o.date >= from && o.date <= to);
+    const uber = {
+      total: uberOrders.reduce((n, o) => n + o.subtotal, 0),
+      count: uberOrders.length,
+      lastDate: uberOrders.map((o) => o.date).sort().pop() ?? null,
+    };
+    split.カフェ.sales += uber.total;
+
+    const byDayMap = new Map<string, { day: string; sales: number; count: number }>(
+      ((a?.sales?.byDay ?? []) as { day: string; sales: number; count: number }[]).map((x) => [x.day, { ...x }]),
+    );
+    for (const o of uberOrders) {
+      const d = byDayMap.get(o.date) ?? { day: o.date, sales: 0, count: 0 };
+      d.sales += o.subtotal;
+      d.count += 1;
+      byDayMap.set(o.date, d);
+    }
+    const byDay = [...byDayMap.values()].sort((p, q) => (p.day < q.day ? -1 : 1));
+    const squareSales: number = a?.sales?.total ?? 0;
+    const sales = squareSales + uber.total;
+    const orderCount = (a?.sales?.orderCount ?? 0) + uber.count;
 
     // 今月がまだ途中なら、残り日数と「あと1日いくら必要か」を出す
     const isThisMonth = month === today.slice(0, 7);
@@ -79,7 +101,7 @@ export async function GET(req: NextRequest) {
       split,
       settings,
       days: { total: lastDay, done: doneDays, left: leftDays },
-      sales: { total: sales, orderCount, byDay, avgPerDay: Math.round(pace) },
+      sales: { total: sales, orderCount, byDay, avgPerDay: Math.round(pace), square: squareSales, uber },
       target,
       achieveRate: target ? Math.round((sales / target) * 1000) / 10 : null,
       needPerDay,

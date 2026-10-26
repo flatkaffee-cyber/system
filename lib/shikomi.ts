@@ -57,7 +57,7 @@ export type Task = {
  *   ・期限の日数が経った日に仕込む
  *   ・切れたら次の日に仕込む（業務チェックの締めで「切れた」を押す）
  *   ・曜日の決まったものは、その曜日にも仕込む
- * 量は決めた分だけ仕込む。足りなくて予定より早く仕込んだ回数は 📆 週間予定の分析に出る。
+ * 量は決めた分だけ仕込む。足りなくて予定より早く仕込んだ回数は 「仕込み」画面の分析に出る。
  * 期限・量の「仮」は坂本さん確認待ちの初期値。
  */
 export const TASKS: Task[] = [
@@ -185,6 +185,83 @@ export const TASKS: Task[] = [
     minutes: 30,
   },
 ];
+
+// ---- 画面から変えた設定 ----
+// TASKS はコードに書いた初期値。画面（仕込み・在庫 → 仕込みの設定）で変えた分を KV に持ち、上から重ねる。
+// 画面で足した仕込み品も同じところに入る。
+
+const SETTINGS_KEY = "shikomi:settings";
+
+export type TaskEdit = Partial<Omit<Task, "id">> & { hidden?: boolean };
+export type ShikomiSettings = {
+  /** 初期値から変えたところ（id ごと） */
+  edits: Record<string, TaskEdit>;
+  /** 画面で足した仕込み品 */
+  added: Task[];
+};
+
+export async function getSettings(): Promise<ShikomiSettings> {
+  const store = await kv();
+  const s = store ? await store.get<ShikomiSettings>(SETTINGS_KEY) : null;
+  return { edits: s?.edits ?? {}, added: s?.added ?? [] };
+}
+
+async function putSettings(s: ShikomiSettings) {
+  const store = await kv();
+  if (!store) throw new Error("KV未設定");
+  await store.set(SETTINGS_KEY, s);
+}
+
+/** 初期値に画面の設定を重ねた一覧。hidden を付けたものは includeHidden のときだけ返す */
+export async function getTasks(includeHidden = false): Promise<(Task & { hidden?: boolean; isAdded?: boolean; isEdited?: boolean })[]> {
+  const s = await getSettings();
+  const base = TASKS.map((t) => ({ ...t, ...(s.edits[t.id] ?? {}), id: t.id, isEdited: !!s.edits[t.id] }));
+  const added = s.added.map((t) => ({ ...t, ...(s.edits[t.id] ?? {}), id: t.id, isAdded: true }));
+  return [...base, ...added].filter((t) => includeHidden || !t.hidden);
+}
+
+/** 1品目の設定を変える。null を渡した項目は初期値に戻す */
+export async function editTask(id: string, patch: Record<string, unknown>) {
+  const s = await getSettings();
+  // 画面で足したものは、足した中身をそのまま書き換える（初期値が無いので重ねる意味がない）
+  const added = s.added.find((t) => t.id === id);
+  if (added) {
+    const a = added as Record<string, unknown>;
+    for (const [k, v] of Object.entries(patch)) {
+      if (k === "id" || k === "kind") continue;
+      if (v === null) delete a[k];
+      else a[k] = v;
+    }
+    await putSettings(s);
+    return;
+  }
+  const cur: Record<string, unknown> = { ...(s.edits[id] ?? {}) };
+  for (const [k, v] of Object.entries(patch)) {
+    if (k === "id") continue;
+    if (v === null) delete cur[k];
+    else cur[k] = v;
+  }
+  if (Object.keys(cur).length) s.edits[id] = cur as TaskEdit;
+  else delete s.edits[id];
+  await putSettings(s);
+}
+
+/** 初期値に戻す（画面で足したものは消える） */
+export async function resetTask(id: string) {
+  const s = await getSettings();
+  delete s.edits[id];
+  s.added = s.added.filter((t) => t.id !== id);
+  await putSettings(s);
+}
+
+export async function addTask(t: Omit<Task, "id" | "kind"> & { id?: string }) {
+  const s = await getSettings();
+  const id = t.id || `custom-${Date.now().toString(36)}`;
+  if (TASKS.some((x) => x.id === id) || s.added.some((x) => x.id === id)) throw new Error("同じIDがあります");
+  s.added.push({ ...t, id, kind: "仕込み" });
+  await putSettings(s);
+  return id;
+}
 
 /**
  * 実施の記録。組込みのRecord型と紛らわしいのでDoneLogにしている。
@@ -351,10 +428,10 @@ function stateOf(t: Task, records: DoneLog[], today: string) {
   return { last, out, lastDate, expiresOn, nextDate, reasons };
 }
 
-export function buildStates(all: DoneLog[], today = todayJST()): TaskState[] {
+export function buildStates(all: DoneLog[], today = todayJST(), tasks: Task[] = TASKS): TaskState[] {
   // 先の日付の記録（日付を指定して見たとき）は混ぜない
   const records = all.filter((r) => r.date <= today);
-  return TASKS.map((t) => {
+  return tasks.map((t) => {
     const full = stateOf(t, records, today);
     // 今日仕込む理由は、今日の「仕込んだ」を除いた記録で見る
     const before = stateOf(
@@ -438,8 +515,8 @@ export type Analysis = {
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
-export function analyze(records: DoneLog[], today = todayJST()): Analysis[] {
-  return TASKS.filter((t) => t.kind === "仕込み").map((t) => {
+export function analyze(records: DoneLog[], today = todayJST(), tasks: Task[] = TASKS): Analysis[] {
+  return tasks.filter((t) => t.kind === "仕込み").map((t) => {
     const mine = records.filter((r) => r.taskId === t.id);
     const made = mine.filter((r) => !isOut(r)).sort((a, b) => (after(a, b) ? 1 : -1));
     const outs = mine.filter(isOut);

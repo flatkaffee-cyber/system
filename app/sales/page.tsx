@@ -80,15 +80,24 @@ export default function SalesPage() {
     "summary"
   );
 
+  const [uber, setUber] = useState<{ total: number; count: number } | null>(null);
+
   const load = useCallback(async () => {
     setLoading(true);
     setErr("");
     try {
       const q = mode === "day" ? `date=${date}` : `from=${from}&to=${to}`;
-      const res = await fetch(`/api/square/sales?${q}`);
+      const uq = mode === "day" ? `from=${date}&to=${date}` : `from=${from}&to=${to}`;
+      // Uber Eats は Square に入らないので、取り込んだ注文（毎週月曜）を別に取ってきて並べる
+      const [res, ures] = await Promise.all([
+        fetch(`/api/square/sales?${q}`),
+        fetch(`/api/uber?${uq}`).catch(() => null),
+      ]);
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "取得失敗");
       setData(json);
+      const uj = ures && ures.ok ? await ures.json() : null;
+      setUber(uj ? { total: uj.subtotal, count: uj.count } : null);
     } catch (e: any) {
       setErr(e.message);
     } finally {
@@ -114,7 +123,7 @@ export default function SalesPage() {
     <div className="wrap">
       <header>
         <h1>📈 売上分析</h1>
-        <p>Squareの売上データをリアルタイムで確認</p>
+        <p>Squareの売上（リアルタイム）とUber Eats</p>
       </header>
       <Nav />
 
@@ -227,6 +236,13 @@ export default function SalesPage() {
               </span>
               <span>税 ¥{fmt(data.summary.totalTax)}</span>
             </div>
+            {uber && uber.count > 0 && (
+              <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.3)", fontSize: 13.5 }}>
+                ＋ Uber Eats ¥{fmt(uber.total)}（{uber.count}件）
+                <strong style={{ marginLeft: 8 }}>合計 ¥{fmt(data.summary.totalSales + uber.total)}</strong>
+                <div style={{ fontSize: 11.5, opacity: 0.8 }}>Uberは毎週月曜に取り込み。レジ締めはSquareだけで計算</div>
+              </div>
+            )}
           </div>
 
           {/* タブ */}
