@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listItems } from "@/lib/squareCatalog";
-import { getCategoryOrder, getHidden, sortCategories, getItemOrder, sortItems } from "@/lib/menuAdmin";
+import { getCategoryOrder, getHidden, getSeasons, inSeason, jstMonth, sortCategories, getItemOrder, sortItems } from "@/lib/menuAdmin";
 
 export const runtime = "nodejs";
 
@@ -23,18 +23,24 @@ async function getLocationId(): Promise<string> {
 }
 
 // GET: 注文画面に出すメニュー。
-// 大分類はSquareのカテゴリをそのまま使う。並び順と提供停止だけKVに持つ。
+// 大分類はSquareのカテゴリをそのまま使う。並び順・提供停止・販売期間はKVに持つ。
 // （以前は注文画面のコードに商品名を直書きしていたので、
 //   新しい商品を作るたびにコードを直す必要があった）
 export async function GET() {
   try {
-    const [items, order, itemOrder, hidden] = await Promise.all([
+    const [items, order, itemOrder, hidden, seasons] = await Promise.all([
       listItems(),
       getCategoryOrder(),
       getItemOrder(),
       getHidden(),
+      getSeasons(),
     ]);
-    const visible = sortItems(items.filter((i) => !hidden.includes(i.id)), itemOrder);
+    // 提供停止のものと、販売期間の外の月のもの（例 コールドブリューは4〜9月だけ）は出さない
+    const month = jstMonth();
+    const visible = sortItems(
+      items.filter((i) => !hidden.includes(i.id) && inSeason(seasons[i.id], month)),
+      itemOrder,
+    );
     const names = sortCategories(
       [...new Set(visible.map((i) => i.category).filter(Boolean))],
       order,

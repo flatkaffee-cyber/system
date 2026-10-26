@@ -119,6 +119,47 @@ export async function setHidden(itemId: string, hidden: boolean): Promise<string
   return next;
 }
 
+/* ── 販売期間 ───────────────────────────────── */
+
+const SEASON_KEY = "menu:season";
+
+/**
+ * 売る月の範囲（1〜12）。from > to なら年をまたぐ（例 10〜3月）。
+ * 設定の無い商品は通年。期間外の月は注文画面に出さない（提供停止と同じ扱い）。
+ * 2026-10-26 コールドブリューを4〜9月にするために作った
+ */
+export type Season = { from: number; to: number };
+
+export async function getSeasons(): Promise<Record<string, Season>> {
+  const store = await kv();
+  if (!store) return {};
+  return (await store.get<Record<string, Season>>(SEASON_KEY)) ?? {};
+}
+
+/** season に null を渡すと通年に戻す */
+export async function setSeason(itemId: string, season: Season | null): Promise<Record<string, Season>> {
+  const store = await kv();
+  if (!store) throw new Error("KV未設定");
+  const cur = (await store.get<Record<string, Season>>(SEASON_KEY)) ?? {};
+  if (season) {
+    const ok = (m: number) => Number.isInteger(m) && m >= 1 && m <= 12;
+    if (!ok(season.from) || !ok(season.to)) throw new Error("月は1〜12で入れてください");
+    cur[itemId] = { from: season.from, to: season.to };
+  } else delete cur[itemId];
+  await store.set(SEASON_KEY, cur);
+  return cur;
+}
+
+/** その月が販売期間に入っているか */
+export function inSeason(season: Season | undefined, month: number): boolean {
+  if (!season) return true;
+  const { from, to } = season;
+  return from <= to ? month >= from && month <= to : month >= from || month <= to;
+}
+
+/** いまの月（日本時間） */
+export const jstMonth = () => new Date(Date.now() + 9 * 3600_000).getUTCMonth() + 1;
+
 /* ── 並び替え ───────────────────────────────── */
 
 /** 大分類の名前を、決めた順に並べる。順序表に無いものは後ろへ（名前順） */

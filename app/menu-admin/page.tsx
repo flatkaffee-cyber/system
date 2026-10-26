@@ -20,6 +20,8 @@ type Data = {
   categoryOrder: string[];
   items: Item[];
   hidden: string[];
+  /** 販売期間（商品ID → 何月から何月）。無ければ通年 */
+  seasons?: Record<string, { from: number; to: number }>;
   pinSet: boolean;
   uncategorized: number;
 };
@@ -221,6 +223,7 @@ export default function MenuAdmin() {
                   item={it}
                   cats={data.categories}
                   hidden={data.hidden.includes(it.id)}
+                  season={data.seasons?.[it.id]}
                   busy={busy}
                   send={send}
                   first={idx === 0}
@@ -312,10 +315,18 @@ function NewItem({
   );
 }
 
+const thisMonth = () => new Date(Date.now() + 9 * 3600_000).getUTCMonth() + 1;
+const inSeasonNow = (s?: { from: number; to: number }) => {
+  if (!s) return true;
+  const m = thisMonth();
+  return s.from <= s.to ? m >= s.from && m <= s.to : m >= s.from || m <= s.to;
+};
+
 function ItemRow({
   item,
   cats,
   hidden,
+  season,
   busy,
   send,
   first,
@@ -325,6 +336,7 @@ function ItemRow({
   item: Item;
   cats: Category[];
   hidden: boolean;
+  season?: { from: number; to: number };
   busy: boolean;
   send: (b: Record<string, unknown>, m: string) => Promise<boolean>;
   first: boolean;
@@ -334,6 +346,10 @@ function ItemRow({
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(item.name);
   const [cat, setCat] = useState(item.categoryId ?? "");
+  const [yearRound, setYearRound] = useState(!season);
+  const [from, setFrom] = useState(season?.from ?? 4);
+  const [to, setTo] = useState(season?.to ?? 9);
+  const offSeason = !inSeasonNow(season);
   const priceLabel = item.variations
     .map((v) => (v.name === "Regular" ? `¥${v.price ?? "―"}` : `${v.name} ¥${v.price ?? "―"}`))
     .join(" / ");
@@ -356,6 +372,14 @@ function ItemRow({
                 borderRadius: 999, background: "#fdecea", color: "#c0392b", whiteSpace: "nowrap",
               }}>
                 停止中
+              </span>
+            )}
+            {season && (
+              <span style={{
+                fontSize: 10.5, fontWeight: 700, marginLeft: 6, padding: "2px 7px", borderRadius: 999, whiteSpace: "nowrap",
+                background: offSeason ? "#eef1f4" : "#e6f2ea", color: offSeason ? "var(--muted)" : "#1f6b3a",
+              }}>
+                {season.from}〜{season.to}月{offSeason ? "・期間外" : ""}
               </span>
             )}
           </div>
@@ -392,6 +416,37 @@ function ItemRow({
             onClick={() => send({ action: "item.update", id: item.id, name, categoryId: cat || null },
               `「${name}」を変更しました`)}>
             名前と分類を保存
+          </button>
+
+          <label>販売期間</label>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, margin: 0, fontSize: 13.5 }}>
+              <input type="radio" checked={yearRound} onChange={() => setYearRound(true)} style={{ width: "auto" }} />
+              通年
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, margin: 0, fontSize: 13.5 }}>
+              <input type="radio" checked={!yearRound} onChange={() => setYearRound(false)} style={{ width: "auto" }} />
+              期間を決める
+            </label>
+            {!yearRound && (
+              <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 13.5 }}>
+                <select value={from} onChange={(e) => setFrom(Number(e.target.value))} style={{ width: "auto" }}>
+                  {Array.from({ length: 12 }, (_, i) => <option key={i} value={i + 1}>{i + 1}月</option>)}
+                </select>
+                〜
+                <select value={to} onChange={(e) => setTo(Number(e.target.value))} style={{ width: "auto" }}>
+                  {Array.from({ length: 12 }, (_, i) => <option key={i} value={i + 1}>{i + 1}月</option>)}
+                </select>
+              </span>
+            )}
+          </div>
+          <p className="hint" style={{ margin: "4px 0 0" }}>期間外の月は注文画面に出ません。10〜3月のように年をまたいでも大丈夫です。</p>
+          <button className="primary" style={{ width: "100%", marginTop: 8 }} disabled={busy}
+            onClick={() => send(
+              { action: "item.season", id: item.id, season: yearRound ? null : { from, to } },
+              yearRound ? `「${item.name}」を通年にしました` : `「${item.name}」を${from}〜${to}月にしました`,
+            )}>
+            販売期間を保存
           </button>
 
           <VariationEditor item={item} busy={busy} send={send} />

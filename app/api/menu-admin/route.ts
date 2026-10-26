@@ -19,6 +19,9 @@ import {
   setCategoryOrder,
   getHidden,
   setHidden,
+  getSeasons,
+  setSeason,
+  type Season,
   sortCategories,
   getItemOrder,
   setItemOrder,
@@ -37,13 +40,14 @@ export const maxDuration = 60;
 // GET → 編集画面に出すもの一式
 export async function GET() {
   try {
-    const [categories, items, order, itemOrder, hidden, pinSet] = await Promise.all([
+    const [categories, items, order, itemOrder, hidden, pinSet, seasons] = await Promise.all([
       listCategories(),
       listItems(),
       getCategoryOrder(),
       getItemOrder(),
       getHidden(),
       hasPin(),
+      getSeasons(),
     ]);
     const names = sortCategories(
       [...new Set(categories.map((c) => c.name))],
@@ -55,6 +59,7 @@ export async function GET() {
       items: sortItems(items, itemOrder),
       itemOrder,
       hidden,
+      seasons,
       pinSet,
       uncategorized: items.filter((i) => !i.categoryId).length,
     });
@@ -75,6 +80,7 @@ type Body = {
   categoryId?: string | null;
   variationId?: string;
   hidden?: boolean;
+  season?: Season | null;
   names?: string[];
   ids?: string[];
   newPin?: string;
@@ -184,6 +190,12 @@ export async function POST(req: NextRequest) {
         if (!b.id) throw new Error("商品が必要です");
         const next = await setHidden(b.id, !!b.hidden);
         return NextResponse.json({ ok: true, hidden: next });
+      }
+      case "item.season": {
+        // 販売期間。null なら通年に戻す
+        if (!b.id) throw new Error("商品が必要です");
+        const next = await setSeason(b.id, b.season ?? null);
+        return NextResponse.json({ ok: true, seasons: next });
       }
       case "item.delete": {
         if (!b.id) throw new Error("商品が必要です");
