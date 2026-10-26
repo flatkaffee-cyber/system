@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Nav from "@/components/Nav";
+import PrepGuide from "@/components/PrepGuide";
 
 // 仕込みの予定と記録（内部用）。店に来たときに何を仕込むかが分かることが目的。
 // 「仕込んだ日＋消費期限」「切れた次の日」「決まった曜日」のうち早い日に出る。
@@ -30,6 +31,8 @@ type State = {
   dueReasons: { reason: string; text: string }[];
   todayBatch: string;
   todayBatchNum: number | null;
+  steps?: string[];
+  stepsDraft?: boolean;
   todayQty: number | null;
   unit?: string;
   doneToday: boolean;
@@ -67,8 +70,8 @@ export default function ShikomiPage() {
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState("");
   const [open, setOpen] = useState<string | null>(null);
-  // 仕込んだ量の入力中の品目。決まった量を初期値に入れ、その日に実際に仕込んだ量に直してもらう
-  const [entering, setEntering] = useState<{ id: string; value: string } | null>(null);
+  // 仕込み方の画面を開いている品目。仕込み方を見ながら仕込み、下で仕込んだ量を入れて記録する
+  const [guide, setGuide] = useState<State | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -93,7 +96,7 @@ export default function ShikomiPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ taskId, type, ...(qty !== undefined ? { qty } : {}) }),
       });
-      setEntering(null);
+      setGuide(null);
       await load();
     } finally {
       setBusy("");
@@ -208,7 +211,7 @@ export default function ShikomiPage() {
                     className="primary"
                     onClick={() =>
                       prep && s.unit
-                        ? setEntering(entering?.id === s.id ? null : { id: s.id, value: s.todayBatchNum != null ? String(s.todayBatchNum) : "" })
+                        ? setGuide(s)
                         : record(s.id, "made")
                     }
                     disabled={!!busy}
@@ -236,39 +239,6 @@ export default function ShikomiPage() {
                 )}
               </div>
             </div>
-
-            {entering?.id === s.id && (
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const n = Number(entering.value);
-                  if (entering.value.trim() === "" || Number.isNaN(n) || n <= 0) return;
-                  record(s.id, "made", n);
-                }}
-                style={{
-                  marginTop: 10, padding: "10px 12px", borderRadius: 10,
-                  background: "#fdf6ec", border: "1px solid #e8d5b0",
-                  display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap",
-                }}
-              >
-                <label style={{ fontSize: 12.5, fontWeight: 700, margin: 0 }}>仕込んだ量</label>
-                <input
-                  autoFocus
-                  inputMode="decimal"
-                  value={entering.value}
-                  onChange={(e) => setEntering({ id: s.id, value: e.target.value })}
-                  style={{ width: 96, fontSize: 16, fontWeight: 700, textAlign: "right" }}
-                />
-                <span style={{ fontSize: 13 }}>{s.unit}</span>
-                <button type="submit" className="primary" disabled={!!busy} style={{ fontSize: 12.5 }}>
-                  {busy === `${s.id}:made` ? "…" : "記録する"}
-                </button>
-                <button type="button" onClick={() => setEntering(null)} style={{ fontSize: 12 }}>やめる</button>
-                <div style={{ width: "100%", fontSize: 11.5, color: "var(--muted)" }}>
-                  決まった量は {s.todayBatch}。違う量を仕込んだら書き換えてください
-                </div>
-              </form>
-            )}
 
             {isOpen && (
               <div style={{ marginTop: 8, borderTop: "1px solid var(--line-soft, #eee)", paddingTop: 6 }}>
@@ -342,6 +312,24 @@ export default function ShikomiPage() {
         ※ 業務チェックの「今日の仕込み」「切れた仕込み品を記録する」と同じ記録です。<br />
         消費期限・1回の量・仕込む日は <Link href="/shikomi/settings">仕込みの設定</Link> で変えられます。
       </p>
+      {guide && (
+        <PrepGuide
+          item={{
+            id: guide.id,
+            name: guide.name,
+            batch: guide.todayBatch,
+            batchNum: guide.todayBatchNum,
+            unit: guide.unit ?? "",
+            steps: guide.steps,
+            stepsDraft: guide.stepsDraft,
+            materials: guide.materials,
+            note: guide.note,
+          }}
+          busy={busy === `${guide.id}:made`}
+          onRecord={(qty) => record(guide.id, "made", qty)}
+          onClose={() => setGuide(null)}
+        />
+      )}
     </div>
   );
 }

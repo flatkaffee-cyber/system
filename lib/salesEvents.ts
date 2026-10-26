@@ -34,6 +34,13 @@ export const EXCLUDE_WINDOWS: ExcludeWindow[] = [
     label: "DJイベント（蓮くん）",
     reason: "イベント",
   },
+  {
+    // 会社の2次会の貸切。会計は23:30の1件（¥56,950）。それより前は普段の営業
+    date: "2026-10-02",
+    fromHour: 23,
+    label: "会社の2次会（貸切）",
+    reason: "イベント",
+  },
 ];
 
 /**

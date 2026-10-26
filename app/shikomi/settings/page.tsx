@@ -25,6 +25,8 @@ type Task = {
   note?: string;
   minutes?: number;
   openingTask?: string;
+  steps?: string[];
+  stepsDraft?: boolean;
   hidden?: boolean;
   isAdded?: boolean;
   isEdited?: boolean;
@@ -43,6 +45,9 @@ type Form = {
   biweekly: boolean;
   byWd: Record<number, string>;
   materials: string;
+  /** 仕込み方。1行が1手順 */
+  steps: string;
+  stepsDraft: boolean;
   note: string;
   minutes: string;
 };
@@ -64,6 +69,8 @@ const toForm = (t?: Task): Form => ({
     Object.entries(t?.batchByWeekday ?? {}).map(([k, v]) => [Number(k), String(v)]),
   ),
   materials: t?.materials ?? "",
+  steps: (t?.steps ?? []).join("\n"),
+  stepsDraft: !!t?.stepsDraft,
   note: t?.note ?? "",
   minutes: t?.minutes != null ? String(t.minutes) : "",
 });
@@ -95,6 +102,11 @@ function fromForm(f: Form): Partial<Task> {
     biweekly: f.mode === "weekday" && f.biweekly ? true : undefined,
     batchByWeekday: Object.keys(byWd).length ? byWd : undefined,
     materials: f.materials.trim() || undefined,
+    steps: (() => {
+      const lines = f.steps.split("\n").map((l) => l.trim()).filter(Boolean);
+      return lines.length ? lines : undefined;
+    })(),
+    stepsDraft: f.stepsDraft,
     note: f.note.trim() || undefined,
     minutes: num(f.minutes),
   };
@@ -206,7 +218,18 @@ function TaskForm({
 
       <label>材料</label>
       <textarea rows={2} value={form.materials} onChange={(e) => set("materials", e.target.value)} />
-      <label>メモ（作り方・保存の注意）</label>
+      <label>仕込み方（1行に1つの手順。仕込むときに画面に出ます）</label>
+      <textarea
+        rows={Math.min(10, Math.max(4, form.steps.split("\n").length + 1))}
+        value={form.steps}
+        onChange={(e) => set("steps", e.target.value)}
+        placeholder={"例\nキャベツを千切りにして塩で揉む\n汁ごと容器に詰める"}
+      />
+      <label className="tf-check">
+        <input type="checkbox" checked={form.stepsDraft} onChange={(e) => set("stepsDraft", e.target.checked)} />
+        下書き（店のやり方をまだ確かめていない）
+      </label>
+      <label>メモ（保存の注意など）</label>
       <textarea rows={3} value={form.note} onChange={(e) => set("note", e.target.value)} />
       <div className="tf-row">
         <div>
@@ -300,7 +323,9 @@ export default function ShikomiSettingsPage() {
     const patch: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(next)) {
       const base = def ? (def as Record<string, unknown>)[k] : undefined;
-      patch[k] = def && same(v, base) ? null : v ?? null;
+      // 下書きの印は「無い」と「false」を同じに見る（チェックを外しただけで変更ありにならないように）
+      const eq = k === "stepsDraft" ? !!v === !!base : same(v, base);
+      patch[k] = def && eq ? null : v ?? null;
     }
     post({ id: t.id, patch }, `${next.name}を保存しました`);
   };

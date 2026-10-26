@@ -253,6 +253,7 @@ export async function GET(req: NextRequest) {
         today: shikomiToday.map((x) => ({
           id: x.id, name: x.name, batch: x.todayBatch, reasons: x.dueReasons,
           batchNum: x.todayBatchNum, unit: x.unit ?? "", qty: x.todayQty,
+          steps: x.steps, stepsDraft: x.stepsDraft,
           doneToday: x.doneToday, materials: x.materials, note: x.note,
         })),
         items: shikomiStates

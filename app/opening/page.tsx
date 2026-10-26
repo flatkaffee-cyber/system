@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Nav from "@/components/Nav";
+import PrepGuide from "@/components/PrepGuide";
 
 // 出勤したらやることのチェックリスト。日付が変わればまっさらに戻る。
 // 「今日ここまで終わった」が一目で分かることが目的なので、順番どおりに縦に並べる。
@@ -42,6 +43,7 @@ type WeekItem = { name: string; phase: string; kind: "fixed" | "interval" | "don
 type ShikomiToday = {
   id: string; name: string; batch: string; reasons: { reason: string; text: string }[];
   batchNum: number | null; unit: string; qty: number | null;
+  steps?: string[]; stepsDraft?: boolean;
   doneToday: boolean; materials?: string; note?: string;
 };
 type ShikomiItem = { id: string; name: string; lastDate: string | null; expiresOn: string | null; outToday: boolean };
@@ -92,8 +94,8 @@ export default function OpeningPage() {
   // 今日の仕込みと、切れたを押すための仕込み品の一覧
   const [shikomi, setShikomi] = useState<{ today: ShikomiToday[]; items: ShikomiItem[] } | null>(null);
   const [sBusy, setSBusy] = useState("");
-  // 仕込んだ量の入力中の品目（決まった量を初期値に入れる）
-  const [sQty, setSQty] = useState<{ id: string; value: string } | null>(null);
+  // 仕込み方の画面を開いている品目（仕込み方を見ながら仕込み、下で仕込んだ量を入れる）
+  const [guide, setGuide] = useState<ShikomiToday | null>(null);
   const [wBusy, setWBusy] = useState(false);
   // ホットサンドの在庫。朝と夕方で別々に数える
   // 牛乳・コールドブリュー・アメリカーノ用の水
@@ -185,7 +187,7 @@ export default function OpeningPage() {
             body: JSON.stringify({ taskId, type, date, by: "業務チェック", ...(qty !== undefined ? { qty } : {}) }),
           });
       if (!res.ok) throw new Error((await res.json()).error || "保存に失敗");
-      setSQty(null);
+      setGuide(null);
       await load();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "保存に失敗");
@@ -594,7 +596,7 @@ export default function OpeningPage() {
                       onClick={() =>
                         it.doneToday || !it.unit
                           ? recordShikomi(it.id, "made", it.doneToday)
-                          : setSQty(sQty?.id === it.id ? null : { id: it.id, value: it.batchNum != null ? String(it.batchNum) : "" })
+                          : setGuide(it)
                       }
                       disabled={busy}
                       style={{
@@ -608,44 +610,6 @@ export default function OpeningPage() {
                       {busy ? "…" : it.doneToday ? `✓ ${it.qty != null ? `${it.qty}${it.unit}` : "仕込んだ"}` : "仕込んだ"}
                     </button>
                   </div>
-                  {sQty?.id === it.id && !it.doneToday && (
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        const n = Number(sQty.value);
-                        if (sQty.value.trim() === "" || Number.isNaN(n) || n <= 0) return;
-                        recordShikomi(it.id, "made", false, n);
-                      }}
-                      style={{
-                        display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap",
-                        margin: "-2px 0 8px", padding: "9px 11px", borderRadius: 7,
-                        background: "#fff", border: "1px solid #e8d5b0",
-                      }}
-                    >
-                      <span style={{ fontSize: 12.5, fontWeight: 700 }}>仕込んだ量</span>
-                      <input
-                        autoFocus
-                        inputMode="decimal"
-                        value={sQty.value}
-                        onChange={(e) => setSQty({ id: it.id, value: e.target.value })}
-                        style={{ width: 90, fontSize: 16, fontWeight: 700, textAlign: "right", padding: "6px 8px" }}
-                      />
-                      <span style={{ fontSize: 13 }}>{it.unit}</span>
-                      <button
-                        type="submit"
-                        disabled={busy}
-                        style={{
-                          padding: "8px 12px", borderRadius: 8, border: 0, cursor: "pointer",
-                          background: "var(--ok)", color: "#fff", fontWeight: 700, fontSize: 12.5,
-                        }}
-                      >
-                        記録する
-                      </button>
-                      <span style={{ width: "100%", fontSize: 11, color: "var(--muted)" }}>
-                        決まった量は {it.batch}。違う量なら書き換える
-                      </span>
-                    </form>
-                  )}
                   </div>
                 );
               })}
@@ -922,6 +886,24 @@ export default function OpeningPage() {
         締め作業が終わるまで同じ日の記録のままです。<br />
         判断に迷ったら「❓ 使い方」のチャットで聞いてください。
       </p>
+      {guide && (
+        <PrepGuide
+          item={{
+            id: guide.id,
+            name: guide.name,
+            batch: guide.batch,
+            batchNum: guide.batchNum,
+            unit: guide.unit,
+            steps: guide.steps,
+            stepsDraft: guide.stepsDraft,
+            materials: guide.materials,
+            note: guide.note,
+          }}
+          busy={sBusy === `${guide.id}:made`}
+          onRecord={(qty) => recordShikomi(guide.id, "made", false, qty)}
+          onClose={() => setGuide(null)}
+        />
+      )}
     </div>
   );
 }
