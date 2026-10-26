@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import Nav from "@/components/Nav";
-import { SET_DRINKS, SET_WITH_DRINK, setNote } from "@/lib/setMenu";
+import { SET_WITH_DRINK, setDrinksInSeason, setNote } from "@/lib/setMenu";
 
 type MenuItem = {
   id: string;
@@ -161,6 +161,8 @@ export default function TablePage() {
   const [variantPending, setVariantPending] = useState<MenuItem | null>(null);
   // ドリンクセット・フルセットで、ホットサンドを選んだあとにドリンクを選ぶところ
   const [drinkPending, setDrinkPending] = useState<{ item: MenuItem; hotsand: string } | null>(null);
+  // 販売期間の外の商品名（セットのドリンクから外す）
+  const [offSeason, setOffSeason] = useState<string[]>([]);
   const [soyPending, setSoyPending] = useState<{ item: MenuItem; note: string } | null>(null);
   const [payMode, setPayMode] = useState(false);
   // PayPayの会計画面（お客さんにQRと金額を見せる）
@@ -237,6 +239,7 @@ export default function TablePage() {
         // 提供停止はサーバー側（メニュー編集画面で設定）で除いてある
         setMenu(data.items || []);
         setCatOrder(data.categoryOrder || []);
+        setOffSeason(data.offSeason || []);
       }
     } catch {}
   }, []);
@@ -934,7 +937,7 @@ export default function TablePage() {
                     id: "set-drink",
                     name: `${drinkPending.item.name}（${drinkPending.hotsand}）のドリンク`,
                     category: "",
-                    variations: SET_DRINKS.map((n) => ({ id: `drink-${n}`, name: n, price: 0 })),
+                    variations: setDrinksInSeason(offSeason).map((n) => ({ id: `drink-${n}`, name: n, price: 0 })),
                   }}
                   stock={stock}
                   onPick={selectDrink}
@@ -1760,7 +1763,7 @@ export default function TablePage() {
                 id: "set-drink",
                 name: `${drinkPending.item.name}（${drinkPending.hotsand}）のドリンク`,
                 category: "",
-                variations: SET_DRINKS.map((n) => ({ id: `drink-${n}`, name: n, price: 0 })),
+                variations: setDrinksInSeason(offSeason).map((n) => ({ id: `drink-${n}`, name: n, price: 0 })),
               }}
               stock={stock}
               onPick={selectDrink}

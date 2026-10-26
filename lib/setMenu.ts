@@ -19,3 +19,7 @@ export const SET_DRINKS = [
 
 /** セットの行のメモ。ホットサンドとドリンクを「／」でつなぐ */
 export const setNote = (hotsand: string, drink?: string) => (drink ? `${hotsand}／${drink}` : hotsand);
+
+/** 販売期間の外のドリンク（例 10〜3月のコールドブリュー）を除いたセットのドリンク */
+export const setDrinksInSeason = (offSeason: string[]) =>
+  SET_DRINKS.filter((d) => !offSeason.some((n) => d === n || d.includes(n) || n.includes(d)));

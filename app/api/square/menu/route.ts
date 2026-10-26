@@ -45,7 +45,9 @@ export async function GET() {
       [...new Set(visible.map((i) => i.category).filter(Boolean))],
       order,
     );
-    return NextResponse.json({ items: visible, categoryOrder: names, hidden });
+    // 販売期間の外の商品名。セットのドリンクのように、商品ではなくメモで選ぶものから外すのに使う
+    const offSeason = items.filter((i) => !inSeason(seasons[i.id], month)).map((i) => i.name);
+    return NextResponse.json({ items: visible, categoryOrder: names, hidden, offSeason });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "エラー" }, { status: 500 });
   }
