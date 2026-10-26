@@ -158,6 +158,11 @@ export default function TablePage() {
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
   const [hotIcePending, setHotIcePending] = useState<MenuItem | null>(null);
+  // カウンター注文の最初の1品で「店内かテイクアウトか」を聞く。
+  // 提供方法の切り替えが下のほうにあって押し忘れ、持ち帰りが店内（10%）で
+  // 記録されることがあったため、最初に必ず選んでもらう。
+  const [typePending, setTypePending] = useState<{ item: MenuItem; note?: string } | null>(null);
+  const [typeChosen, setTypeChosen] = useState(false);
   const [variantPending, setVariantPending] = useState<MenuItem | null>(null);
   // ドリンクセット・フルセットで、ホットサンドを選んだあとにドリンクを選ぶところ
   const [drinkPending, setDrinkPending] = useState<{ item: MenuItem; hotsand: string } | null>(null);
@@ -397,8 +402,26 @@ export default function TablePage() {
     setTendered("");
   };
 
+  // 会計が済む・取り消すなどでカートが空に戻ったら、次の注文でもう一度聞く
+  useEffect(() => {
+    if (cart.length === 0) setTypeChosen(false);
+  }, [cart.length]);
+
+  const chooseType = (t: "店内" | "テイクアウト") => {
+    const p = typePending;
+    setOrderType(t);
+    setTypeChosen(true);
+    setTypePending(null);
+    if (p) addToCart(p.item, p.note, true);
+  };
+
   // カートに追加
-  const addToCart = (item: MenuItem, tempNote?: string) => {
+  // typeOk: 店内かテイクアウトかを選んだ直後の呼び出し（この時点の状態はまだ古いので、聞き直さない）
+  const addToCart = (item: MenuItem, tempNote?: string, typeOk = false) => {
+    if (!typeOk && mode === "day" && !party && !takeout && cart.length === 0 && !typeChosen) {
+      setTypePending({ item, note: tempNote });
+      return;
+    }
     // 選んだバリエーション（チョコ/抹茶/Hot/Ice等）に対応する価格・カタログIDを使う。
     // 以前は常に variations[0] を使っていたため、チョコ・抹茶を選んでも
     // プレーンの価格(¥400)とIDで登録されていた。
@@ -953,6 +976,19 @@ export default function TablePage() {
                     <div style={{ display: "flex", gap: 10 }}>
                       <button onClick={() => selectHotIce("Hot")} style={{ flex: 1, padding: "14px 0", borderRadius: 10, border: "2px solid #c0392b", background: "#fde8e8", color: "#c0392b", fontSize: 16, fontWeight: 700, cursor: "pointer" }}>🔥 Hot</button>
                       <button onClick={() => selectHotIce("Ice")} style={{ flex: 1, padding: "14px 0", borderRadius: 10, border: "2px solid #2980b9", background: "#e8f4fd", color: "#2980b9", fontSize: 16, fontWeight: 700, cursor: "pointer" }}>🧊 Ice</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {typePending && (
+                <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }} onClick={() => setTypePending(null)}>
+                  <div className="card" role="dialog" aria-label="店内かテイクアウトか" style={{ width: 300, margin: 0 }} onClick={e => e.stopPropagation()}>
+                    <div style={{ textAlign: "center", fontWeight: 700, fontSize: 16, marginBottom: 4 }}>店内ですか？テイクアウトですか？</div>
+                    <div style={{ textAlign: "center", fontSize: 12, color: "var(--muted)", marginBottom: 12 }}>この注文の提供方法を選んでください</div>
+                    <div style={{ display: "flex", gap: 10 }}>
+                      <button onClick={() => chooseType("店内")} style={{ flex: 1, padding: "16px 0", borderRadius: 10, border: "2px solid var(--ok)", background: "#eaf6ec", color: "var(--ok)", fontSize: 16, fontWeight: 700, cursor: "pointer" }}>🍽 店内</button>
+                      <button onClick={() => chooseType("テイクアウト")} style={{ flex: 1, padding: "16px 0", borderRadius: 10, border: "2px solid #b5651d", background: "#fdf2e8", color: "#b5651d", fontSize: 16, fontWeight: 700, cursor: "pointer" }}>🥡 テイクアウト</button>
                     </div>
                   </div>
                 </div>
