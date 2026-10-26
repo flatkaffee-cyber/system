@@ -10,7 +10,7 @@ import {
   type Item,
 } from "@/lib/stockroom";
 import { getOrders, openOrders } from "@/lib/purchase";
-import { getRecords } from "@/lib/shikomi";
+import { TASKS as SHIKOMI_TASKS, getRecords } from "@/lib/shikomi";
 import { getInventoryItems } from "@/lib/inventory";
 
 export const runtime = "nodejs";
@@ -78,15 +78,17 @@ export async function GET(req: NextRequest) {
     const records = await getRecords();
     const madeAt: Record<string, { date: string; daysAgo: number; keepDays: number; daysLeft: number }> = {};
     for (const i of items) {
-      if (!i.shikomiId || !i.keepDays) continue;
+      // 日持ちは仕込みの消費期限（lib/shikomi）を正とする。無ければ在庫側の keepDays
+      const keepDays = SHIKOMI_TASKS.find((t) => t.id === i.shikomiId)?.shelfLifeDays ?? i.keepDays;
+      if (!i.shikomiId || !keepDays) continue;
       const days = records
-        .filter((r) => r.taskId === i.shikomiId)
+        .filter((r) => r.taskId === i.shikomiId && r.type !== "out")
         .map((r) => r.date)
         .sort();
       const last = days[days.length - 1];
       if (!last) continue;
       const ago = daysBetween(last, today);
-      madeAt[i.id] = { date: last, daysAgo: ago, keepDays: i.keepDays, daysLeft: i.keepDays - ago };
+      madeAt[i.id] = { date: last, daysAgo: ago, keepDays, daysLeft: keepDays - ago };
     }
 
     // 直近の在庫確認を「いまの状態」として3日間そのまま出す。

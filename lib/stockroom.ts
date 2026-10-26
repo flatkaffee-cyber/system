@@ -134,7 +134,7 @@ export const SEED_ITEMS: Item[] = [
   { id: "mashed", name: "マッシュポテト", group: "仕込み品", par: 800, unit: "g", madeInHouse: true, shikomiId: "mashed-potato", keepDays: 10 },
   { id: "amiebi", name: "あみえびクリームチーズ", group: "仕込み品", par: 1, unit: "タッパ", madeInHouse: true, shikomiId: "amiebi-cream-cheese", keepDays: 10 },
   { id: "sauerkraut", name: "自家製ザワークラウト", group: "仕込み品", par: 1, unit: "タッパ", madeInHouse: true, shikomiId: "sauerkraut", keepDays: 60, note: "キャベツから仕込む。発酵に夏3日・冬7日かかる" },
-  { id: "ajillo", name: "アヒージョセット（冷凍）", group: "仕込み品", par: 6, unit: "セット", madeInHouse: true },
+  { id: "ajillo", name: "アヒージョセット（冷凍）", group: "仕込み品", par: 6, unit: "セット", madeInHouse: true, shikomiId: "ajillo-set", keepDays: 14 },
   { id: "cold-brew", name: "コールドブリュー", group: "仕込み品", par: 2, unit: "本", madeInHouse: true },
   { id: "bread-baked", name: "自家製パン（冷凍・焼き済み）", group: "仕込み品", par: 6, unit: "個", madeInHouse: true },
 
@@ -172,9 +172,9 @@ export const SEED_ITEMS: Item[] = [
   { id: "grenadine", name: "グレナデンシロップ", group: "ドリンク（酒）", par: 1, unit: "本" },
   { id: "cassis", name: "カシスリキュール", group: "ドリンク（酒）", par: 1, unit: "本" },
   // 仕込み品（作ったものの在庫）
-  { id: "hotsand-classic", name: "冷凍ホットサンド（クラシック）", group: "仕込み品", par: 5, unit: "個", madeInHouse: true, note: "水曜・日曜に仕込む。日曜は5個以上あれば仕込まない" },
-  { id: "hotsand-garden", name: "冷凍ホットサンド（ガーデン）", group: "仕込み品", par: 5, unit: "個", madeInHouse: true, note: "水曜・日曜に仕込む。日曜は5個以上あれば仕込まない" },
-  { id: "soup-base", name: "スープベース（冷凍・100g）", group: "仕込み品", par: 4, unit: "個", madeInHouse: true, note: "2週に1回、A週の木曜に16個仕込む" },
+  { id: "hotsand-classic", name: "冷凍ホットサンド（クラシック）", group: "仕込み品", par: 5, unit: "個", madeInHouse: true, shikomiId: "hotsand-classic", keepDays: 14, note: "水曜・日曜に仕込む。日曜は5個以上あれば仕込まない" },
+  { id: "hotsand-garden", name: "冷凍ホットサンド（ガーデン）", group: "仕込み品", par: 5, unit: "個", madeInHouse: true, shikomiId: "hotsand-garden", keepDays: 14, note: "水曜・日曜に仕込む。日曜は5個以上あれば仕込まない" },
+  { id: "soup-base", name: "スープベース（冷凍・100g）", group: "仕込み品", par: 4, unit: "個", madeInHouse: true, shikomiId: "soup-base", keepDays: 30, note: "2週に1回、A週の木曜に16個仕込む" },
   // 消耗品・包材
   { id: "takeout-cup", name: "テイクアウトカップ（ふた付き）", group: "消耗品・包材", par: 50, unit: "個" },
   { id: "wrap", name: "ラップ", group: "消耗品・包材", par: 1, unit: "本" },

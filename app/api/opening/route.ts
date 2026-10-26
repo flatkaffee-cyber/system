@@ -20,10 +20,15 @@ import {
   yesterdayOf,
 } from "@/lib/opening";
 import { openOrders } from "@/lib/purchase";
-import { buildStates as buildShikomiStates, getRecords as getShikomiRecords } from "@/lib/shikomi";
-
-// 週間スケジュールに出さない仕込み（毎日の作業で見ているもの）
-const WEEK_SKIP_SHIKOMI = ["cold-brew", "stock-check"];
+import {
+  TASKS as SHIKOMI_TASKS,
+  addRecord as addShikomiRecord,
+  batchLabel,
+  buildStates as buildShikomiStates,
+  getRecords as getShikomiRecords,
+  isScheduledDay,
+  removeRecord as removeShikomiRecord,
+} from "@/lib/shikomi";
 import { getShifts } from "@/lib/shift";
 import { getKintai } from "@/lib/kintai";
 import type { Slot } from "@/lib/dailycheck";
@@ -72,8 +77,42 @@ export async function GET(req: NextRequest) {
       tdy?.baked,
     );
 
+    // 今日の仕込み。期限・切れた次の日・決まった曜日から出る（lib/shikomi）。
+    // 別の作業で出しているもの（コールドブリュー）と、確認の作業は除く
+    const shikomiRecords = await getShikomiRecords();
+    const wdToday = new Date(`${date}T00:00:00Z`).getUTCDay();
+    // 日曜の朝に「今回は仕込まない」を選んだら、日曜の予定としてのホットサンドは出さない（切れた・期限は残す）
+    const skipSundayHotsand = wdToday === 0 && choices["hotsand-sunday-check"] === "今回は仕込まない";
+    const shikomiStates = buildShikomiStates(shikomiRecords, date)
+      .filter((s) => s.kind === "仕込み")
+      .map((s) => ({
+        ...s,
+        dueReasons:
+          skipSundayHotsand && s.id.startsWith("hotsand")
+            ? s.dueReasons.filter((r) => r.reason !== "予定日")
+            : s.dueReasons,
+      }));
+    const shikomiToday = shikomiStates.filter(
+      (s) => !s.openingTask && (s.dueReasons.length > 0 || s.doneToday),
+    );
+
     const tasks = await Promise.all(
       TASKS.map(async (t) => {
+        if (t.shikomiList) {
+          // 並んだものを全部仕込んだら終わり。チェックは仕込みの記録から決まる
+          return {
+            ...t,
+            due: shikomiToday.length > 0,
+            done: shikomiToday.length > 0 && shikomiToday.every((s) => s.doneToday),
+          };
+        }
+        if (t.shikomiFor) {
+          return {
+            ...t,
+            done: done.includes(t.id),
+            due: shikomiToday.some((s) => t.shikomiFor!.includes(s.id)),
+          };
+        }
         if (t.pendingOrder) {
           return { ...t, done: done.includes(t.id), due: pending.length > 0 };
         }
@@ -116,16 +155,7 @@ export async function GET(req: NextRequest) {
         }
         if (t.weekday !== undefined) {
           // 曜日が決まっている作業。その曜日以外は「今日はなし」。隔週のものはA週だけ
-          let due = weekdayDue(t, date);
-          // 日曜の朝に「今回は仕込まない」を選んだら、日曜のタネと仕込みは出さない
-          const wd = new Date(`${date}T00:00:00Z`).getUTCDay();
-          if (
-            wd === 0 &&
-            (t.id === "hotsand-tane" || t.id === "hotsand-prep") &&
-            choices["hotsand-sunday-check"] === "今回は仕込まない"
-          ) {
-            due = false;
-          }
+          const due = weekdayDue(t, date);
           return { ...t, done: done.includes(t.id), due, ...(t.biweekly ? { weekA: isWeekA(date) } : {}) };
         }
         if (!t.everyDays) return { ...t, done: done.includes(t.id) };
@@ -145,27 +175,46 @@ export async function GET(req: NextRequest) {
     // きょう必要な作業のうち、終わった数
     const need = tasks.filter((t) => !("due" in t) || t.due);
 
-    // 今週（月〜日）の予定。曜日の決まった作業と、📆 週間予定の「前回から何日」で来る仕込み
+    // 今週（月〜日）の予定。曜日の決まった作業と、仕込み（期限・切れた次の日・決まった曜日）。
+    // 過ぎた日は実際に仕込んだもの、今日は今日の仕込み、先の日は予定を出す
     const monday = mondayOf(date);
-    const states = buildShikomiStates(await getShikomiRecords(), date);
+    type WeekItem = { name: string; phase: string; kind: "fixed" | "interval" | "done"; note?: string };
     const week = Array.from({ length: 7 }, (_, i) => {
       const d = new Date(`${monday}T00:00:00Z`);
       d.setUTCDate(d.getUTCDate() + i);
       const day = d.toISOString().slice(0, 10);
-      const items: { name: string; phase: string; kind: "fixed" | "interval"; note?: string }[] = TASKS
+      const items: WeekItem[] = TASKS
         .filter((t) => weekdayDue(t, day) && t.id !== "hotsand-sunday-check")
         .map((t) => ({ name: t.name, phase: t.phase, kind: "fixed" as const, ...(t.biweekly ? { note: "隔週・A週" } : {}) }));
-      for (const s of states) {
-        if (WEEK_SKIP_SHIKOMI.includes(s.id) || !s.nextDate) continue;
-        // 予定日を過ぎているものは今日（今週でなければ月曜）に寄せる
-        const target = s.nextDate < monday ? (date >= monday ? date : monday) : s.nextDate;
-        if (target !== day) continue;
-        items.push({
-          name: s.name,
-          phase: "仕込み",
-          kind: "interval",
-          note: s.nextDate < day ? `予定日 ${s.nextDate.slice(5)} を過ぎています` : `前回 ${s.lastDate?.slice(5)}から${s.intervalDays}日`,
-        });
+      for (const st of shikomiStates) {
+        if (st.openingTask) continue;
+        if (day < date) {
+          if (shikomiRecords.some((r) => r.taskId === st.id && r.date === day && r.type !== "out"))
+            items.push({ name: st.name, phase: "仕込み", kind: "done", note: "仕込んだ" });
+          continue;
+        }
+        if (day === date) {
+          if (st.doneToday) items.push({ name: st.name, phase: "仕込み", kind: "done", note: "今日仕込んだ" });
+          else if (st.dueReasons.length)
+            items.push({
+              name: `${st.name} ${st.todayBatch}`,
+              phase: "仕込み",
+              kind: "interval",
+              note: st.dueReasons.map((r) => r.text).join("・"),
+            });
+          continue;
+        }
+        // 先の日：決まった曜日か、次に仕込む日（期限・切れた次の日）
+        const t = SHIKOMI_TASKS.find((x) => x.id === st.id)!;
+        const onNext = st.nextDate === day && st.nextDate > date;
+        if (isScheduledDay(t, day) || onNext) {
+          items.push({
+            name: `${st.name} ${batchLabel(t, day)}`,
+            phase: "仕込み",
+            kind: "interval",
+            note: isScheduledDay(t, day) ? undefined : st.expiresOn === day ? "期限の日" : "予定の日",
+          });
+        }
       }
       return { date: day, weekday: d.getUTCDay(), items };
     });
@@ -185,6 +234,16 @@ export async function GET(req: NextRequest) {
         night,
       },
       pendingOrders: pending,
+      // 今日の仕込みと、切れたを押すための一覧
+      shikomi: {
+        today: shikomiToday.map((x) => ({
+          id: x.id, name: x.name, batch: x.todayBatch, reasons: x.dueReasons,
+          doneToday: x.doneToday, materials: x.materials, note: x.note,
+        })),
+        items: shikomiStates
+          .filter((x) => !x.openingTask)
+          .map((x) => ({ id: x.id, name: x.name, lastDate: x.lastDate, expiresOn: x.expiresOn, outToday: x.outToday })),
+      },
       daily: { ...daily, carried },
       // 締めで勤怠をつけるときに使う。シフトと、すでに入っている勤怠
       kintai: {
@@ -271,6 +330,11 @@ export async function POST(req: NextRequest) {
     }
     const date = b.date || todayJST();
     const done = await toggle(date, b.taskId, b.done !== false);
+    // コールドブリューのように業務チェックの作業で仕込むものは、仕込みの記録にも残す（分析に使う）
+    for (const st of SHIKOMI_TASKS.filter((x) => x.openingTask === b.taskId)) {
+      if (b.done !== false) await addShikomiRecord({ taskId: st.id, date, by: "業務チェック" });
+      else await removeShikomiRecord(st.id, date);
+    }
     return NextResponse.json({ ok: true, date, done });
   } catch (e) {
     return NextResponse.json(

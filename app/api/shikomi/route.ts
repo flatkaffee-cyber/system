@@ -4,23 +4,24 @@ import {
   addRecord,
   removeRecord,
   buildStates,
+  analyze,
   todayJST,
 } from "@/lib/shikomi";
 
 export const runtime = "nodejs";
 
-// GET /api/shikomi → 今日やること・各作業の次回予定
+// GET /api/shikomi → 今日やること・各作業の次回予定・予定とのずれの分析
 export async function GET() {
   try {
     const today = todayJST();
-    const states = buildStates(await getRecords(), today);
-    const due = states.filter(
-      (s) => !s.doneToday && (s.status === "overdue" || s.status === "today" || s.status === "never"),
-    );
+    const records = await getRecords();
+    const states = buildStates(records, today);
+    const due = states.filter((s) => !s.doneToday && s.dueReasons.length > 0);
     return NextResponse.json({
       today,
       states,
       due,
+      analysis: analyze(records, today),
       summary: {
         due: due.length,
         dueMinutes: due.reduce((n, s) => n + (s.minutes ?? 0), 0),
@@ -35,11 +36,14 @@ export async function GET() {
   }
 }
 
-// POST /api/shikomi { taskId, date?, note?, by? } → やったことを記録
+// POST /api/shikomi { taskId, type?: "made"|"out", qty?, date?, note?, by? }
+//   → 仕込んだ（made）か、切れた（out）かを記録
 export async function POST(req: NextRequest) {
   try {
     const b = (await req.json()) as {
       taskId?: string;
+      type?: "made" | "out";
+      qty?: number;
       date?: string;
       note?: string;
       by?: string;
@@ -50,6 +54,8 @@ export async function POST(req: NextRequest) {
     await addRecord({
       taskId: b.taskId,
       date: b.date || todayJST(),
+      ...(b.type === "out" ? { type: "out" as const } : {}),
+      ...(typeof b.qty === "number" ? { qty: b.qty } : {}),
       note: b.note,
       by: b.by,
     });
@@ -62,7 +68,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// DELETE /api/shikomi?taskId=..&date=.. → 記録の取り消し
+// DELETE /api/shikomi?taskId=..&date=..&type=made|out → 記録の取り消し
 export async function DELETE(req: NextRequest) {
   try {
     const sp = req.nextUrl.searchParams;
@@ -71,7 +77,7 @@ export async function DELETE(req: NextRequest) {
     if (!taskId || !date) {
       return NextResponse.json({ error: "taskId と date が必要です" }, { status: 400 });
     }
-    await removeRecord(taskId, date);
+    await removeRecord(taskId, date, sp.get("type") === "out" ? "out" : "made");
     return NextResponse.json({ ok: true, states: buildStates(await getRecords()) });
   } catch (e) {
     return NextResponse.json(

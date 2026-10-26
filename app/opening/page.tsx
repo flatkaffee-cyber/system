@@ -27,6 +27,9 @@ type Task = {
   dailyAction?: "buy" | "prep" | "refill";
   wafflePrep?: boolean;
   kintai?: boolean;
+  shikomiList?: boolean;
+  shikomiOut?: boolean;
+  shikomiFor?: string[];
   done: boolean;
   lastDate?: string | null;
   daysSince?: number | null;
@@ -35,7 +38,12 @@ type Task = {
 
 type Slot = "morning" | "afternoon" | "evening";
 
-type WeekItem = { name: string; phase: string; kind: "fixed" | "interval"; note?: string };
+type WeekItem = { name: string; phase: string; kind: "fixed" | "interval" | "done"; note?: string };
+type ShikomiToday = {
+  id: string; name: string; batch: string; reasons: { reason: string; text: string }[];
+  doneToday: boolean; materials?: string; note?: string;
+};
+type ShikomiItem = { id: string; name: string; lastDate: string | null; expiresOn: string | null; outToday: boolean };
 type Week = { monday: string; weekA: boolean; days: { date: string; weekday: number; items: WeekItem[] }[] };
 const WD_JA = ["日", "月", "火", "水", "木", "金", "土"];
 /** 週間スケジュールに出す作業。毎週の掃除などは数が多いので、仕入れ・仕込みを先に並べる */
@@ -80,6 +88,9 @@ export default function OpeningPage() {
   // 今週（月〜日）の予定
   const [week, setWeek] = useState<Week | null>(null);
   const [weekOpen, setWeekOpen] = useState(true);
+  // 今日の仕込みと、切れたを押すための仕込み品の一覧
+  const [shikomi, setShikomi] = useState<{ today: ShikomiToday[]; items: ShikomiItem[] } | null>(null);
+  const [sBusy, setSBusy] = useState("");
   const [wBusy, setWBusy] = useState(false);
   // ホットサンドの在庫。朝と夕方で別々に数える
   // 牛乳・コールドブリュー・アメリカーノ用の水
@@ -141,6 +152,7 @@ export default function OpeningPage() {
       setWaffle(d.waffle || null);
       setPendingOrders(d.pendingOrders || []);
       setWeek(d.week || null);
+      setShikomi(d.shikomi || null);
       setDaily(d.daily || null);
       setKin(d.kintai || null);
       if (d.waffle?.today) {
@@ -157,7 +169,30 @@ export default function OpeningPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // 仕込んだ／切れたを記録する。undo なら取り消す。日付は業務チェックの日（朝6時切替）
+  const recordShikomi = async (taskId: string, type: "made" | "out", undo: boolean) => {
+    setSBusy(`${taskId}:${type}`);
+    setErr("");
+    try {
+      const res = undo
+        ? await fetch(`/api/shikomi?taskId=${taskId}&date=${date}&type=${type}`, { method: "DELETE" })
+        : await fetch("/api/shikomi", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ taskId, type, date, by: "業務チェック" }),
+          });
+      if (!res.ok) throw new Error((await res.json()).error || "保存に失敗");
+      await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "保存に失敗");
+    } finally {
+      setSBusy("");
+    }
+  };
+
   const flip = async (t: Task) => {
+    // 今日の仕込みは、並んだものを全部「仕込んだ」にすると自動で終わる
+    if (t.shikomiList) return;
     // 押した瞬間に見た目を変える。通信の返りを待たせない
     setTasks((prev) => prev.map((x) => (x.id === t.id ? { ...x, done: !x.done } : x)));
     setDoneCount((n) => n + (t.done ? -1 : 1));
@@ -303,7 +338,7 @@ export default function OpeningPage() {
   };
 
   const row = (t: Task) => {
-    const skip = (t.everyDays || t.weekday !== undefined) && !t.due;
+    const skip = (t.everyDays || t.weekday !== undefined || t.shikomiList || t.shikomiFor) && !t.due;
     return (
       <div
         key={t.id}
@@ -522,6 +557,79 @@ export default function OpeningPage() {
               </div>
             );
           })()}
+          {t.shikomiList && shikomi && (
+            <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 7 }}>
+              {shikomi.today.length === 0 && (
+                <div style={{ fontSize: 12.5, color: "var(--muted)" }}>今日仕込むものはありません</div>
+              )}
+              {shikomi.today.map((it) => {
+                const busy = sBusy === `${it.id}:made`;
+                return (
+                  <div
+                    key={it.id}
+                    style={{
+                      display: "flex", gap: 10, alignItems: "center", justifyContent: "space-between",
+                      padding: "9px 11px", borderRadius: 7, marginBottom: 6,
+                      background: it.doneToday ? "#eaf6ec" : "#fdf6ec",
+                      border: `1px solid ${it.doneToday ? "#b7dfc0" : "#e8d5b0"}`,
+                    }}
+                  >
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 700 }}>
+                        {it.name}
+                        <span style={{ marginLeft: 6, color: "#9c5f22" }}>{it.batch}</span>
+                      </div>
+                      <div style={{ fontSize: 11.5, color: it.reasons.some((r) => r.reason !== "予定日") ? "#c0392b" : "var(--muted)", marginTop: 2 }}>
+                        {it.reasons.map((r) => r.text).join("・")}
+                      </div>
+                      {it.materials && (
+                        <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>材料 {it.materials}</div>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => recordShikomi(it.id, "made", it.doneToday)}
+                      disabled={busy}
+                      style={{
+                        padding: "8px 12px", borderRadius: 8, cursor: "pointer", flexShrink: 0,
+                        fontSize: 12.5, fontWeight: 700, whiteSpace: "nowrap",
+                        border: it.doneToday ? "2px solid var(--ok)" : "1px solid var(--line)",
+                        background: it.doneToday ? "var(--ok)" : "#fff",
+                        color: it.doneToday ? "#fff" : "var(--ink)",
+                      }}
+                    >
+                      {busy ? "…" : it.doneToday ? "✓ 仕込んだ" : "仕込んだ"}
+                    </button>
+                  </div>
+                );
+              })}
+              <div style={{ fontSize: 11.5, color: "var(--muted)", lineHeight: 1.6 }}>
+                量は決めた分だけ。足りなくなったら締めで「切れた」を押すと、次の日にここに出ます
+              </div>
+            </div>
+          )}
+          {t.shikomiOut && shikomi && (
+            <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 7, display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {shikomi.items.map((it) => {
+                const busy = sBusy === `${it.id}:out`;
+                return (
+                  <button
+                    key={it.id}
+                    onClick={() => recordShikomi(it.id, "out", it.outToday)}
+                    disabled={busy}
+                    style={{
+                      padding: "7px 10px", borderRadius: 8, cursor: "pointer",
+                      fontSize: 12.5, fontWeight: 700,
+                      border: it.outToday ? "2px solid #c0392b" : "1px solid var(--line)",
+                      background: it.outToday ? "#c0392b" : "#fff",
+                      color: it.outToday ? "#fff" : "var(--ink)",
+                    }}
+                  >
+                    {busy ? "…" : `${it.outToday ? "✕ 切れた：" : ""}${it.name.replace(/の仕込み$|のセット仕込み$/, "")}`}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           {t.orderList && (
             <div onClick={(e) => e.stopPropagation()}>
               <Link
@@ -700,8 +808,9 @@ export default function OpeningPage() {
           {weekOpen && week.days.map((d) => {
             const isToday = d.date === date;
             const closed = d.weekday === 2;
-            const prep = d.items.filter((it) => it.kind === "interval" || isPrep(it.name));
-            const other = d.items.filter((it) => !(it.kind === "interval" || isPrep(it.name)));
+            const made = d.items.filter((it) => it.kind === "done");
+            const prep = d.items.filter((it) => it.kind === "interval" || (it.kind === "fixed" && isPrep(it.name)));
+            const other = d.items.filter((it) => it.kind === "fixed" && !isPrep(it.name));
             return (
               <div key={d.date} style={{
                 display: "grid", gridTemplateColumns: "54px 1fr", gap: 10, padding: "9px 6px",
@@ -720,6 +829,9 @@ export default function OpeningPage() {
                       {it.note && <span style={{ fontSize: 11, color: it.note.includes("過ぎ") ? "#c0392b" : "var(--muted)", marginLeft: 6 }}>{it.note}</span>}
                     </div>
                   ))}
+                  {made.map((it, i) => (
+                    <div key={`d${i}`} style={{ color: "var(--ok)" }}>✓ {it.name}<span style={{ fontSize: 11, marginLeft: 6 }}>{it.note}</span></div>
+                  ))}
                   {other.map((it, i) => (
                     <div key={`o${i}`} style={{ color: "var(--muted)" }}>・{it.name}</div>
                   ))}
@@ -730,8 +842,8 @@ export default function OpeningPage() {
           })}
           {weekOpen && (
             <p className="hint" style={{ marginTop: 8 }}>
-              太字は仕入れ・仕込み、灰色は週1の掃除など。マッシュポテト・あみえびクリームチーズ・ザワークラウトなどは
-              「📆 週間予定」で仕込んだ日を記録すると、そこから数えた日にここに出ます。
+              太字は仕入れ・仕込み（量つき）、緑は仕込んだもの、灰色は週1の掃除など。仕込みは「仕込んだ日＋消費期限」「切れた次の日」
+              「決まった曜日」のうち早い日に出ます。赤字は期限切れ・切れたもの。
             </p>
           )}
         </div>
