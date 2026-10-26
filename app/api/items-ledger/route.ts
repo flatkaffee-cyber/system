@@ -24,6 +24,8 @@ export type Buy = {
   category: string;
   /** どこから来た記録か */
   from: "領収書" | "注文" | "明細";
+  /** 注文で個数が分かっているとき（amount は単価×個数） */
+  qty?: number;
 };
 
 export type Ledger = {
@@ -39,6 +41,17 @@ export type Ledger = {
   vendors: string[];
   buys: Buy[];
 };
+
+/**
+ * 注文メールの日付は「Sun, 4 Oct 2026 10:00:00 +0900」の形のことがあり、先頭10文字だと「Sun, 4 Oct」になって
+ * 年が落ち、並びや購入間隔が狂っていた。日付として読めるものは日本時間の YYYY-MM-DD に直す
+ */
+function ymd(raw?: string): string {
+  const s = raw || "";
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  const t = Date.parse(s);
+  return Number.isNaN(t) ? s.slice(0, 10) : new Date(t + 9 * 3600_000).toISOString().slice(0, 10);
+}
 
 const today = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 const dayDiff = (a: string, b: string) =>
@@ -111,12 +124,13 @@ export async function GET() {
         const amount = (it.price ?? 0) * (it.quantity ?? 1);
         if (!name || !amount) continue;
         const buy: Buy = {
-          date: (o.orderDate || "").slice(0, 10),
+          date: ymd(o.orderDate),
           vendor: o.source,
           name,
           amount,
           category: o.account || "仕入高",
           from: "注文",
+          ...((it.quantity ?? 1) > 1 ? { qty: it.quantity } : {}),
         };
         const item = resolveWithOverrides(name, overrides);
         if (!item) {

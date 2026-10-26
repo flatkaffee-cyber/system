@@ -1,4 +1,8 @@
 // メニュー管理：KVに保存し、領収書登録時に仕入原価を自動更新する。
+// 2026-10-26 材料を品目台帳の品目（ledgerItem）につなぎ、レシートの行から1個あたりの値段を出して更新する形に直した。
+// それまでは「フード材料費」などの区分の行だけを見ていたが、区分が freee の勘定科目（仕入高など）に変わってから一度も動いていなかった。
+import { getOverrides, resolveWithOverrides } from "@/lib/freeeItems";
+import { unitPriceOf } from "@/lib/unitPrice";
 
 const MENU_KEY = "menu:items";
 
@@ -18,7 +22,20 @@ export type Ingredient = {
   purchasePrice: number;
   usage: number;
   cost: number; // computed: (purchasePrice / capacity) * usage
+  /** 品目台帳のどの品目の値段を使うか。無ければ材料名から自動で決める（linkOf） */
+  ledgerItem?: string;
+  /** いまの仕入値がどのレシートから来たか */
+  priceFrom?: { date: string; name: string; vendor?: string };
 };
+
+/** 材料がつながる品目台帳の品目。手で決めたものが優先、無ければ材料名から判定 */
+export function linkOf(ing: Pick<Ingredient, "name" | "ledgerItem">, overrides: Record<string, string>): string | null {
+  return ing.ledgerItem || resolveWithOverrides(ing.name, overrides);
+}
+
+/** 新しい値段がいまの値段から大きく外れていたら、自動では入れない（1パックの量が違う品を買った可能性） */
+export const isPlausiblePrice = (oldPrice: number, newPrice: number) =>
+  !oldPrice || (newPrice / oldPrice <= 1.5 && newPrice / oldPrice >= 0.5);
 
 export type MenuItem = {
   id: string;
@@ -461,110 +478,66 @@ export async function deleteMenuItem(id: string): Promise<void> {
 // 領収書の品目名に材料名が含まれていたら、単価を更新する。
 // 例: 「コーヒー豆2kg」→ エスプレッソ豆の仕入値を更新
 
-// 材料名 → 領収書の品目名に含まれそうなキーワード
-const INGREDIENT_KEYWORDS: Record<string, string[]> = {
-  "エスプレッソ豆": ["コーヒー豆", "エスプレッソ", "珈琲豆"],
-  "牛乳": ["牛乳", "ミルク"],
-  "プロテインパウダー": ["プロテイン"],
-  "ココアパウダー": ["ココア"],
-  "バナナ": ["バナナ"],
-  "ミックスベリー": ["ベリー", "ミックスベリー"],
-  "食パン": ["食パン", "パン"],
-  "バター": ["バター"],
-  "マーガリン": ["マーガリン"],
-  "ワッフルミックス": ["ワッフルミックス", "ワッフル粉"],
-  "卵": ["卵", "たまご"],
-  "抹茶": ["抹茶"],
-  "チョコチップ": ["チョコチップ"],
-  "ざらめ": ["ざらめ", "ザラメ"],
-  "ハイネケン 330ml瓶": ["ハイネケン", "Heineken"],
-  "テキーラ": ["テキーラ", "tequila"],
-  "アペロール": ["アペロール", "Aperol", "aperol"],
-  "ライムジュース": ["ライムジュース", "ライム果汁"],
-  "ココナッツミルク": ["ココナッツミルク", "ココナッツ"],
-  "シンプルシロップ": ["シロップ", "シンプルシロップ"],
-  "バーボンウイスキー": ["バーボン"],
-  "ウイスキー(JIM BEAM)": ["ウイスキー", "JIM BEAM", "ジムビーム"],
-  "ウォッカ（アブソルート）": ["ウォッカ", "アブソルート", "ABSOLUT"],
-  "ホワイトキュラソー（コアントロー）": ["コアントロー", "COINTREAU", "キュラソー"],
-  "レモンジュース（お酒にプラス）": ["お酒にプラス", "ポッカレモン", "レモンジュース"],
-  "ガムシロップ（サントリー）": ["ガムシロップ"],
-  "コロナ 330ml瓶": ["コロナ", "Corona"],
-  "バドワイザー 330ml瓶": ["バドワイザー", "Budweiser"],
-  "梅酒": ["梅酒"],
-  "ジンジャーエール": ["ジンジャーエール"],
-  "オレンジジュース": ["オレンジジュース", "オレンジ"],
-  "ツナ": ["ツナ"],
-  "ハム": ["ハム"],
-  "チーズ": ["チーズ"],
-  "マヨネーズ": ["マヨ"],
-  "ケチャップ": ["ケチャップ"],
-  "マスタード": ["マスタード"],
-  "スパム": ["スパム", "SPAM"],
-  "ブロッコリー": ["ブロッコリー"],
-};
-
-// 原価系カテゴリ
-const COST_CATEGORIES = [
-  "コーヒー豆・茶葉",
-  "牛乳・シロップ等",
-  "フード材料費",
-  "その他原価",
-];
-
 /**
- * 領収書が保存されたとき、原価系の品目をチェックし、
- * メニューの材料の仕入値を自動更新する。
+ * 領収書が保存されたとき、行ごとに品目を判定し、その品目につながっている材料の仕入値（1個あたり）を更新する。
+ * 値段が今の半分未満・1.5倍超のときは自動では入れない（メニュー → 原価の見直し で確かめて入れる）。
  * 呼び出し元: saveReceipt の後。
  */
 export async function updateCostsFromReceipt(receipt: {
   summary: string;
   total: number;
   category: string;
+  date?: string;
+  vendor?: string;
   lines?: { name: string; amount: number; category: string }[];
 }): Promise<{ updated: string[]; skipped: boolean }> {
   const lines = receipt.lines ?? [
     { name: receipt.summary, amount: receipt.total, category: receipt.category },
   ];
-
-  // 原価系の品目だけ対象
-  const costLines = lines.filter((l) => COST_CATEGORIES.includes(l.category));
-  if (costLines.length === 0) return { updated: [], skipped: true };
+  const overrides = await getOverrides().catch(() => ({}));
+  const priced = lines
+    .map((l) => ({ line: l, item: resolveWithOverrides(l.name, overrides), ...unitPriceOf(l.name, l.amount) }))
+    .filter((x) => x.item && x.price > 0);
+  if (!priced.length) return { updated: [], skipped: true };
 
   const items = await getMenuItems();
   const updatedNames: string[] = [];
   let changed = false;
-
-  for (const line of costLines) {
-    const lineName = line.name.toLowerCase();
-    // 各材料のキーワードとマッチするか
-    for (const [ingName, keywords] of Object.entries(INGREDIENT_KEYWORDS)) {
-      const match = keywords.some((kw) => lineName.includes(kw.toLowerCase()));
-      if (!match) continue;
-
-      // マッチした材料を持つ全メニューの仕入値を更新
-      for (const item of items) {
-        for (const ing of item.ingredients) {
-          if (ing.name === ingName) {
-            // 仕入値を更新（内容量は維持）
-            const newPrice = line.amount;
-            if (newPrice > 0 && newPrice !== ing.purchasePrice) {
-              ing.purchasePrice = newPrice;
-              ing.cost = recalcCost(ing);
-              changed = true;
-              if (!updatedNames.includes(ingName)) updatedNames.push(ingName);
-            }
-          }
-        }
+  for (const p of priced) {
+    for (const item of items) {
+      for (const ing of item.ingredients) {
+        if (linkOf(ing, overrides) !== p.item) continue;
+        if (p.price === ing.purchasePrice || !isPlausiblePrice(ing.purchasePrice, p.price)) continue;
+        ing.purchasePrice = p.price;
+        ing.priceFrom = { date: receipt.date ?? new Date().toISOString().slice(0, 10), name: p.line.name, vendor: receipt.vendor };
+        changed = true;
+        if (!updatedNames.includes(ing.name)) updatedNames.push(ing.name);
       }
     }
   }
-
-  if (changed) {
-    // 全メニューの合計原価を再計算して保存
-    const recalced = items.map(recalcItem);
-    await saveMenuItems(recalced);
-  }
-
+  if (changed) await saveMenuItems(items.map(recalcItem));
   return { updated: updatedNames, skipped: false };
+}
+
+/** 同じ名前の材料を、全部のメニューでまとめて直す（原価の見直しの画面から） */
+export async function updateIngredient(
+  name: string,
+  patch: { ledgerItem?: string | null; purchasePrice?: number; priceFrom?: Ingredient["priceFrom"] },
+): Promise<number> {
+  const items = await getMenuItems();
+  let n = 0;
+  for (const item of items) {
+    for (const ing of item.ingredients) {
+      if (ing.name !== name) continue;
+      if (patch.ledgerItem === null) delete ing.ledgerItem;
+      else if (patch.ledgerItem !== undefined) ing.ledgerItem = patch.ledgerItem;
+      if (patch.purchasePrice !== undefined && patch.purchasePrice > 0) {
+        ing.purchasePrice = patch.purchasePrice;
+        ing.priceFrom = patch.priceFrom;
+      }
+      n++;
+    }
+  }
+  if (n) await saveMenuItems(items.map(recalcItem));
+  return n;
 }

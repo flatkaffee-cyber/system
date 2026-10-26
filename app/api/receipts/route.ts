@@ -152,6 +152,8 @@ export async function POST(req: NextRequest) {
         summary: body.summary ?? "",
         total,
         category: lines[0]?.category ?? body.category ?? "不明",
+        date: body.date || undefined,
+        vendor: body.vendor || undefined,
         lines: lines.length ? lines : undefined,
       });
     } catch {

@@ -79,6 +79,8 @@ export async function POST(req: NextRequest) {
       summary: lines.map((l) => l.name).join("、"),
       total: extractedTotal,
       category: "仕入高",
+      date: receipt?.date || undefined,
+      vendor: receipt?.vendor || undefined,
       lines,
     });
   } catch {

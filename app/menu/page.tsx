@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Fragment, useCallback } from "react";
 import Nav from "@/components/Nav";
+import CostReview from "@/components/CostReview";
 
 // ─── 型 ───
 
@@ -503,7 +504,7 @@ function MenuDisplayView({ items }: { items: MenuItem[] }) {
 // ─── メインページ ───
 
 export default function MenuPage() {
-  const [tab, setTab] = useState<"list" | "display" | "calc">("list");
+  const [tab, setTab] = useState<"list" | "display" | "calc" | "review">("list");
   const [items, setItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -527,7 +528,7 @@ export default function MenuPage() {
     <div className="wrap">
       <header>
         <h1>☕ flat. メニュー管理</h1>
-        <p>メニューの原価・売価を管理 → 領収書登録で仕入値が自動更新されます</p>
+        <p>メニューの原価・売価。材料を品目台帳につなぐと、レシートの買値で仕入値が自動で入ります</p>
       </header>
       <Nav />
 
@@ -551,6 +552,12 @@ export default function MenuPage() {
         >
           🧮 原価計算
         </button>
+        <button
+          className={`sub-tab ${tab === "review" ? "active" : ""}`}
+          onClick={() => setTab("review")}
+        >
+          🧾 原価の見直し
+        </button>
       </div>
 
       {loading ? (
@@ -565,6 +572,8 @@ export default function MenuPage() {
         <MenuListView items={items} />
       ) : tab === "display" ? (
         <MenuDisplayView items={items} />
+      ) : tab === "review" ? (
+        <CostReview onChanged={loadItems} />
       ) : (
         <CalcView />
       )}
