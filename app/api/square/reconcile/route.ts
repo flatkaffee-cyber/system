@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isAmountOnly } from "@/lib/posMatch";
-import { saveFix } from "@/lib/salesFix";
+import { isAmountOnly, pairPosOrders } from "@/lib/posMatch";
+import { getFixes, saveFix } from "@/lib/salesFix";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -104,6 +104,16 @@ export async function POST(req: NextRequest) {
     }
 
     const used = new Set<string>();
+    // まず、レジが金額だけで作った注文のうち、開いた注文の直後（30分以内）にできた同額のものとつなぐ。
+    // 「同じ日・同じ金額」だけで選ぶと、夜の別の会計（現金など）と取り違えることがあったため
+    // （2026-10-22 14:02 の ¥600 が 20:51 の会計につながっていた）。品目を写し済みのレジ注文は除く
+    const fixes = await getFixes();
+    const posPair = new Map(
+      pairPosOrders(open, completed.filter((c) => isAmountOnly(c) && !fixes[c.id])).map((p) => [p.sysId, p.posId]),
+    );
+    for (const posId of posPair.values()) used.add(posId);
+    const byId = new Map(completed.map((c) => [c.id, c]));
+
     const matched: {
       openId: string;
       ticket: string;
@@ -118,7 +128,8 @@ export async function POST(req: NextRequest) {
       const amount = o.total_money?.amount ?? 0;
       if (!amount) continue;
       const k = `${bizDay(o.created_at)}_${amount}`;
-      const hit = (paid.get(k) ?? []).find((c) => !used.has(c.id));
+      const pos = posPair.get(o.id);
+      const hit = pos ? byId.get(pos) : (paid.get(k) ?? []).find((c) => !used.has(c.id));
       if (!hit) continue;
       used.add(hit.id);
       const row = {
