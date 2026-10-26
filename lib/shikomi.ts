@@ -67,9 +67,10 @@ export const TASKS: Task[] = [
     kind: "仕込み",
     intervalDays: 3.5,
     weekday: [3, 0],
-    // 2026-10-24 水曜はクラシック15食。日曜（月・水の2日分）の9食は仮
-    batch: 15,
-    batchByWeekday: { 3: 15, 0: 9 },
+    // 2026-10-26 店内（Square 9/1〜10/22）＋Uber（9/16〜10/25）の売れ方から決めた。
+    // 水曜の分は水曜午後〜日曜昼（約15.9食）、日曜の分は日曜午後〜水曜昼（約7.3食）に1〜2割の余裕を足して斤で丸めた
+    batch: 18,
+    batchByWeekday: { 3: 18, 0: 9 },
     unit: "食",
     perLoaf: 3,
     shelfLifeDays: 14, // 冷凍。仮
@@ -82,8 +83,9 @@ export const TASKS: Task[] = [
     kind: "仕込み",
     intervalDays: 3.5,
     weekday: [3, 0],
-    batch: 12,
-    batchByWeekday: { 3: 12, 0: 9 },
+    // 水曜の分は約12.7食、日曜の分は約7.0食（店内＋Uber）。同じく余裕を足して斤で丸めた
+    batch: 15,
+    batchByWeekday: { 3: 15, 0: 9 },
     unit: "食",
     perLoaf: 3,
     shelfLifeDays: 14, // 冷凍。仮
@@ -110,24 +112,28 @@ export const TASKS: Task[] = [
     kind: "仕込み",
     intervalDays: 10,
     shelfLifeDays: 10,
-    batch: 800,
+    // 2026-10-26 800g→300g。9/1〜10/25の55日で生ハム包み8・マッシュポテト4・3種盛り2・ソーセージ1、10日で約200〜250gしか使わない
+    batch: 300,
     unit: "g",
-    materials: "ポテトフレーク 150g",
+    materials: "ポテトフレーク 約56g（800gのとき150gの割合）",
     note: "タッパに入れて冷蔵。容器に仕込んだ日付を書く",
-    minutes: 20,
+    minutes: 15,
   },
   {
     id: "amiebi-cream-cheese",
     name: "あみえびのクリームチーズ",
     kind: "仕込み",
-    intervalDays: 10,
-    shelfLifeDays: 10,
-    // 2026-10-23 坂本さん決定：3食分ずつ10日に1回
-    batch: 3,
+    // 2026-10-26 坂本さん決定：2食分を週1回。1週間に1食も出ないこともあるので量を減らし、期限を7日に。
+    // 2食出たら（切れたら）その日か次の日に仕込む
+    intervalDays: 7,
+    shelfLifeDays: 7,
+    batch: 2,
     unit: "食分",
-    materials: "クリームチーズ・あみえびうま煮（大葉は混ぜない）",
-    note: "大葉は混ぜず、出すときにのせる（混ぜると傷みやすい）。容器に仕込んだ日付を書く",
-    minutes: 20,
+    materials: "クリームチーズ・あみえびうま煮（冷凍のものを使う分だけ解凍）",
+    note:
+      "あみえびうま煮は賞味期限が約1週間なので、買ったら小分けにして冷凍。" +
+      "大葉は混ぜず、出すときにのせる（混ぜると水が出て傷みやすく、7日はもたない）。容器に仕込んだ日付を書く",
+    minutes: 15,
   },
   {
     id: "sauerkraut",
