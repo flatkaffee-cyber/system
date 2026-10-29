@@ -40,8 +40,9 @@ type Data = {
 const WD = ["日", "月", "火", "水", "木", "金", "土"];
 // カレンダーの並び。週は月曜始まり（WD は getUTCDay の番号で引くのでそのまま）
 const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
-// タイムラインの描画範囲。開店前の仕込み(9:00)から閉店(24:30)まで
-const T0 = 9 * 60;
+// タイムラインの描画範囲。早めの仕込み(8:00)から閉店(24:30)まで。
+// 以前は 9:00 始まりで、8:30 開始のシフトは表示位置が範囲外になり、バーが崩れていた
+const T0 = 8 * 60;
 const T1 = 24 * 60 + 30;
 
 const COLOR: Record<string, string> = {
@@ -76,10 +77,11 @@ const shiftMonth = (month: string, delta: number) => {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 };
 
-// 9:00〜24:30 を30分×31コマのグリッドに載せる。1人1行なので、
+// 8:00〜24:30 を30分×33コマのグリッドに載せる。1人1行なので、
 // 中抜けのある人は同じ行に2本のバーが並ぶ（何時に帰って何時に戻るかが見える）。
-const SLOTS = (T1 - T0) / 30; // 31
-const col = (min: number) => Math.round((min - T0) / 30) + 1;
+const SLOTS = (T1 - T0) / 30; // 33
+// グリッドの列番号は 1〜SLOTS+1 しか使えない。範囲外の時刻でも端に収めて、表示が崩れないようにする
+const col = (min: number) => Math.min(SLOTS + 1, Math.max(1, Math.round((min - T0) / 30) + 1));
 
 // 意図的に誰も入れない時間帯（lib/shift.ts の IDLE_WINDOWS と揃える）
 const IDLE: [number, number][] = [[18 * 60, 19 * 60]];
