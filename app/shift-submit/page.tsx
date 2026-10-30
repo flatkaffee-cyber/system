@@ -8,7 +8,7 @@ import Nav from "@/components/Nav";
 // 朝番9:00-14:30／昼番14:30-19:30／夜番19:30-24:30 に当てはめる。
 
 type Slot = { weekday: number; start: string; end: string };
-type Submission = { staff: string; week: string; slots: Slot[]; submittedAt: string };
+type Submission = { staff: string; week: string; slots: Slot[]; comment?: string; submittedAt: string };
 
 const WDAYS = [
   { wd: 1, label: "月" }, { wd: 2, label: "火" }, { wd: 3, label: "水" },
@@ -32,6 +32,8 @@ export default function ShiftSubmitPage() {
   const [week, setWeek] = useState("");
   const [subs, setSubs] = useState<Record<string, Submission>>({});
   const [slots, setSlots] = useState<Slot[]>([]);
+  // ひとこと（任意）。時間の枠だけでは伝わらないことを書いてもらう
+  const [comment, setComment] = useState("");
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
   const [saving, setSaving] = useState(false);
@@ -64,8 +66,13 @@ export default function ShiftSubmitPage() {
 
   // 名前を選んだら、提出済みの内容を呼び出して直せるようにする
   useEffect(() => {
-    if (me && subs[me]) setSlots(subs[me].slots);
-    else setSlots([]);
+    if (me && subs[me]) {
+      setSlots(subs[me].slots);
+      setComment(subs[me].comment ?? "");
+    } else {
+      setSlots([]);
+      setComment("");
+    }
   }, [me, subs]);
 
   const dateOf = (wd: number) => {
@@ -108,7 +115,7 @@ export default function ShiftSubmitPage() {
       const res = await fetch("/api/shift-request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ staff: me, week, slots }),
+        body: JSON.stringify({ staff: me, week, slots, comment }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "保存失敗");
@@ -306,6 +313,19 @@ export default function ShiftSubmitPage() {
                   </div>
                 );
               })}
+              <div style={{ marginTop: 14 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
+                  ひとこと（なくてもOK）
+                </div>
+                <textarea
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  rows={3}
+                  maxLength={500}
+                  placeholder="例）水曜は授業で17時から入れます／この週はテスト期間なので少なめでお願いします"
+                  style={{ width: "100%", fontSize: 14, padding: 8, lineHeight: 1.6 }}
+                />
+              </div>
               <button className="primary" onClick={save} disabled={saving}
                 style={{ width: "100%", marginTop: 12 }}>
                 {saving ? "提出中…" : subs[me] ? "出し直す（上書き）" : "この内容で提出"}
@@ -346,6 +366,17 @@ export default function ShiftSubmitPage() {
               </div>
             </div>
           ))}
+          {staff.some((st) => subs[st]?.comment) && (
+            <div style={{ padding: "10px 0 2px", borderTop: "1px solid var(--line-soft, #eee)" }}>
+              <strong style={{ fontSize: 13.5 }}>ひとこと</strong>
+              {staff.filter((st) => subs[st]?.comment).map((st) => (
+                <div key={st} style={{ display: "flex", gap: 8, fontSize: 12.5, marginTop: 4 }}>
+                  <span style={{ minWidth: 40, fontWeight: 700 }}>{st}</span>
+                  <span style={{ whiteSpace: "pre-wrap" }}>{subs[st].comment}</span>
+                </div>
+              ))}
+            </div>
+          )}
           <p className="hint" style={{ marginTop: 10 }}>
             これを見て「🗓️ シフト」のページで割り当ててください。
             基本は 朝番9:00-14:30／昼番14:30-19:30／夜番19:30-24:30 です。

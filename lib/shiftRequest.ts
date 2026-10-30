@@ -25,6 +25,11 @@ export type Submission = {
   /** 対象週の月曜日 YYYY-MM-DD */
   week: string;
   slots: Slot[];
+  /**
+   * ひとこと。「水曜は授業で17時まで」「この週はテスト期間」など、
+   * 時間の枠だけでは伝わらないことを組む人に伝える
+   */
+  comment?: string;
   submittedAt: string;
 };
 

@@ -24,6 +24,7 @@ type Data = {
   staff: string[];
   submitted: string[];
   notSubmitted: string[];
+  comments?: Record<string, string>;
   availability: Record<string, Avail[]>;
   days: Day[];
   current: { id: string; date: string; staff: string; start: string; end: string }[];
@@ -245,6 +246,14 @@ export default function ShiftBuild() {
               未提出: <b>{data.notSubmitted.join("・")}</b>（この人は自動では入りません）
             </div>
           )}
+          {Object.entries(data.comments ?? {}).map(([who, c]) => (
+            <div key={who} style={{
+              marginTop: 6, padding: "6px 10px", borderRadius: 8,
+              background: "#fff8e6", border: "1px solid #f0d9a8", whiteSpace: "pre-wrap",
+            }}>
+              <b>{who}</b>：{c}
+            </div>
+          ))}
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
           <button className="primary" style={{ flex: 2 }} onClick={autoFill} disabled={busy}>

@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST /api/shift-request { staff, week, slots: [{weekday,start,end}] }
+// POST /api/shift-request { staff, week, slots: [{weekday,start,end}], comment? }
 // 同じ人が出し直したら上書き。空のslotsは「その週は入れない」の提出として扱う。
 export async function POST(req: NextRequest) {
   try {
@@ -44,10 +44,12 @@ export async function POST(req: NextRequest) {
       if (s.weekday == null || !s.start || !s.end) continue;
       slots.push({ weekday: Number(s.weekday), start: String(s.start), end: String(s.end) });
     }
+    const comment = String(b.comment ?? "").trim().slice(0, 500);
     const sub: Submission = {
       staff: String(b.staff),
       week,
       slots,
+      ...(comment ? { comment } : {}),
       submittedAt: new Date().toISOString(),
     };
     await submit(sub);
