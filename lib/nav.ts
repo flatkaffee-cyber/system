@@ -30,6 +30,10 @@ export const NAV_GROUPS: NavGroup[] = [
     { href: "/kintai", label: "勤怠" },
     { href: "/labor", label: "労働枠" },
   ]),
+  one("roumu", "労務", [
+    { href: "/roumu/kyuyo", label: "給与" },
+    { href: "/roumu/shorui", label: "書類" },
+  ]),
   one("shikomi", "仕込み・在庫", [
     { href: "/shikomi", label: "仕込み" },
     { href: "/shikomi/settings", label: "仕込みの設定" },
