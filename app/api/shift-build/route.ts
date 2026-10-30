@@ -49,6 +49,10 @@ export async function GET(req: NextRequest) {
       staff: ASSIGNABLE,
       submitted: ASSIGNABLE.filter((s) => submissions[s]),
       notSubmitted: ASSIGNABLE.filter((s) => !submissions[s]),
+      // 提出のひとこと（ある人だけ）。組むときに見落とさないよう上に出す
+      comments: Object.fromEntries(
+        ASSIGNABLE.filter((s) => submissions[s]?.comment).map((s) => [s, submissions[s].comment]),
+      ),
       availability,
       days,
       unfilled,
