@@ -3,8 +3,10 @@
 import { useEffect, useState, useCallback } from "react";
 import { CONTRACT_KINDS } from "@/lib/contracts";
 
-// 契約書。中身より「いつまでに動くか」が大事なので、
+// 契約と管理ページ。中身より「いつまでに動くか」が大事なので、
 // 解約予告の期限が近いものを上に出す。
+// 電気・保険・ネット・Squareなどの管理ページ（マイページ）のURLとログインIDも
+// ここに集め、種類ごとのタブで見られるようにする（2026-10-30）。パスワードは置かない。
 
 type Status = { noticeBy?: string; daysToNotice?: number; daysToEnd?: number; alert: "" | "soon" | "passed"; message: string };
 type Contract = {
@@ -13,6 +15,7 @@ type Contract = {
   autoRenew: boolean; renewMonths?: number; noticeMonths?: number;
   monthlyAmount?: number; paymentTerms?: string; initialCost?: number;
   notes?: string; active: boolean; status: Status;
+  portalUrl?: string; loginId?: string;
 };
 
 const fmt = (n: number) => `¥${Math.round(n).toLocaleString()}`;
@@ -20,6 +23,7 @@ const blank = {
   title: "", kind: "その他", party: "", partyContact: "", signedOn: "",
   startDate: "", endDate: "", autoRenew: true, renewMonths: 12, noticeMonths: 1,
   monthlyAmount: "", paymentTerms: "", initialCost: "", notes: "",
+  portalUrl: "", loginId: "",
 };
 
 export default function Contracts() {
@@ -30,6 +34,9 @@ export default function Contracts() {
   const [file, setFile] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [viewing, setViewing] = useState<string>("");
+  // 種類のタブ。"" はすべて
+  const [tab, setTab] = useState("");
+  const [copied, setCopied] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -59,9 +66,33 @@ export default function Contracts() {
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || "保存に失敗");
       setForm({ ...blank }); setFile(""); setOpen(false);
+      window.scrollTo({ top: 0 });
       await load();
     } catch (e) { setErr(e instanceof Error ? e.message : "保存に失敗"); }
     finally { setBusy(false); }
+  };
+
+  const startEdit = (c: Contract) => {
+    setForm({
+      id: c.id, title: c.title, kind: c.kind, party: c.party, partyContact: c.partyContact ?? "",
+      signedOn: c.signedOn ?? "", startDate: c.startDate ?? "", endDate: c.endDate ?? "",
+      autoRenew: c.autoRenew, renewMonths: c.renewMonths ?? 12, noticeMonths: c.noticeMonths ?? 0,
+      monthlyAmount: c.monthlyAmount ? String(c.monthlyAmount) : "",
+      paymentTerms: c.paymentTerms ?? "", initialCost: c.initialCost ? String(c.initialCost) : "",
+      notes: c.notes ?? "", portalUrl: c.portalUrl ?? "", loginId: c.loginId ?? "",
+    });
+    setFile("");
+    setOpen(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const copyId = async (c: Contract) => {
+    if (!c.loginId) return;
+    try {
+      await navigator.clipboard.writeText(c.loginId);
+      setCopied(c.id);
+      setTimeout(() => setCopied(""), 1500);
+    } catch { /* コピーできなくても表示は見える */ }
   };
 
   const pickFile = (f: File | null) => {
@@ -78,8 +109,11 @@ export default function Contracts() {
     setViewing(j.file);
   };
 
+  // タブ：登録がある種類だけ出す（並びは CONTRACT_KINDS の順）
+  const kinds = CONTRACT_KINDS.filter((k) => (list ?? []).some((c) => c.kind === k));
+  const shown = (list ?? []).filter((c) => !tab || c.kind === tab);
   const sorted = list
-    ? [...list].sort((a, b) => {
+    ? [...shown].sort((a, b) => {
         const rank = (c: Contract) => (c.status.alert === "passed" ? 0 : c.status.alert === "soon" ? 1 : 2);
         return rank(a) - rank(b) || (a.endDate || "9999").localeCompare(b.endDate || "9999");
       })
@@ -87,21 +121,22 @@ export default function Contracts() {
 
   return (
     <main>
-      <h1>📜 契約書</h1>
+      <h1>📜 契約・管理ページ</h1>
       <p className="lead">
-        いま生きている約束をまとめる場所です。大事なのは中身より期限で、
-        解約予告の期限を過ぎると自動で更新されてしまいます。
+        いま生きている約束と、その管理ページ（マイページ）をまとめる場所です。
+        大事なのは中身より期限で、解約予告の期限を過ぎると自動で更新されてしまいます。
       </p>
 
       {err && <p className="err">{err}</p>}
 
-      <button className="add" onClick={() => setOpen(!open)}>
-        {open ? "閉じる" : "＋ 契約を登録"}
+      <button className="add" onClick={() => { if (open) { setForm({ ...blank }); setFile(""); } setOpen(!open); }}>
+        {open ? "閉じる" : "＋ 契約・管理ページを登録"}
       </button>
 
       {open && (
         <section className="card form">
-          <label>契約名<input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="京町パーキング 駐車場使用契約" /></label>
+          {form.id && <p className="editing">「{form.title}」を編集しています</p>}
+          <label>名前<input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="京町パーキング 駐車場使用契約／電気（エネパル）" /></label>
           <label>種類
             <select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>
               {CONTRACT_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
@@ -109,9 +144,12 @@ export default function Contracts() {
           </label>
           <label>相手先<input value={form.party} onChange={(e) => setForm({ ...form, party: e.target.value })} placeholder="株式会社◯◯" /></label>
           <label>連絡先<input value={form.partyContact} onChange={(e) => setForm({ ...form, partyContact: e.target.value })} placeholder="TEL・住所" /></label>
+          <label>管理ページのURL<input value={form.portalUrl} onChange={(e) => setForm({ ...form, portalUrl: e.target.value })} placeholder="https://… （マイページ・管理画面）" inputMode="url" /></label>
+          <label>ログインID・お客様番号<input value={form.loginId} onChange={(e) => setForm({ ...form, loginId: e.target.value })} placeholder="MYIY… など" /></label>
+          <p className="warn">パスワードはここに入れないでください。</p>
           <div className="row">
             <label>締結日<input type="date" value={form.signedOn} onChange={(e) => setForm({ ...form, signedOn: e.target.value })} /></label>
-            <label>開始日<input type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} /></label>
+            <label>開始日（分かれば）<input type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} /></label>
             <label>満了日<input type="date" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} /></label>
           </div>
           <div className="row">
@@ -134,6 +172,19 @@ export default function Contracts() {
         </section>
       )}
 
+      {kinds.length > 0 && (
+        <div className="ct-tabs" role="tablist">
+          <button role="tab" aria-selected={tab === ""} className={`ct-tab ${tab === "" ? "on" : ""}`} onClick={() => setTab("")}>
+            すべて <span>{list?.length ?? 0}</span>
+          </button>
+          {kinds.map((k) => (
+            <button key={k} role="tab" aria-selected={tab === k} className={`ct-tab ${tab === k ? "on" : ""}`} onClick={() => setTab(k)}>
+              {k} <span>{(list ?? []).filter((c) => c.kind === k).length}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {sorted.map((c) => (
         <section className={`card contract ${c.status.alert}`} key={c.id}>
           <div className="head">
@@ -151,17 +202,33 @@ export default function Contracts() {
           </p>
 
           <ul className="facts">
-            <li><span>期間</span><b>{c.startDate} 〜 {c.endDate || "定めなし"}</b></li>
+            {(c.startDate || c.endDate) && <li><span>期間</span><b>{c.startDate || "?"} 〜 {c.endDate || "定めなし"}</b></li>}
             <li><span>更新</span><b>{c.autoRenew ? `自動更新（${c.renewMonths ?? 12}か月ごと）` : "自動更新なし"}</b></li>
             {c.noticeMonths ? <li><span>解約予告</span><b>{c.noticeMonths}か月前</b></li> : null}
             {c.initialCost ? <li><span>契約時の一時金</span><b>{fmt(c.initialCost)}</b></li> : null}
             {c.signedOn ? <li><span>締結日</span><b>{c.signedOn}</b></li> : null}
           </ul>
 
+          {(c.portalUrl || c.loginId) && (
+            <div className="portal">
+              {c.portalUrl && (
+                <a href={c.portalUrl} target="_blank" rel="noreferrer" className="portal-link">
+                  管理ページを開く ↗
+                </a>
+              )}
+              {c.loginId && (
+                <button type="button" className="portal-id" onClick={() => copyId(c)} title="押すとコピー">
+                  ID：<b>{c.loginId}</b>{copied === c.id ? " ✓ コピーしました" : ""}
+                </button>
+              )}
+            </div>
+          )}
+
           {c.paymentTerms && <p className="terms">支払条件：{c.paymentTerms}</p>}
           {c.notes && <p className="notes">{c.notes}</p>}
 
           <div className="acts">
+            <button className="ghost" onClick={() => startEdit(c)}>編集</button>
             <button className="ghost" onClick={() => showFile(c.id)}>契約書を見る</button>
             <button className="ghost danger" onClick={async () => {
               if (!confirm(`${c.title} を削除しますか？`)) return;
@@ -172,7 +239,7 @@ export default function Contracts() {
         </section>
       ))}
 
-      {list && list.length === 0 && <p className="empty">まだ契約が登録されていません。</p>}
+      {list && list.length === 0 && <p className="empty">まだ登録がありません。</p>}
 
       {viewing && (
         <div className="viewer" onClick={() => setViewing("")}>
@@ -216,6 +283,16 @@ export default function Contracts() {
         .ghost { background: #eee; color: #333; border: 0; border-radius: 8px; padding: 6px 12px; font-size: 12.5px; cursor: pointer; }
         .ghost.danger { color: #c0392b; }
         .empty { color: #888; font-size: 13px; margin-top: 20px; }
+        .editing { margin: 0; font-size: 12.5px; color: #2b6cb0; font-weight: 600; }
+        .warn { margin: -4px 0 0; font-size: 11.5px; color: #9c3a2e; }
+        .ct-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 16px 0 0; }
+        .ct-tab { border: 1px solid #ddd; background: #fff; color: #333; border-radius: 99px; padding: 6px 12px; font-size: 12.5px; cursor: pointer; width: auto; }
+        .ct-tab span { color: #999; margin-left: 2px; font-size: 11px; }
+        .ct-tab.on { background: #2b6cb0; border-color: #2b6cb0; color: #fff; font-weight: 600; }
+        .ct-tab.on span { color: #d6e4f5; }
+        .portal { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 4px 0 8px; }
+        .portal-link { display: inline-block; background: #2b6cb0; color: #fff; text-decoration: none; padding: 7px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; }
+        .portal-id { background: #f3f5f8; border: 1px dashed #c9d3df; color: #33475b; border-radius: 8px; padding: 6px 10px; font-size: 12.5px; cursor: pointer; width: auto; }
         .viewer { position: fixed; inset: 0; background: rgba(0,0,0,.8); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 50; }
         .viewer img { max-width: 100%; max-height: 100%; }
         .viewer iframe { width: 100%; height: 100%; border: 0; background: #fff; }

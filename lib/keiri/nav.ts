@@ -20,7 +20,7 @@ export const KEIRI_TABS: KeiriTab[] = [
   { href: "/items", label: "🧺 品目台帳", group: "shukei" },
   { href: "/report", label: "📊 用途別", group: "shukei" },
   { href: "/shorui", label: "📄 書類", group: "shorui" },
-  { href: "/contracts", label: "📜 契約書", group: "shorui" },
+  { href: "/contracts", label: "📜 契約・管理ページ", group: "shorui" },
   { href: "/company", label: "🏢 会社書類", group: "shorui" },
   { href: "/zeirishi", label: "🧑‍💼 税理士", group: "shorui" },
 ];
