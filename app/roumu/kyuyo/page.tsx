@@ -33,11 +33,11 @@ export default function Kyuyo() {
   const pay = monthlyPayment();
   const ex = EXCEPTIONS[month];
 
-  // これからの支払い（保険料の引き落としと報酬の支給）
+  // これからの支払い（保険料の納付と報酬の支給）
   const upcoming = [
     ...[-2, -1, 0, 1].map((n) => {
       const ins = addMonth(thisMonthJST(), n);
-      return { date: dueDate(ins), what: `社会保険料 ${ymLabel(ins)}分の引き落とし`, amount: pay.total };
+      return { date: dueDate(ins), what: `社会保険料 ${ymLabel(ins)}分の納付期限`, amount: pay.total };
     }),
     ...[0, 1].map((n) => {
       const m = addMonth(thisMonthJST(), n);
@@ -124,7 +124,7 @@ export default function Kyuyo() {
         <h2>会社が払う保険料（3人分・毎月）</h2>
         <div className="ky-big">{yen(pay.total)}</div>
         <p className="ky-sub">うち本人負担 {yen(pay.employee)}（報酬から引く分）／会社負担 {yen(pay.employer)}</p>
-        <p className="ky-note">当月分を翌月末に口座から引き落とし（土日なら次の平日）。</p>
+        <p className="ky-note">当月分を翌月末までに納めます（土日なら次の平日）。毎月20日ごろ年金事務所から届く「保険料納入告知書」の金額で、銀行の窓口かネットバンキング（ペイジー）で払います。告知書の金額が正で、ここの数字は見込みです。口座振替は年金事務所に申し出ると使えます。</p>
       </section>
 
       <section className="ky-card">
