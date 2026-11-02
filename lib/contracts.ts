@@ -20,16 +20,20 @@ async function kv() {
 export type ContractKind =
   | "店舗賃貸借"
   | "駐車場"
+  | "光熱・通信"
+  | "保険"
+  | "借入"
   | "業務委託"
   | "リース・レンタル"
-  | "保険"
   | "サブスク・利用契約"
-  | "借入"
+  | "管理画面・サービス"
   | "その他";
 
+// 画面のタブもこの順。光熱・通信（電気・ネット）と、契約書は無いがログインして使う
+// 管理画面（Square・Uber Eats・LINE公式など）も、ここで一緒に管理する（2026-10-30）
 export const CONTRACT_KINDS: ContractKind[] = [
-  "店舗賃貸借", "駐車場", "業務委託", "リース・レンタル",
-  "保険", "サブスク・利用契約", "借入", "その他",
+  "店舗賃貸借", "駐車場", "光熱・通信", "保険", "借入", "業務委託",
+  "リース・レンタル", "サブスク・利用契約", "管理画面・サービス", "その他",
 ];
 
 export type Contract = {
@@ -42,7 +46,7 @@ export type Contract = {
   partyContact?: string;
   /** 契約締結日 */
   signedOn?: string;
-  /** 契約期間 */
+  /** 契約期間。管理画面だけのサービスなど、分からなければ空 */
   startDate: string;
   endDate?: string;
   /** 自動更新するか */
@@ -61,6 +65,10 @@ export type Contract = {
   notes?: string;
   /** 定期請求(/bills)のID。紐づけておくと支払い管理とつながる */
   billId?: string;
+  /** 管理ページ（マイページ・管理画面）のURL */
+  portalUrl?: string;
+  /** ログインID・お客様番号など。パスワードは入れない */
+  loginId?: string;
   active: boolean;
   createdAt: string;
 };

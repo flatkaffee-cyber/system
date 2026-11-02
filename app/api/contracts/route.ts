@@ -31,11 +31,16 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: "不正なリクエスト" }, { status: 400 });
   }
-  if (!body.title || !body.party || !body.startDate) {
+  // 開始日は任意。管理画面だけのサービスは開始日が分からないことがあるため
+  if (!body.title || !body.party) {
     return NextResponse.json(
-      { error: "契約名・相手先・開始日が必要です" },
+      { error: "名前と相手先が必要です" },
       { status: 400 },
     );
+  }
+  const portalUrl = String(body.portalUrl ?? "").trim();
+  if (portalUrl && !/^https?:\/\//.test(portalUrl)) {
+    return NextResponse.json({ error: "管理ページのURLは http から始めてください" }, { status: 400 });
   }
   const id = body.id || `c_${Date.now()}`;
   try {
@@ -46,7 +51,7 @@ export async function POST(req: NextRequest) {
       party: body.party,
       partyContact: body.partyContact,
       signedOn: body.signedOn,
-      startDate: body.startDate,
+      startDate: body.startDate ?? "",
       endDate: body.endDate,
       autoRenew: body.autoRenew ?? false,
       renewMonths: body.renewMonths,
@@ -56,6 +61,8 @@ export async function POST(req: NextRequest) {
       initialCost: body.initialCost,
       notes: body.notes,
       billId: body.billId,
+      portalUrl: portalUrl || undefined,
+      loginId: String(body.loginId ?? "").trim() || undefined,
       active: body.active ?? true,
     });
     if (body.file) await saveContractFile(id, body.file);
