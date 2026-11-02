@@ -210,6 +210,19 @@ export default function ShuttenReji() {
               <button className={pay === "card" ? "on" : ""} onClick={() => { setPay("card"); setReceived(null); }}>キャッシュレス</button>
             </div>
 
+            {/* キャッシュレスは PayPay「イベント出店用」ストアのQR。店のQRと分けて、イベントの売上がそのまま分かるようにする */}
+            {pay === "card" && (
+              <div className="ev-qr">
+                <img src="/paypay-qr-event.png" alt="PayPay QRコード（イベント出店用）" className="ev-qr-img" />
+                <p className="ev-qr-note">
+                  PayPayアプリで読み取り、<strong>{yen(total)}</strong> を入力してください
+                </p>
+                <a className="ev-qr-link" href="/paypay-qr-event-print.png" target="_blank" rel="noopener noreferrer">
+                  QRを開く（印刷・保存用）
+                </a>
+              </div>
+            )}
+
             {pay === "cash" && (
               <>
                 <div className="quick">
@@ -312,6 +325,11 @@ export default function ShuttenReji() {
         .pay-toggle, .quick { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
         .pay-toggle button, .quick button { flex: 1; padding: 10px 8px; font-size: 15px; min-width: 70px; }
         .pay-toggle button.on, .quick button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+        .ev-qr { text-align: center; margin: 4px 0 8px; }
+        .ev-qr-img { width: min(64vw, 240px); height: auto; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+        .ev-qr-note { margin: 8px 0 4px; font-size: 15px; font-weight: 700; }
+        .ev-qr-note strong { color: #e60020; }
+        .ev-qr-link { font-size: 13px; color: var(--muted); text-underline-offset: 3px; }
         .change { text-align: right; font-size: 16px; margin: 8px 0; }
         .change strong { font-size: 26px; color: var(--ok); margin-left: 6px; }
         .change.short { color: #c62828; }
