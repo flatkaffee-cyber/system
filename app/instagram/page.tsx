@@ -257,7 +257,18 @@ export default function InstagramPage() {
                 onClick={async () => { if (await post({ action: "connect", token, userId: igId }, "接続しました")) { setToken(""); setIgId(""); } }}>
                 接続する
               </button>
-              <p className="hint">手順はナレッジの「インスタ自動ストーリーの接続」にあります。</p>
+              <details style={{ fontSize: 12.5, lineHeight: 1.7 }}>
+                <summary style={{ cursor: "pointer", fontWeight: 700 }}>トークンの作り方（最初に1回だけ）</summary>
+                <ol style={{ paddingLeft: 18, margin: "6px 0" }}>
+                  <li>インスタのアプリで flat. のアカウントをプロアカウント（ビジネス）にしておく</li>
+                  <li>パソコンで developers.facebook.com を開き、「マイアプリ」→「アプリを作成」。用途は「Instagramでメッセージとコンテンツを管理」を選ぶ</li>
+                  <li>アプリの「Instagram」→「InstagramログインによるAPI設定」を開く</li>
+                  <li>「アクセストークンを生成する」で flat. のインスタにログインし、許可する</li>
+                  <li>出てきたトークン（IGで始まる長い文字）をコピーして、上の欄に貼る</li>
+                </ol>
+                アプリは「開発モード」のままで大丈夫です（自分のアカウントにだけ投稿するため、審査は要りません）。
+                トークンは60日で切れますが、このシステムが週に1回自動で延ばします。
+              </details>
             </div>
           )}
         </div>
