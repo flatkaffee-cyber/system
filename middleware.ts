@@ -25,7 +25,11 @@ const PUBLIC_EXACT = new Set([
 ]);
 
 /** 配下すべてを通すもの。管理画面が同じ下にぶら下がっていないか必ず確認する */
-const PUBLIC_PREFIX = ["/e/"];
+const PUBLIC_PREFIX = [
+  "/e/",
+  // ストーリーの画像。インスタのサーバーが取りに来る。管理の /api/instagram 本体は含まない
+  "/api/instagram/img/",
+];
 
 /** 静的ファイル。public/ に置いてあるものだけ */
 const PUBLIC_FILES = new Set([
