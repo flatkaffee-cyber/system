@@ -376,11 +376,11 @@ export default function InstagramPage() {
           )}
 
           <div>
-            <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>時刻と画像</div>
+            <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>時刻と画像<span style={{ fontWeight: 400, color: "var(--muted)" }}>（7:00〜22:30の間）</span></div>
             {edit.slots.map((s, i) => (
               <div key={i} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 8, marginBottom: 6 }}>
                 <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                  <input type="time" value={s.time} step={300} onChange={(e) => setSlot(i, { time: e.target.value })} style={{ width: 110 }} />
+                  <input type="time" value={s.time} step={300} min="07:00" max="22:30" onChange={(e) => setSlot(i, { time: e.target.value })} style={{ width: 110 }} />
                   <span style={{ flex: 1, fontSize: 11, color: "var(--muted)" }}>
                     {s.imageIds.length > 1 ? `${s.imageIds.length}枚を順に上げる` : ""}
                   </span>
@@ -451,7 +451,7 @@ export default function InstagramPage() {
           </div>
           <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}>
             <input type="checkbox" checked={edit.enabled} onChange={(e) => setEdit({ ...edit, enabled: e.target.checked })} />
-            この定期ストーリーを動かす
+            オンにする（外すと、設定は残したまま止まる）
           </label>
 
           <div style={{ display: "flex", gap: 8 }}>

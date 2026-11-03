@@ -59,6 +59,9 @@ function cleanRule(b: Partial<StoryRule>): StoryRule {
     .filter((s) => s && toMin(s.time) !== null)
     .map((s) => ({ time: s.time.trim().padStart(5, "0"), imageIds: (s.imageIds || []).filter(Boolean) }));
   if (slots.length === 0) throw new Error("時刻を1つ以上入れてください");
+  // cron は 7:00〜22:55 だけ動く（vercel.json）。その外の時刻は出ないので保存させない
+  const late = slots.find((s) => { const m = toMin(s.time)!; return m < 7 * 60 || m > 22 * 60 + 30; });
+  if (late) throw new Error(`${late.time} は出せません。時刻は7:00〜22:30の間にしてください`);
   const frequency = FREQS.includes(b.frequency as Frequency) ? (b.frequency as Frequency) : "daily";
   const rule: StoryRule = {
     id: b.id || `r_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
