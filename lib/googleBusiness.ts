@@ -1,6 +1,6 @@
 // Googleビジネスプロフィール（Googleマップの店の情報）への投稿。
 //
-// 2026-11 インスタの定期投稿と同じ内容をGoogleにも出すために作った。
+// 2026-11 インスタのフィード投稿を、そのままGoogleにも流すために作った（ストーリーは流さない）。
 // - OAuthのクライアントは Gmail 連携（lib/google.ts）と同じものを使う。戻り先も /api/google/callback
 // - ただしトークンは別に持つ。Gmail と店のオーナーが別のGoogleアカウントでも困らないように
 // - Business Profile API は Google の審査が通るまで使えない（docs/operations/Googleマップ投稿.md）
@@ -132,8 +132,8 @@ export async function connectGbp(origin: string, code: string): Promise<GbpConn>
 }
 
 /** 投稿して、できた投稿の名前を返す */
-export async function postToGoogle(conn: GbpConn, summary: string, imageUrl?: string): Promise<string> {
-  const body = buildLocalPost(summary, imageUrl);
+export async function postToGoogle(conn: GbpConn, summary: string, imageUrl?: string, linkUrl?: string): Promise<string> {
+  const body = buildLocalPost(summary, imageUrl, linkUrl);
   try {
     const { access_token } = await tokenReq({ grant_type: "refresh_token", refresh_token: conn.refreshToken });
     const r = await call<{ name: string }>(

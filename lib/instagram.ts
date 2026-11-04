@@ -12,6 +12,7 @@
 
 import { delFile, getFile, putFile } from "@/lib/fileStore";
 import { getGbpConn, postToGoogle } from "@/lib/googleBusiness";
+import { captionToSummary, feedImage, newFeedPosts, type FeedMedia } from "@/lib/googleBusinessPost";
 import { SHOP } from "@/lib/shop";
 import {
   dueSlots,
@@ -282,31 +283,36 @@ async function addRun(r: RunRecord): Promise<void> {
   await (await must()).set(KEY_RUNS, list.slice(-200));
 }
 
-// ───────── Googleマップにも出す ─────────
+// ───────── フィード投稿をGoogleマップに流す ─────────
 
 /**
- * 決まりで「Googleにも出す」になっていれば投稿する。ストーリーの結果には影響させない。
- * 手で上げてあってストーリーを飛ばした日も、Googleには手で出していないので出す。
+ * 新しいフィード投稿をGoogleにも投稿する。手で上げたものも含む。ストーリーは /media に出てこない。
+ * つないだ時より前の投稿と、24時間より前の投稿は流さない。
+ * 失敗したら1時間おきに試す（24時間を過ぎたら諦める）。
  */
-async function shareToGoogle(
-  rule: StoryRule,
-  base: Pick<RunRecord, "key" | "date" | "time">,
-  imageId: string | undefined,
-  origin?: string,
-): Promise<void> {
-  if (!rule.google?.enabled) return;
-  const conn = await getGbpConn();
-  if (!conn) return;
-  const key = `gbp|${base.key}`;
-  const locked = await (await must()).set(`ig:lock:${key}`, 1, { nx: true, ex: 3600 });
-  if (!locked) return;
-  const rec = { ...base, key, ruleId: rule.id, ruleName: `${rule.name}（Google）` };
-  try {
-    await postToGoogle(conn, rule.google.summary, imageId ? imageUrl(imageId, origin) : undefined);
-    await addRun({ ...rec, status: "posted", at: new Date().toISOString() });
-  } catch (e) {
-    await addRun({ ...rec, status: "error", at: new Date().toISOString(), detail: e instanceof Error ? e.message : String(e) });
+export async function syncFeedToGoogle() {
+  const [conn, gbp] = await Promise.all([getConn(), getGbpConn()]);
+  if (!conn || !gbp) return { ok: true, note: "未接続" };
+  const r = await call<{ data: FeedMedia[] }>(
+    `${api(conn, `${conn.userId}/media`)}?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp&limit=10&access_token=${encodeURIComponent(conn.token)}`,
+  );
+  const store = await must();
+  let posted = 0;
+  for (const m of newFeedPosts(r.data, gbp.savedAt)) {
+    const lock = `gbp:media:${m.id}`;
+    if (!(await store.set(lock, 1, { nx: true, ex: 3600 }))) continue;
+    const today = jstNow();
+    const rec = { key: `gbp|${m.id}`, ruleId: "feed", ruleName: "フィード投稿（Google）", date: today.date, time: "" };
+    try {
+      await postToGoogle(gbp, captionToSummary(m.caption), feedImage(m), m.permalink);
+      await store.set(lock, 1, { ex: 7 * 86400 });
+      await addRun({ ...rec, status: "posted", at: new Date().toISOString() });
+      posted++;
+    } catch (e) {
+      await addRun({ ...rec, status: "error", at: new Date().toISOString(), detail: e instanceof Error ? e.message : String(e) });
+    }
   }
+  return { ok: true, posted };
 }
 
 // ───────── cron から ─────────
@@ -346,7 +352,6 @@ export async function runDue(origin?: string, now = Date.now()) {
         const r: RunRecord = { ...base, status: "skipped", at: new Date().toISOString(), detail: "手で上げてあった" };
         await addRun(r);
         results.push(r);
-        await shareToGoogle(d.rule, base, d.imageIds[0], origin);
         continue;
       }
     }
@@ -359,7 +364,6 @@ export async function runDue(origin?: string, now = Date.now()) {
       await addRun(r);
       results.push(r);
       if (conn.lastError) await putConn({ ...conn, lastError: undefined });
-      await shareToGoogle(d.rule, base, d.imageIds[0], origin);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       const r: RunRecord = { ...base, status: "error", at: new Date().toISOString(), detail: msg };
@@ -370,25 +374,6 @@ export async function runDue(origin?: string, now = Date.now()) {
     }
   }
   return { ok: true, due: due.length, results };
-}
-
-/** 画面の「Googleに試しに出す」。ストーリーは上げない */
-export async function postGoogleNow(ruleId: string, origin?: string): Promise<void> {
-  const conn = await getGbpConn();
-  if (!conn) throw new Error("Googleが未接続です");
-  const rule = (await listRules()).find((r) => r.id === ruleId);
-  if (!rule?.google?.summary) throw new Error("Googleに出す文章が入っていません");
-  const imageId = rule.slots.find((s) => s.imageIds.length > 0)?.imageIds[0];
-  const today = jstNow();
-  const base = { key: `test|gbp|${Date.now()}`, ruleId, ruleName: `${rule.name}（Google）`, date: today.date, time: "" };
-  try {
-    await postToGoogle(conn, rule.google.summary, imageId ? imageUrl(imageId, origin) : undefined);
-    await addRun({ ...base, status: "test", at: new Date().toISOString() });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    await addRun({ ...base, status: "error", at: new Date().toISOString(), detail: `試し: ${msg}` });
-    throw new Error(msg);
-  }
 }
 
 /** 画面の「いま試しに上げる」。予定とは関係なく、その時刻の画像を上げる */
