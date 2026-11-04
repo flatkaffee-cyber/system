@@ -23,7 +23,7 @@ type Analytics = {
   };
   products: {
     name: string; qty: number; amount: number; cost: number;
-    gross: number; rate: number | null; hasCost: boolean;
+    gross: number; rate: number | null; hasCost: boolean; noCost: boolean;
     category: string;
     months: { month: string; qty: number; amount: number }[];
   }[];
@@ -241,7 +241,7 @@ export default function Bunseki() {
                       >
                         <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5 }}>
                           <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {open ? "▾" : "▸"} {p.name}
+                            {open ? "▾" : "▸"} {p.name === "不明" ? "金額だけの注文" : p.name}
                           </span>
                           <span style={{ background: RANK_STYLE[r].bg, color: RANK_STYLE[r].fg, fontSize: 11, padding: "1px 7px", borderRadius: 10, whiteSpace: "nowrap" }}>
                             {RANK_STYLE[r].label}
@@ -254,7 +254,7 @@ export default function Bunseki() {
                             <div style={{ width: `${(p.amount / maxAmount) * 100}%`, height: "100%", background: RANK_STYLE[r].fg, borderRadius: 3 }} />
                           </div>
                           <span style={{ fontSize: 11, color: "var(--muted)", width: 130, textAlign: "right" }}>
-                            1日 {(p.qty / days).toFixed(1)}個 ・ 原価率 {p.hasCost && p.rate !== null ? `${p.rate}%` : "—"}
+                            1日 {(p.qty / days).toFixed(1)}個 ・ 原価率 {p.hasCost && p.rate !== null ? `${p.rate}%` : p.noCost ? "対象外" : "—"}
                           </span>
                         </div>
                       </button>

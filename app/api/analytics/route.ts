@@ -23,6 +23,9 @@ async function getLocationId(): Promise<string> {
   return data.locations?.[0]?.id || "";
 }
 
+// 原価を持たない売上。イベントの入場・飲み放題の券と、品目の無い金額だけの注文（不明）
+const NO_COST_PRODUCT = /^(不明|エントランス|飲み放題|花火|パーティ)/;
+
 // 指定期間のCOMPLETED注文をSquareから全件取得
 async function fetchOrders(beginISO: string, endISO: string) {
   const locationId = await getLocationId();
@@ -80,7 +83,10 @@ export async function GET(req: NextRequest) {
     // ── 売上side ──────────────────────────────
     // カタログID→原価のマップ（バリエーション名は追えないので商品名で引く）
     const costByName: Record<string, number> = {};
-    for (const m of menu) costByName[m.name] = m.cost;
+    for (const m of menu) {
+      costByName[m.name] = m.cost;
+      for (const alias of m.aliases ?? []) costByName[alias] = m.cost;
+    }
 
     let totalSales = 0, totalTax = 0;
     const byDay: Record<string, { sales: number; count: number }> = {};
@@ -203,6 +209,7 @@ export async function GET(req: NextRequest) {
         months: Object.entries(v.months)
           .sort()
           .map(([month, mv]) => ({ month, ...mv })),
+        noCost: NO_COST_PRODUCT.test(name),
       }))
       .sort((a, b) => b.amount - a.amount || b.qty - a.qty);
 

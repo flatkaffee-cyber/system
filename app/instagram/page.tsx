@@ -22,6 +22,7 @@ type Rule = {
   skipWindowMin: number;
   startDate?: string;
   endDate?: string;
+  google?: { enabled: boolean; summary: string };
   next?: { date: string; time: string } | null;
 };
 type Img = { id: string; name: string; createdAt: string };
@@ -34,6 +35,7 @@ type Run = {
   at: string;
   detail?: string;
 };
+type GoogleConn = { title: string; savedAt: string; lastError?: string };
 type Conn = { username: string; userId: string; host: string; savedAt: string; refreshedAt?: string; lastError?: string };
 
 const FREQ_LABEL: Record<Freq, string> = { daily: "毎日", weekly: "毎週", monthly: "毎月", custom: "日を指定" };
@@ -99,6 +101,7 @@ async function toJpeg(file: File): Promise<string> {
 
 export default function InstagramPage() {
   const [conn, setConn] = useState<Conn | null>(null);
+  const [google, setGoogle] = useState<GoogleConn | null>(null);
   const [rules, setRules] = useState<Rule[]>([]);
   const [images, setImages] = useState<Img[]>([]);
   const [closures, setClosures] = useState<string[]>([]);
@@ -123,6 +126,7 @@ export default function InstagramPage() {
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "取得失敗");
       setConn(d.conn);
+      setGoogle(d.google);
       setRules(d.rules || []);
       setImages(d.images || []);
       setClosures(d.closures || []);
@@ -137,6 +141,10 @@ export default function InstagramPage() {
 
   useEffect(() => {
     load();
+    // Googleの接続から戻ってきたとき
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("google")) setMsg("Googleマップの店につなぎました");
+    if (q.get("googleError")) setErr(`Googleにつなげませんでした: ${q.get("googleError")}`);
   }, [load]);
 
   async function post(body: object, done?: string): Promise<boolean> {
@@ -221,6 +229,34 @@ export default function InstagramPage() {
       {msg && <p className="hint" style={{ color: "#2e7d32", fontWeight: 700 }}>{msg}</p>}
       {loading && <div className="card" style={{ textAlign: "center", color: "var(--muted)" }}>読み込み中…</div>}
 
+      {/* Googleマップの接続 */}
+      {!loading && (
+        <div className="card" style={{ padding: 14 }}>
+          <div className="cat-title">Googleマップとの接続</div>
+          {google ? (
+            <>
+              <div style={{ fontSize: 14 }}><strong>{google.title || "店"}</strong> に接続しています</div>
+              <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
+                定期ストーリーの編集で「Googleマップにも出す」にしたものを、同じ画像で投稿します
+              </div>
+              {google.lastError && <p className="err" style={{ marginTop: 8 }}>最後のエラー: {google.lastError}</p>}
+              <div style={{ marginTop: 10, textAlign: "right" }}>
+                <button disabled={busy} onClick={() => confirm("Googleとの接続を外しますか？") && post({ action: "disconnectGoogle" }, "接続を外しました")}>
+                  接続を外す
+                </button>
+              </div>
+            </>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <p style={{ fontSize: 13, margin: 0 }}>
+                まだ接続していません。Googleの審査が通ったあと、店のオーナーのGoogleアカウントでつないでください。
+              </p>
+              <button className="primary" onClick={() => { window.location.href = "/api/google-business/authorize"; }}>Googleマップの店につなぐ</button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* 接続 */}
       {!loading && (
         <div className="card" style={{ padding: 14 }}>
@@ -291,7 +327,16 @@ export default function InstagramPage() {
               <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
                 {summary(r, closedLabel)}
                 {r.skipIfPosted && ` ・${r.skipWindowMin}分前から手で上げていたら出さない`}
+                {r.google?.enabled && " ・Googleマップにも出す"}
               </div>
+              {google && r.google?.summary && (
+                <div style={{ marginTop: 6 }}>
+                  <button disabled={busy} style={{ fontSize: 12 }}
+                    onClick={() => confirm("Googleマップに今すぐ投稿しますか？お客さんに見えます") && post({ action: "postGoogleNow", ruleId: r.id }, "Googleに投稿しました")}>
+                    Googleに今すぐ出す
+                  </button>
+                </div>
+              )}
               <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 8 }}>
                 {r.slots.map((s) => (
                   <div key={s.time} style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -443,6 +488,15 @@ export default function InstagramPage() {
               onChange={(e) => setEdit({ ...edit, skipWindowMin: Number(e.target.value) })} style={{ width: 64 }} />
             分前から手でストーリーを上げていたら、自動では出さない
           </label>
+          <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}>
+            <input type="checkbox" checked={!!edit.google?.enabled}
+              onChange={(e) => setEdit({ ...edit, google: { enabled: e.target.checked, summary: edit.google?.summary || "" } })} />
+            Googleマップにも出す（同じ時刻に、1枚目の画像と下の文章で投稿）
+          </label>
+          {edit.google?.enabled && (
+            <textarea rows={4} maxLength={1500} placeholder="Googleに出す文章（電話番号は入れない）" value={edit.google.summary}
+              onChange={(e) => setEdit({ ...edit, google: { enabled: true, summary: e.target.value } })} />
+          )}
           <div style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12 }}>
             <span>期間（任意）</span>
             <input type="date" value={edit.startDate || ""} onChange={(e) => setEdit({ ...edit, startDate: e.target.value || undefined })} style={{ flex: 1 }} />

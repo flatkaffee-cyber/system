@@ -46,6 +46,8 @@ export type MenuItem = {
   ingredients: Ingredient[];
   recipe?: string; // 作り方
   note?: string;
+  /** Squareでの別の名前。売上の分析で同じ商品として原価を付ける */
+  aliases?: string[];
   updatedAt?: string;
 };
 
