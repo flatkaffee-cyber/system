@@ -9,18 +9,23 @@ import { getReceipts } from "@/lib/receipts";
 import { getPendingExpenses } from "@/lib/pending-expenses";
 import { isMissingPeriodError, isMonth, jstMonth, periodOf, shiftMonth } from "@/lib/keiri/period";
 import { buildPl } from "@/lib/keiri/pl";
+import { buildItemTotals } from "@/lib/keiri/itemTotals";
+import { getOverrides as getItemOverrides, itemNamesById, resolveWithOverrides } from "@/lib/freeeItems";
 import { buildCash, summarize } from "@/lib/keiri/cashflow";
 import { attachReceipts } from "@/lib/keiri/linkReceipts";
-import type { CashView, PlView } from "@/lib/keiri/types";
+import type { CashView, ItemView, PlView } from "@/lib/keiri/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+
+/** 費用の科目の分類。「品目で見る」の対象 */
+const EXPENSE_CATEGORIES = new Set(["売上原価", "販売管理費", "営業外費用", "特別損失"]);
 
 export type KeiriMonthlyResponse = {
   month: string;
   prev: string;
   next: string | null;
-  view: "cash" | "pl";
+  view: "cash" | "pl" | "items";
   future: boolean;
   noData?: boolean; // freeeにその会計期間が無い（1期目より前など）
   source: "db" | "freee"; // db = Supabase の写しから、freee = freee から直接
@@ -43,6 +48,8 @@ export type KeiriMonthlyResponse = {
     eventLabels: string[];
   };
   cash?: CashView;
+  /** 品目で見る */
+  items?: ItemView;
   pl?: PlView;
   warnings: string[];
 };
@@ -62,7 +69,8 @@ export async function GET(req: NextRequest) {
   const thisMonth = jstMonth();
   const raw = req.nextUrl.searchParams.get("month") ?? "";
   const month = isMonth(raw) ? raw : thisMonth;
-  const view = req.nextUrl.searchParams.get("view") === "pl" ? "pl" : "cash";
+  const rawView = req.nextUrl.searchParams.get("view");
+  const view = rawView === "pl" || rawView === "items" ? rawView : "cash";
   const res: KeiriMonthlyResponse = {
     month,
     prev: shiftMonth(month, -1),
@@ -95,6 +103,34 @@ export async function GET(req: NextRequest) {
     return report;
   };
   try {
+    if (view === "items") {
+      const range = { from: p.from, to: p.to };
+      const [deals, journals, accounts, partners, itemNames, itemOverrides, receipts] = await Promise.all([
+        src.deals(range),
+        src.manualJournals(range),
+        src.accountItems(),
+        src.partners(),
+        itemNamesById().catch(() => {
+          res.warnings.push("freeeの品目の一覧を読めなかったため、商品名から判定しています。");
+          return new Map<number, string>();
+        }),
+        getItemOverrides().catch(() => ({}) as Record<string, string>),
+        getReceipts().catch(() => []),
+      ]);
+      res.items = buildItemTotals({
+        deals,
+        journals,
+        expenseAccounts: new Map(
+          accounts.filter((a) => a.categories?.some((c) => EXPENSE_CATEGORIES.has(c))).map((a) => [a.id, a.name]),
+        ),
+        itemNames,
+        partnerNames: new Map(partners.map((x) => [x.id, x.name])),
+        receiptVendors: new Map(receipts.flatMap((r) => (r.registered ? [[r.registered.journalId, r.vendor] as const] : []))),
+        resolve: (d) => resolveWithOverrides(d, itemOverrides),
+      });
+      await withScopes();
+      return NextResponse.json(res);
+    }
     if (view === "pl") {
       // 1期目より前の月などは freee が「会計期間がありません」を返す（null）→ データが無い月として扱う
       const trial = await src.trialPl(month);

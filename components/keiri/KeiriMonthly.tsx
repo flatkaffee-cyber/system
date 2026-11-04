@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { KeiriMonthlyResponse } from "@/app/api/keiri/monthly/route";
 import KeiriSheet from "./KeiriSheet";
 import PlTable from "./PlTable";
+import ItemTotals from "./ItemTotals";
 import { monthLabel, yen } from "./format";
 import { isMonth, jstMonth } from "@/lib/keiri/period";
 import { buildSheet, clearsOnLoad, monthTabs, NO_FILTER, type SheetFilter, type SheetRow } from "@/lib/keiri/sheet";
@@ -24,7 +25,8 @@ export default function KeiriMonthly() {
   const raw = sp.get("month") ?? "";
   const thisMonth = jstMonth();
   const month = isMonth(raw) ? raw : thisMonth;
-  const view = sp.get("view") === "pl" ? "pl" : "cash";
+  const rawView = sp.get("view");
+  const view = rawView === "pl" || rawView === "items" ? rawView : "cash";
   const rawScope = sp.get("scope") ?? "all";
   const scope: Scope = isScope(rawScope) ? rawScope : "all";
   const [data, setData] = useState<KeiriMonthlyResponse | null>(null);
@@ -207,6 +209,7 @@ export default function KeiriMonthly() {
         <div className="views" role="tablist" aria-label="見方">
           <button type="button" role="tab" aria-selected={view === "cash"} className={view === "cash" ? "on" : ""} onClick={() => go(month, "cash")}>経理で見る</button>
           <button type="button" role="tab" aria-selected={view === "pl"} className={view === "pl" ? "on" : ""} onClick={() => go(month, "pl")}>会計で見る</button>
+          <button type="button" role="tab" aria-selected={view === "items"} className={view === "items" ? "on" : ""} onClick={() => go(month, "items")}>品目で見る</button>
         </div>
       </div>
 
@@ -251,6 +254,7 @@ export default function KeiriMonthly() {
         />
       )}
       {!loading && view === "pl" && scope !== "all" && data?.plScope && <ScopePl scope={scope} plScope={data.plScope} />}
+      {!loading && view === "items" && data?.items && <ItemTotals data={data.items} />}
 
       <style jsx>{`
         main.wide { max-width: none; padding: 20px 24px 64px; }

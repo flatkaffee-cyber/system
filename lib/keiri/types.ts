@@ -13,6 +13,8 @@ export type FreeeDetail = {
   amount: number;
   description?: string | null;
   entry_side: "debit" | "credit";
+  item_id?: number | null;
+  partner_id?: number | null;
 };
 export type FreeePayment = {
   date: string;
@@ -104,3 +106,16 @@ export type CashInput = {
   accountNames: Map<number, string>;
   partnerNames: Map<number, string>;
 };
+
+/** 品目で見る: 1回の買い物の1行 */
+export type ItemBuy = {
+  date: string;
+  vendor: string;
+  name: string;
+  account: string;
+  amount: number;
+  sourceType: "deal" | "journal";
+  sourceId: number;
+};
+export type ItemTotal = { item: string; total: number; count: number; buys: ItemBuy[] };
+export type ItemView = { rows: ItemTotal[]; total: number; unknownTotal: number; unknownCount: number };
