@@ -23,7 +23,7 @@ type Analytics = {
   };
   products: {
     name: string; qty: number; amount: number; cost: number;
-    gross: number; rate: number | null; hasCost: boolean;
+    gross: number; rate: number | null; hasCost: boolean; noCost: boolean;
   }[];
   productCostCoverage: {
     knownSales: number; unknownSales: number; knownCost: number; estGross: number;
@@ -196,11 +196,11 @@ export default function Bunseki() {
                 <tbody>
                   {data.products.map((p) => (
                     <tr key={p.name} style={{ borderBottom: "1px solid var(--line)" }}>
-                      <td style={{ padding: "6px 4px" }}>{p.name}</td>
+                      <td style={{ padding: "6px 4px" }}>{p.name === "不明" ? "金額だけの注文" : p.name}</td>
                       <td style={{ textAlign: "right", padding: "6px 4px" }} className="mono">{p.qty}</td>
                       <td style={{ textAlign: "right", padding: "6px 4px" }} className="mono">{fmt(p.amount)}</td>
                       <td style={{ textAlign: "right", padding: "6px 4px" }} className="mono">
-                        {p.hasCost ? fmt(p.gross) : <span style={{ color: "#c0392b" }}>原価未登録</span>}
+                        {p.hasCost ? fmt(p.gross) : p.noCost ? <span style={{ color: "var(--muted)" }}>対象外</span> : <span style={{ color: "#c0392b" }}>原価未登録</span>}
                       </td>
                       <td style={{ textAlign: "right", padding: "6px 4px" }} className="mono">
                         {p.hasCost && p.rate !== null ? `${p.rate}%` : "—"}
