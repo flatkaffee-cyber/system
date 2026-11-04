@@ -483,6 +483,12 @@ async function loadItems(cache: ItemCache): Promise<FreeeItem[]> {
   return cache.list;
 }
 
+/** freeeの品目の id → 名前 */
+export async function itemNamesById(): Promise<Map<number, string>> {
+  const list = await loadItems(newItemCache());
+  return new Map(list.map((i) => [i.id, i.name]));
+}
+
 /**
  * 品目名からfreeeのitem_idを引く。無ければ作る。
  * ルールに載っている名前しか渡さないので、品目が無秩序に増えることはない。
