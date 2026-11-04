@@ -96,7 +96,7 @@ export function dueDate(insMonth: string) {
 export const EXCEPTIONS: Record<string, { skipped: boolean; note: string }> = {
   "2026-10": {
     skipped: true,
-    note: "9月分の保険料を引かずに満額で払った。9月分（1人 ¥10,984）は本人から返してもらう（やり方は未定）",
+    note: "9月分の保険料を引かずに満額で払った。9月分（1人 ¥10,984）は立替（役員借入金）と相殺する。坂本・櫻井は 11/4 に相殺済み。町田は立替が ¥5,606 しかないので、足りない分の返し方を確認中",
   },
 };
 
