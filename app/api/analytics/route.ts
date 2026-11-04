@@ -84,7 +84,18 @@ export async function GET(req: NextRequest) {
 
     let totalSales = 0, totalTax = 0;
     const byDay: Record<string, { sales: number; count: number }> = {};
-    const byProduct: Record<string, { qty: number; amount: number; cost: number }> = {};
+    // months: 商品ごとの月別の数と売上（分析ページで商品を開いたときに出す）
+    type ProductAgg = { qty: number; amount: number; cost: number; months: Record<string, { qty: number; amount: number }> };
+    const byProduct: Record<string, ProductAgg> = {};
+    const addProduct = (name: string, mon: string, qty: number, amount: number, cost: number) => {
+      const p = (byProduct[name] = byProduct[name] || { qty: 0, amount: 0, cost: 0, months: {} });
+      p.qty += qty;
+      p.amount += amount;
+      p.cost += cost;
+      const m = (p.months[mon] = p.months[mon] || { qty: 0, amount: 0 });
+      m.qty += qty;
+      m.amount += amount;
+    };
     const byTender: Record<string, { count: number; amount: number }> = {};
     // 時間帯別・曜日別（バイトのシフトをどこに入れるかの判断材料）。
     // 「営業した日数」で割って1日平均を出すため、時間帯ごとに日付も集める。
@@ -140,17 +151,12 @@ export async function GET(req: NextRequest) {
       for (const li of o.line_items || []) {
         const name = li.name || "不明";
         const qty = parseInt(li.quantity) || 1;
-        byProduct[name] = byProduct[name] || { qty: 0, amount: 0, cost: 0 };
-        byProduct[name].qty += qty;
-        byProduct[name].amount += li.total_money?.amount || 0;
-        byProduct[name].cost += (costByName[name] || 0) * qty;
+        addProduct(name, mon, qty, li.total_money?.amount || 0, (costByName[name] || 0) * qty);
         // セット（スープセット・ドリンクセット・フルセット）の中のホットサンドも、ホットサンドの数に入れる。
         // 金額はセットの行に付いているので、ここでは数と原価だけ足す
         const v = li.variation_name || "";
         if (v !== name && (v === "クラシックメルト" || v === "ガーデンメルト")) {
-          byProduct[v] = byProduct[v] || { qty: 0, amount: 0, cost: 0 };
-          byProduct[v].qty += qty;
-          byProduct[v].cost += (costByName[v] || 0) * qty;
+          addProduct(v, mon, qty, 0, (costByName[v] || 0) * qty);
         }
       }
       for (const t of o.tenders || []) {
@@ -180,6 +186,12 @@ export async function GET(req: NextRequest) {
     }
 
     // ── 商品別粗利（原価表に載っているものだけ原価が付く）──
+    // メニュー表にあるのに期間中1つも売れなかった商品も、0個として載せる（売れていない商品を見落とさないため）
+    for (const m of menu) {
+      if (m.price !== null && !byProduct[m.name]) byProduct[m.name] = { qty: 0, amount: 0, cost: 0, months: {} };
+    }
+    const categoryByName: Record<string, string> = {};
+    for (const m of menu) categoryByName[m.name] = m.category;
     const products = Object.entries(byProduct)
       .map(([name, v]) => ({
         name, qty: v.qty, amount: v.amount,
@@ -187,8 +199,12 @@ export async function GET(req: NextRequest) {
         gross: v.amount - Math.round(v.cost),
         rate: v.amount ? Math.round((v.cost / v.amount) * 1000) / 10 : null,
         hasCost: costByName[name] !== undefined,
+        category: categoryByName[name] || "その他",
+        months: Object.entries(v.months)
+          .sort()
+          .map(([month, mv]) => ({ month, ...mv })),
       }))
-      .sort((a, b) => b.amount - a.amount);
+      .sort((a, b) => b.amount - a.amount || b.qty - a.qty);
 
     const knownCost = products.filter((p) => p.hasCost).reduce((s, p) => s + p.cost, 0);
     const knownSales = products.filter((p) => p.hasCost).reduce((s, p) => s + p.amount, 0);

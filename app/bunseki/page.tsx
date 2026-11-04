@@ -24,6 +24,8 @@ type Analytics = {
   products: {
     name: string; qty: number; amount: number; cost: number;
     gross: number; rate: number | null; hasCost: boolean;
+    category: string;
+    months: { month: string; qty: number; amount: number }[];
   }[];
   productCostCoverage: {
     knownSales: number; unknownSales: number; knownCost: number; estGross: number;
@@ -40,6 +42,26 @@ type Analytics = {
 };
 
 const fmt = (n: number) => `¥${Math.round(n).toLocaleString()}`;
+// 開業日。「開業から」ボタンで期間をここからにする
+const OPEN_DAY = "2026-08-01";
+
+// 売れた数の順位で3段階に分ける。上位1/4が売れ筋、下位1/4（0個を含む）が売れていない
+type Rank = "top" | "mid" | "low";
+const RANK_STYLE: Record<Rank, { label: string; bg: string; fg: string }> = {
+  top: { label: "売れ筋", bg: "#e3f4e8", fg: "#1e7b3c" },
+  mid: { label: "ふつう", bg: "#f0f0f0", fg: "#666" },
+  low: { label: "売れていない", bg: "#fdecea", fg: "#c0392b" },
+};
+function rankProducts(products: Analytics["products"]): Record<string, Rank> {
+  const sorted = [...products].sort((a, b) => b.qty - a.qty);
+  const n = sorted.length;
+  const out: Record<string, Rank> = {};
+  sorted.forEach((p, i) => {
+    out[p.name] = p.qty === 0 || i >= n - Math.ceil(n / 4) ? "low" : i < Math.ceil(n / 4) ? "top" : "mid";
+  });
+  return out;
+}
+
 const todayJST = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 
 export default function Bunseki() {
@@ -50,6 +72,8 @@ export default function Bunseki() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
   const [tab, setTab] = useState<"pnl" | "products" | "expenses" | "days" | "month" | "weekday">("pnl");
+  const [openProduct, setOpenProduct] = useState<string | null>(null);
+  const [productCat, setProductCat] = useState("すべて");
 
   const load = useCallback(async () => {
     setLoading(true); setErr("");
@@ -94,6 +118,7 @@ export default function Bunseki() {
           <span>〜</span>
           <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
           <button className="ghost" onClick={() => setMonth(1)}>翌月 ▶</button>
+          <button className="ghost" onClick={() => { setFrom(OPEN_DAY); setTo(t); }}>開業から</button>
         </div>
       </div>
 
@@ -180,37 +205,88 @@ export default function Bunseki() {
           )}
 
           {/* 商品別 */}
-          {tab === "products" && (
-            <div className="card" style={{ overflowX: "auto" }}>
-              <div className="cat-title">商品別の売上と粗利</div>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                <thead>
-                  <tr style={{ borderBottom: "1px solid var(--line)", color: "var(--muted)" }}>
-                    <th style={{ textAlign: "left", padding: "6px 4px" }}>商品</th>
-                    <th style={{ textAlign: "right", padding: "6px 4px" }}>個数</th>
-                    <th style={{ textAlign: "right", padding: "6px 4px" }}>売上</th>
-                    <th style={{ textAlign: "right", padding: "6px 4px" }}>粗利</th>
-                    <th style={{ textAlign: "right", padding: "6px 4px" }}>原価率</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.products.map((p) => (
-                    <tr key={p.name} style={{ borderBottom: "1px solid var(--line)" }}>
-                      <td style={{ padding: "6px 4px" }}>{p.name}</td>
-                      <td style={{ textAlign: "right", padding: "6px 4px" }} className="mono">{p.qty}</td>
-                      <td style={{ textAlign: "right", padding: "6px 4px" }} className="mono">{fmt(p.amount)}</td>
-                      <td style={{ textAlign: "right", padding: "6px 4px" }} className="mono">
-                        {p.hasCost ? fmt(p.gross) : <span style={{ color: "#c0392b" }}>原価未登録</span>}
-                      </td>
-                      <td style={{ textAlign: "right", padding: "6px 4px" }} className="mono">
-                        {p.hasCost && p.rate !== null ? `${p.rate}%` : "—"}
-                      </td>
-                    </tr>
+          {tab === "products" && (() => {
+            const ranks = rankProducts(data.products);
+            const cats = ["すべて", ...Array.from(new Set(data.products.map((p) => p.category)))];
+            const list = data.products.filter((p) => productCat === "すべて" || p.category === productCat);
+            const maxAmount = Math.max(1, ...data.products.map((p) => p.amount));
+            const days = data.sales.byDay.length || 1;
+            const daysOf = (m: string) => data.sales.byMonth.find((x) => x.month === m)?.days || 0;
+            const count = (r: Rank) => data.products.filter((p) => ranks[p.name] === r).length;
+            return (
+              <div className="card">
+                <div className="cat-title">商品別の売れ行き（{days}営業日）</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", fontSize: 12, marginBottom: 8 }}>
+                  {(["top", "mid", "low"] as const).map((r) => (
+                    <span key={r} style={{ background: RANK_STYLE[r].bg, color: RANK_STYLE[r].fg, padding: "2px 8px", borderRadius: 10 }}>
+                      {RANK_STYLE[r].label} {count(r)}品
+                    </span>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                </div>
+                <div className="sub-tabs" style={{ marginBottom: 8 }}>
+                  {cats.map((c) => (
+                    <button key={c} className={`sub-tab ${productCat === c ? "active" : ""}`} onClick={() => setProductCat(c)}>{c}</button>
+                  ))}
+                </div>
+                <p className="hint" style={{ marginTop: 0 }}>商品をタップすると月ごとの数と売上が出ます。期間を「開業から」にすると全部の月を比べられます。</p>
+                {list.map((p) => {
+                  const r = ranks[p.name];
+                  const open = openProduct === p.name;
+                  const maxQty = Math.max(1, ...p.months.map((m) => m.qty));
+                  return (
+                    <div key={p.name} style={{ borderBottom: "1px solid var(--line)" }}>
+                      <button
+                        onClick={() => setOpenProduct(open ? null : p.name)}
+                        style={{ all: "unset", cursor: "pointer", display: "block", width: "100%", padding: "8px 2px", boxSizing: "border-box" }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5 }}>
+                          <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {open ? "▾" : "▸"} {p.name}
+                          </span>
+                          <span style={{ background: RANK_STYLE[r].bg, color: RANK_STYLE[r].fg, fontSize: 11, padding: "1px 7px", borderRadius: 10, whiteSpace: "nowrap" }}>
+                            {RANK_STYLE[r].label}
+                          </span>
+                          <span className="mono" style={{ width: 52, textAlign: "right" }}>{p.qty}個</span>
+                          <span className="mono" style={{ width: 78, textAlign: "right", fontWeight: 700 }}>{fmt(p.amount)}</span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+                          <div style={{ flex: 1, height: 5, background: "var(--line)", borderRadius: 3 }}>
+                            <div style={{ width: `${(p.amount / maxAmount) * 100}%`, height: "100%", background: RANK_STYLE[r].fg, borderRadius: 3 }} />
+                          </div>
+                          <span style={{ fontSize: 11, color: "var(--muted)", width: 130, textAlign: "right" }}>
+                            1日 {(p.qty / days).toFixed(1)}個 ・ 原価率 {p.hasCost && p.rate !== null ? `${p.rate}%` : "—"}
+                          </span>
+                        </div>
+                      </button>
+                      {open && (
+                        <div style={{ padding: "4px 4px 12px 18px", fontSize: 12.5 }}>
+                          {p.months.length === 0 && <div style={{ color: "#c0392b" }}>この期間は1つも売れていません</div>}
+                          {p.months.map((m) => (
+                            <div key={m.month} style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 0" }}>
+                              <span style={{ width: 44 }}>{Number(m.month.slice(5))}月</span>
+                              <div style={{ flex: 1, height: 10, background: "var(--line)", borderRadius: 3 }}>
+                                <div style={{ width: `${(m.qty / maxQty) * 100}%`, height: "100%", background: "#4a7c59", borderRadius: 3 }} />
+                              </div>
+                              <span className="mono" style={{ width: 44, textAlign: "right" }}>{m.qty}個</span>
+                              <span className="mono" style={{ width: 72, textAlign: "right" }}>{fmt(m.amount)}</span>
+                              <span style={{ width: 70, textAlign: "right", color: "var(--muted)" }}>
+                                1日 {daysOf(m.month) ? (m.qty / daysOf(m.month)).toFixed(1) : "—"}個
+                              </span>
+                            </div>
+                          ))}
+                          {p.hasCost && <div style={{ color: "var(--muted)", marginTop: 4 }}>期間の粗利 {fmt(p.gross)}</div>}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                <p className="hint" style={{ marginTop: 10 }}>
+                  売れ筋・売れていないは、売れた数の上位1/4・下位1/4です（メニューにあって0個の商品は売れていないに入ります）。
+                  セットに入ったホットサンドは数にだけ足しているので、売上は0円のことがあります。
+                </p>
+              </div>
+            );
+          })()}
 
           {/* 支出 */}
           {tab === "expenses" && (
