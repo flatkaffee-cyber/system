@@ -16,6 +16,7 @@ type Task = {
   everyDays?: number;
   weekday?: number | number[];
   biweekly?: boolean;
+  monthDays?: number[];
   weekA?: boolean;
   waffleCount?: boolean;
   hotsandCount?: boolean;
@@ -378,7 +379,7 @@ export default function OpeningPage() {
   };
 
   const row = (t: Task) => {
-    const skip = (t.everyDays || t.weekday !== undefined || t.shikomiList || t.shikomiFor) && !t.due;
+    const skip = (t.everyDays || t.weekday !== undefined || t.monthDays || t.shikomiList || t.shikomiFor) && !t.due;
     return (
       <div
         key={t.id}
@@ -415,6 +416,16 @@ export default function OpeningPage() {
                 color: t.due ? "#9c5f22" : "var(--muted)",
               }}>
                 {t.biweekly ? "2週に1回（A週）の" : "毎週"}{(Array.isArray(t.weekday) ? t.weekday : [t.weekday]).map((w) => ["日","月","火","水","木","金","土"][w]).join("・")}曜{t.due ? "・今日やる" : "・今日はなし"}
+              </span>
+            )}
+            {t.monthDays && (
+              <span style={{
+                marginLeft: 6, fontSize: 10.5, fontWeight: 700, padding: "2px 6px",
+                borderRadius: 4, verticalAlign: "middle",
+                background: t.due ? "#fdf0e6" : "#eef1f4",
+                color: t.due ? "#9c5f22" : "var(--muted)",
+              }}>
+                毎月{t.monthDays.join("・")}日{t.due ? "・今日やる" : "・今日はなし"}
               </span>
             )}
             {t.everyDays && (

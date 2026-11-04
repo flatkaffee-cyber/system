@@ -39,6 +39,8 @@ export type Task = {
    * 生ハムの仕入れとスープの仕込みのように、隔週のものは同じ週にまとめる
    */
   biweekly?: boolean;
+  /** 毎月決まった日の作業。火曜（定休日）に当たるときは前の日に出す */
+  monthDays?: number[];
   /** 夜にワッフルの残数を入力する作業 */
   waffleCount?: boolean;
   /** 前夜の残数を見て、朝焼くかどうかを出す作業 */
@@ -101,6 +103,16 @@ export function weekdayDue(t: Task, date: string): boolean {
   const wds = Array.isArray(t.weekday) ? t.weekday : [t.weekday];
   if (!wds.includes(wd)) return false;
   return t.biweekly ? isWeekA(date) : true;
+}
+
+/** 毎月決まった日の作業が、その日にあるか。火曜は店が閉まっているので前の日に寄せる */
+export function monthDayDue(t: Task, date: string): boolean {
+  if (!t.monthDays) return false;
+  const d = new Date(`${date}T00:00:00Z`);
+  if (d.getUTCDay() === 2) return false;
+  if (t.monthDays.includes(d.getUTCDate())) return true;
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.getUTCDay() === 2 && t.monthDays.includes(d.getUTCDate());
 }
 
 export const TASKS: Task[] = [
@@ -203,6 +215,17 @@ export const TASKS: Task[] = [
       "ストック確認で倉庫に無かったものが「📋 発注リスト」に並ぶ。数を決めて買い、「発注済みにする」を押す。毎週月曜にまとめて発注する",
     weekday: 1,
     orderList: true,
+  },
+  {
+    // 2026-11-04 坂本さん決定。6日（報酬・返済）、25日（公庫）、27日（家賃）の前に口座へ入れる。
+    // ATM は1回 110円かかるので月2回にした。決まりは docs/operations/現金の管理.md
+    id: "cash-deposit",
+    phase: "営業中",
+    name: "売上金を入金する",
+    detail:
+      "小口の現金とレシートを足して20,000円になるか確かめ、レシートの分を売上袋から足して現金20,000円に戻す。" +
+      "そのあと売上袋の札をセブンのATMで入金する。1回50枚まで、入らない分は次の入金へ。小銭は売上袋に残す",
+    monthDays: [5, 24],
   },
 
   {
@@ -365,7 +388,8 @@ export const TASKS: Task[] = [
     phase: "締め",
     name: "売上金をドロワーから抜く",
     detail:
-      "レジを締めたら、その日の現金売上を抜いて金庫へ。" +
+      "レジを締めたら、その日の現金売上を抜いて売上袋へ。" +
+      "1万円札と5千円札から先に抜いて、千円札と小銭を残す。" +
       "ドロワーに残すのは釣銭の30,000円ちょうど。" +
       "数えて30,000円でなければ、抜く額が間違っています",
   },
