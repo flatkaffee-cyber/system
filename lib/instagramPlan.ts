@@ -28,8 +28,6 @@ export type StoryRule = {
   /** 期間。どちらも省略できる（YYYY-MM-DD） */
   startDate?: string;
   endDate?: string;
-  /** Googleマップの投稿にも同じ画像を出す。ストーリーと違って本文が要る */
-  google?: { enabled: boolean; summary: string };
   updatedAt: string;
 };
 

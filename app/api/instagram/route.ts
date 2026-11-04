@@ -8,7 +8,6 @@ import {
   listImages,
   listRules,
   listRuns,
-  postGoogleNow,
   postNow,
   removeImage,
   removeRule,
@@ -16,7 +15,6 @@ import {
   saveRule,
 } from "@/lib/instagram";
 import { disconnectGbp, getGbpConn } from "@/lib/googleBusiness";
-import { cleanSummary } from "@/lib/googleBusinessPost";
 import { jstNow, nextRun, toMin, type Frequency, type StoryRule } from "@/lib/instagramPlan";
 import { SHOP } from "@/lib/shop";
 
@@ -82,13 +80,11 @@ function cleanRule(b: Partial<StoryRule>): StoryRule {
     skipWindowMin: Math.min(Math.max(Number(b.skipWindowMin) || 60, 5), 600),
     ...(isDate(b.startDate) ? { startDate: b.startDate } : {}),
     ...(isDate(b.endDate) ? { endDate: b.endDate } : {}),
-    ...(b.google ? { google: { enabled: !!b.google.enabled, summary: cleanSummary(b.google.summary) } } : {}),
     updatedAt: new Date().toISOString(),
   };
   if (frequency === "weekly" && rule.weekdays.length === 0) throw new Error("曜日を選んでください");
   if (frequency === "monthly" && rule.monthDays.length === 0) throw new Error("日にちを選んでください");
   if (frequency === "custom" && rule.dates.length === 0) throw new Error("日付を1つ以上入れてください");
-  if (rule.google?.enabled && !rule.google.summary) throw new Error("Googleに出す文章を入れてください");
   return rule;
 }
 
@@ -98,7 +94,7 @@ function cleanRule(b: Partial<StoryRule>): StoryRule {
 //   closures { dates }
 //   connect { token, userId? } / disconnect
 //   postNow { ruleId, time }
-//   postGoogleNow { ruleId } / disconnectGoogle
+//   disconnectGoogle
 export async function POST(req: NextRequest) {
   try {
     const b = await req.json();
@@ -128,9 +124,6 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true });
       case "postNow":
         return NextResponse.json({ ok: true, run: await postNow(String(b.ruleId), String(b.time), req.nextUrl.origin) });
-      case "postGoogleNow":
-        await postGoogleNow(String(b.ruleId), req.nextUrl.origin);
-        return NextResponse.json({ ok: true });
       case "disconnectGoogle":
         await disconnectGbp();
         return NextResponse.json({ ok: true });
