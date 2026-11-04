@@ -11,6 +11,7 @@
 // 画像はJPEGしか受け付けないので、画面側でJPEGに直してから送ってくる。
 
 import { delFile, getFile, putFile } from "@/lib/fileStore";
+import { getGbpConn, postToGoogle } from "@/lib/googleBusiness";
 import { SHOP } from "@/lib/shop";
 import {
   dueSlots,
@@ -281,6 +282,33 @@ async function addRun(r: RunRecord): Promise<void> {
   await (await must()).set(KEY_RUNS, list.slice(-200));
 }
 
+// ───────── Googleマップにも出す ─────────
+
+/**
+ * 決まりで「Googleにも出す」になっていれば投稿する。ストーリーの結果には影響させない。
+ * 手で上げてあってストーリーを飛ばした日も、Googleには手で出していないので出す。
+ */
+async function shareToGoogle(
+  rule: StoryRule,
+  base: Pick<RunRecord, "key" | "date" | "time">,
+  imageId: string | undefined,
+  origin?: string,
+): Promise<void> {
+  if (!rule.google?.enabled) return;
+  const conn = await getGbpConn();
+  if (!conn) return;
+  const key = `gbp|${base.key}`;
+  const locked = await (await must()).set(`ig:lock:${key}`, 1, { nx: true, ex: 3600 });
+  if (!locked) return;
+  const rec = { ...base, key, ruleId: rule.id, ruleName: `${rule.name}（Google）` };
+  try {
+    await postToGoogle(conn, rule.google.summary, imageId ? imageUrl(imageId, origin) : undefined);
+    await addRun({ ...rec, status: "posted", at: new Date().toISOString() });
+  } catch (e) {
+    await addRun({ ...rec, status: "error", at: new Date().toISOString(), detail: e instanceof Error ? e.message : String(e) });
+  }
+}
+
 // ───────── cron から ─────────
 
 export async function runDue(origin?: string, now = Date.now()) {
@@ -318,6 +346,7 @@ export async function runDue(origin?: string, now = Date.now()) {
         const r: RunRecord = { ...base, status: "skipped", at: new Date().toISOString(), detail: "手で上げてあった" };
         await addRun(r);
         results.push(r);
+        await shareToGoogle(d.rule, base, d.imageIds[0], origin);
         continue;
       }
     }
@@ -330,6 +359,7 @@ export async function runDue(origin?: string, now = Date.now()) {
       await addRun(r);
       results.push(r);
       if (conn.lastError) await putConn({ ...conn, lastError: undefined });
+      await shareToGoogle(d.rule, base, d.imageIds[0], origin);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       const r: RunRecord = { ...base, status: "error", at: new Date().toISOString(), detail: msg };
@@ -340,6 +370,25 @@ export async function runDue(origin?: string, now = Date.now()) {
     }
   }
   return { ok: true, due: due.length, results };
+}
+
+/** 画面の「Googleに試しに出す」。ストーリーは上げない */
+export async function postGoogleNow(ruleId: string, origin?: string): Promise<void> {
+  const conn = await getGbpConn();
+  if (!conn) throw new Error("Googleが未接続です");
+  const rule = (await listRules()).find((r) => r.id === ruleId);
+  if (!rule?.google?.summary) throw new Error("Googleに出す文章が入っていません");
+  const imageId = rule.slots.find((s) => s.imageIds.length > 0)?.imageIds[0];
+  const today = jstNow();
+  const base = { key: `test|gbp|${Date.now()}`, ruleId, ruleName: `${rule.name}（Google）`, date: today.date, time: "" };
+  try {
+    await postToGoogle(conn, rule.google.summary, imageId ? imageUrl(imageId, origin) : undefined);
+    await addRun({ ...base, status: "test", at: new Date().toISOString() });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    await addRun({ ...base, status: "error", at: new Date().toISOString(), detail: `試し: ${msg}` });
+    throw new Error(msg);
+  }
 }
 
 /** 画面の「いま試しに上げる」。予定とは関係なく、その時刻の画像を上げる */
