@@ -193,11 +193,16 @@ export async function GET(req: NextRequest) {
 
     // ── 商品別粗利（原価表に載っているものだけ原価が付く）──
     // メニュー表にあるのに期間中1つも売れなかった商品も、0個として載せる（売れていない商品を見落とさないため）
+    // Squareの別名で売れていれば売れた商品なので載せない
     for (const m of menu) {
-      if (m.price !== null && !byProduct[m.name]) byProduct[m.name] = { qty: 0, amount: 0, cost: 0, months: {} };
+      const sold = [m.name, ...(m.aliases ?? [])].some((n) => byProduct[n]);
+      if (m.price !== null && !sold) byProduct[m.name] = { qty: 0, amount: 0, cost: 0, months: {} };
     }
     const categoryByName: Record<string, string> = {};
-    for (const m of menu) categoryByName[m.name] = m.category;
+    for (const m of menu) {
+      categoryByName[m.name] = m.category;
+      for (const alias of m.aliases ?? []) categoryByName[alias] = m.category;
+    }
     const products = Object.entries(byProduct)
       .map(([name, v]) => ({
         name, qty: v.qty, amount: v.amount,
