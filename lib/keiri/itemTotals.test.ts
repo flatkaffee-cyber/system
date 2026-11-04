@@ -81,6 +81,14 @@ test("品目が空なら備考の商品名から決める", () => {
   assert.equal(v.rows[0].item, "牛乳");
 });
 
+test("商品名からの判定は仕入高と消耗品費だけ。家賃の備考は品目にしない", () => {
+  const v = buildItemTotals(input({
+    deals: [{ id: 1, issue_date: "2026-11-02", type: "expense", details: [line(YACHIN, 104830, "日本セーフティー経由の店舗家賃")] }],
+    resolve: (d) => (d.includes("ティー") ? "紅茶" : null),
+  }));
+  assert.equal(v.rows[0].item, "地代家賃");
+});
+
 test("返金はマイナスで足し、売上の行は入れない", () => {
   const v = buildItemTotals(input({
     deals: [

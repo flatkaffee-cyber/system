@@ -43,9 +43,11 @@ function spreadTax(lines: Line[], itemNames: Map<number, string>): Line[] {
 function itemOf(l: Line, input: ItemInput): string {
   const description = l.detail.description ?? "";
   if (description.includes("詳細未登録")) return UNKNOWN_ITEM;
-  const named = input.itemNames.get(l.detail.item_id ?? 0) ?? input.resolve(description);
+  const itemized = ITEMIZED_ACCOUNTS.has(l.account);
+  // 商品名からの判定は買い物の行だけ。家賃の「日本セーフティー」が「ティー」で紅茶に当たるなど、ほかの科目では外れる
+  const named = input.itemNames.get(l.detail.item_id ?? 0) ?? (itemized ? input.resolve(description) : null);
   if (named) return named;
-  return ITEMIZED_ACCOUNTS.has(l.account) ? `${l.account}（品目なし）` : l.account;
+  return itemized ? `${l.account}（品目なし）` : l.account;
 }
 
 export function buildItemTotals(input: ItemInput): ItemView {
