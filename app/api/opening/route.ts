@@ -15,6 +15,7 @@ import {
   mondayOf,
   isWeekA,
   weekdayDue,
+  monthDayDue,
   saveChoice,
   saveWaffleCount,
   setWaffleBaked,
@@ -194,6 +195,9 @@ export async function GET(req: NextRequest) {
             ...(t.weekday !== undefined ? { due: weekdayDue(t, date) } : {}),
           };
         }
+        if (t.monthDays) {
+          return { ...t, done: done.includes(t.id), due: monthDayDue(t, date) };
+        }
         if (t.weekday !== undefined) {
           // 曜日が決まっている作業。その曜日以外は「今日はなし」。隔週のものはA週だけ
           const due = weekdayDue(t, date);
@@ -248,7 +252,7 @@ export async function GET(req: NextRequest) {
         d.setUTCDate(d.getUTCDate() + i);
         const day = d.toISOString().slice(0, 10);
         const items: WeekItem[] = TASKS
-          .filter((t) => weekdayDue(t, day) && t.id !== "hotsand-sunday-check")
+          .filter((t) => (weekdayDue(t, day) || monthDayDue(t, day)) && t.id !== "hotsand-sunday-check")
           .map((t) => ({ name: t.name, phase: t.phase, kind: "fixed" as const, ...(t.biweekly ? { note: "隔週・A週" } : {}) }));
         // ザワークラウトを冷蔵庫へ移す日（過ぎてまだ移していなければ今日に寄せる）
         if (krautPending && krautDue && day >= date && (day === krautDue || (krautDue < date && day === date))) {
