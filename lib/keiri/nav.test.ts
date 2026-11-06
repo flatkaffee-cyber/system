@@ -7,7 +7,7 @@ test("経理のレイアウトで出すページ", () => {
   assert.equal(isKeiriPath("/ryoshusho"), true);
   assert.equal(isKeiriPath("/receipts"), true);
   assert.equal(isKeiriPath("/table"), false);
-  assert.equal(KEIRI_TABS.length, 15);
+  assert.equal(KEIRI_TABS.length, 16);
 });
 
 test("サイドバーの分野と並び", () => {
@@ -16,7 +16,7 @@ test("サイドバーの分野と並び", () => {
   assert.deepEqual(menu.map((g) => g.tabs.map((t) => t.href)), [
     ["/keiri"],
     ["/ryoshusho", "/receipts", "/meisai", "/pending"],
-    ["/kariire", "/payables", "/bills", "/loans"],
+    ["/kariire", "/payables", "/bills", "/loans", "/shaho"],
     ["/items", "/report"],
     ["/shorui", "/contracts", "/company", "/zeirishi"],
   ]);

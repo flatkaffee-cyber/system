@@ -17,6 +17,7 @@ export const KEIRI_TABS: KeiriTab[] = [
   { href: "/payables", label: "💰 払うもの", group: "shiharai" },
   { href: "/bills", label: "🔁 定期請求", group: "shiharai" },
   { href: "/loans", label: "🏦 借入返済", group: "shiharai" },
+  { href: "/shaho", label: "🏥 社会保険", group: "shiharai" },
   { href: "/items", label: "🧺 品目台帳", group: "shukei" },
   { href: "/report", label: "📊 用途別", group: "shukei" },
   { href: "/shorui", label: "📄 書類", group: "shorui" },

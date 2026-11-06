@@ -79,6 +79,15 @@ export const GROUPS: InfoGroup[] = [
     ],
   },
   {
+    title: "社会保険（健康保険・厚生年金）",
+    fields: [
+      { key: "shahoOffice", label: "管轄の年金事務所" },
+      { key: "shahoSeiri", label: "事業所整理記号" },
+      { key: "shahoNumber", label: "事業所番号" },
+      { key: "shahoPay", label: "納め方", hint: "毎月の金額・納付番号は「経理 → 社会保険」" },
+    ],
+  },
+  {
     title: "口座・税務",
     fields: [
       { key: "bank", label: "法人口座" },
@@ -122,6 +131,12 @@ export const DEFAULTS: Record<string, string> = {
   opened: "2026年8月8日",
   bank: "GMOあおぞらネット銀行 フリー支店（125）普通 ***5680",
   taxOffice: "彦根税務署",
+  pensionOffice: "彦根年金事務所",
+  // 2026-11-06 年金事務所の納入告知書（令和8年9月分）から
+  shahoOffice: "彦根年金事務所",
+  shahoSeiri: "02-ヘヤ",
+  shahoNumber: "04091",
+  shahoPay: "前月分を毎月末までに納める。納入告知書の Pay-easy（収納機関番号 00500）でネットバンキングから払える",
   etaxLogin: "https://login.e-tax.nta.go.jp/login/reception/loginCorporate#anc02",
 };
 
