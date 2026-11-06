@@ -108,7 +108,9 @@ export default function CompanyInfo() {
                     style={{ display: "flex", justifyContent: "space-between", gap: 8, cursor: "pointer", fontSize: 15, marginTop: 2 }}
                   >
                     <span style={{ wordBreak: "break-all", whiteSpace: "pre-wrap" }}>
-                      {f.secret && !shown[f.key] ? "••••••••" : v}
+                      {f.secret && !shown[f.key] ? "••••••••" : /^https?:\/\//.test(v) ? (
+                        <a href={v} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>開く ↗</a>
+                      ) : v}
                       {f.secret && (
                         <button
                           className="ghost"

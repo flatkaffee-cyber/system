@@ -72,6 +72,7 @@ export const GROUPS: InfoGroup[] = [
     // 番号・暗証番号は画面から入れてKVにだけ置く。このファイルには書かない
     title: "電子申告（e-Tax・eLTAX）",
     fields: [
+      { key: "etaxLogin", label: "e-Tax ログイン画面（法人）" },
       { key: "etaxId", label: "e-Tax 利用者識別番号（16桁）", secret: true },
       { key: "etaxPin", label: "e-Tax 暗証番号", secret: true },
       { key: "eltaxId", label: "eLTAX 利用者ID（地方税）", secret: true },
@@ -121,6 +122,7 @@ export const DEFAULTS: Record<string, string> = {
   opened: "2026年8月8日",
   bank: "GMOあおぞらネット銀行 フリー支店（125）普通 ***5680",
   taxOffice: "彦根税務署",
+  etaxLogin: "https://login.e-tax.nta.go.jp/login/reception/loginCorporate#anc02",
 };
 
 export async function getCompanyInfo(): Promise<Record<string, string>> {
