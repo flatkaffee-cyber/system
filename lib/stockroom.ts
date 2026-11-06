@@ -122,6 +122,8 @@ export const SEED_ITEMS: Item[] = [
   { id: "egg", name: "卵", group: "ワッフル", par: 6, unit: "個" },
   { id: "butter", name: "バター", group: "ワッフル", par: 1, unit: "個" },
   { id: "zarame", name: "ざらめ", group: "ワッフル", par: 1, unit: "袋" },
+  // 2026-11-06 シュガードーナツの販売開始（1個400円）。冷凍で届く
+  { id: "sugar-donut", name: "シュガードーナツ（冷凍）", group: "ワッフル", par: 5, unit: "個", note: "朝いちばんに冷凍庫から出して自然解凍" },
   { id: "waffle-sugar", name: "ワッフルシュガー", group: "ワッフル", par: 1, unit: "袋" },
   { id: "sugar-powder", name: "シュガーパウダー", group: "ワッフル", par: 1, unit: "袋" },
   { id: "choco-chip", name: "チョコチップ", group: "ワッフル", par: 1, unit: "袋" },
@@ -185,6 +187,7 @@ export const SEED_ITEMS: Item[] = [
   { id: "gloves", name: "ニトリル手袋", group: "消耗品・包材", par: 1, unit: "箱" },
   { id: "dish-soap", name: "食器用洗剤", group: "消耗品・包材", par: 1, unit: "本" },
   { id: "sponge", name: "スポンジ", group: "消耗品・包材", par: 3, unit: "個" },
+  { id: "cooking-sheet", name: "クッキングシート（茶色・正方形）", group: "消耗品・包材", par: 1, unit: "袋", note: "シュガードーナツをのせて出す用。カインズなどで探し、無ければAmazonで注文" },
   { id: "haiter", name: "ハイター", group: "消耗品・包材", par: 1, unit: "本", note: "ダスター類を毎晩つける" },
   { id: "alcohol-spray", name: "アルコールスプレー", group: "消耗品・包材", par: 1, unit: "本" },
   { id: "hand-soap", name: "ハンドソープ", group: "消耗品・包材", par: 1, unit: "本" },
