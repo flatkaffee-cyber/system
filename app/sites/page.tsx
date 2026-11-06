@@ -143,14 +143,12 @@ export default function Sites() {
                     <span className="st-nourl">URL未登録</span>
                   </div>
                 )}
-                <div className="st-tools">
-                  {s.loginId && (
-                    <button type="button" className="st-id" onClick={() => copyId(s)} title="押すとコピー">
-                      ID {s.loginId}{copied === s.id ? " ✓ コピーしました" : ""}
-                    </button>
-                  )}
-                  <button type="button" className="st-edit" onClick={() => edit(s)}>編集</button>
-                </div>
+                <button type="button" className="st-edit" onClick={() => edit(s)}>編集</button>
+                {s.loginId && (
+                  <button type="button" className="st-id" onClick={() => copyId(s)} title="押すとコピー">
+                    ID {s.loginId}{copied === s.id ? " ✓ コピーしました" : ""}
+                  </button>
+                )}
               </li>
             ))}
           </ul>
@@ -176,8 +174,9 @@ export default function Sites() {
         .st-group { margin-top: 22px; }
         .st-group h2 { font-size: 13px; font-weight: 600; color: var(--muted); margin: 0 0 6px 2px; }
         .st-group ul { list-style: none; margin: 0; padding: 0; background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+        .st-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
         .st-row + .st-row { border-top: 1px solid var(--line); }
-        .st-open { display: flex; align-items: center; gap: 12px; padding: 12px 14px 8px; color: var(--ink); text-decoration: none; }
+        .st-open { display: flex; align-items: center; gap: 12px; padding: 12px 8px 12px 14px; color: var(--ink); text-decoration: none; }
         a.st-open:hover { background: #faf7f1; }
         a.st-open:hover .st-go { text-decoration: underline; text-underline-offset: 3px; }
         a.st-open:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
@@ -186,9 +185,8 @@ export default function Sites() {
         .st-desc { display: block; margin-top: 1px; font-size: 12.5px; color: var(--muted); }
         .st-go { flex: none; font-size: 13px; font-weight: 600; color: var(--accent); white-space: nowrap; }
         .st-nourl { flex: none; font-size: 12px; color: var(--muted); white-space: nowrap; }
-        .st-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0 14px 10px; }
-        .st-id { width: auto; background: #f4f1ea; color: var(--ink); padding: 3px 8px; font-size: 12px; font-weight: 500; border-radius: 6px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; text-align: left; }
-        .st-edit { width: auto; background: none; color: var(--muted); padding: 3px 4px; font-size: 12px; font-weight: 500; margin-left: auto; }
+        .st-id { grid-column: 1 / -1; justify-self: start; max-width: calc(100% - 28px); margin: -6px 14px 10px; width: auto; background: #f4f1ea; color: var(--ink); padding: 3px 8px; font-size: 12px; font-weight: 500; border-radius: 6px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; text-align: left; }
+        .st-edit { width: auto; background: none; color: var(--muted); padding: 10px 14px 10px 6px; font-size: 12px; font-weight: 500; }
         .st-edit:hover { color: var(--accent); }
         .st-id:focus-visible, .st-edit:focus-visible, .st-add:focus-visible, .st-save:focus-visible, .st-del:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         .st-foot { margin: 22px 2px 0; font-size: 12.5px; color: var(--muted); }
