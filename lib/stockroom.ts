@@ -131,8 +131,8 @@ export const SEED_ITEMS: Item[] = [
   { id: "coconut", name: "ココナッツミルク", group: "ワッフル", par: 4, unit: "缶", buyId: 3, orderQty: 24 },
 
   // 仕込み品（足りなければ発注ではなく仕込み）
-  { id: "mashed", name: "マッシュポテト", group: "仕込み品", par: 300, unit: "g", madeInHouse: true, shikomiId: "mashed-potato", keepDays: 10 },
-  { id: "amiebi", name: "あみえびクリームチーズ", group: "仕込み品", par: 1, unit: "タッパ", madeInHouse: true, shikomiId: "amiebi-cream-cheese", keepDays: 7 },
+  { id: "mashed", name: "マッシュポテト", group: "仕込み品", par: 300, unit: "g", madeInHouse: true, shikomiId: "mashed-potato", keepDays: 12 },
+  { id: "amiebi", name: "あみえびクリームチーズ", group: "仕込み品", par: 1, unit: "タッパ", madeInHouse: true, shikomiId: "amiebi-cream-cheese", keepDays: 12 },
   { id: "sauerkraut", name: "自家製ザワークラウト", group: "仕込み品", par: 1, unit: "タッパ", madeInHouse: true, shikomiId: "sauerkraut", keepDays: 60, note: "キャベツから仕込む。発酵に夏3日・冬7日かかる" },
   { id: "ajillo", name: "アヒージョセット（冷凍）", group: "仕込み品", par: 6, unit: "セット", madeInHouse: true, shikomiId: "ajillo-set", keepDays: 14 },
   { id: "cold-brew", name: "コールドブリュー", group: "仕込み品", par: 2, unit: "本", madeInHouse: true },
