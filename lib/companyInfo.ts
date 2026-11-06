@@ -74,6 +74,7 @@ export const GROUPS: InfoGroup[] = [
 /** 最初から分かっているもの。分からないものは入れない（画面で空欄として出る） */
 export const DEFAULTS: Record<string, string> = {
   legalName: "合同会社flat.",
+  corporateNumber: "8160003003836",
   representative: "代表社員 坂本 達郎",
   established: "2026年6月9日",
   capital: "300万円",
