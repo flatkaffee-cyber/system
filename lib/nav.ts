@@ -71,6 +71,7 @@ export const NAV_GROUPS: NavGroup[] = [
     { href: "/event/kanri", label: "イベント申込" },
     { href: "/natsumatsuri/kanri", label: "夏祭り申込" },
   ]),
+  one("sites", "サイト", [{ href: "/sites", label: "サイト一覧" }]),
   one("sonota", "その他", [
     { href: "/meetings", label: "MTG" },
     { href: "/todos", label: "ToDo" },

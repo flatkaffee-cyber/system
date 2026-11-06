@@ -26,6 +26,9 @@ export type ContractKind =
   | "業務委託"
   | "リース・レンタル"
   | "サブスク・利用契約"
+  | "会計・銀行"
+  | "売上・決済"
+  | "集客・SNS"
   | "管理画面・サービス"
   | "その他";
 
@@ -33,7 +36,8 @@ export type ContractKind =
 // 管理画面（Square・Uber Eats・LINE公式など）も、ここで一緒に管理する（2026-10-30）
 export const CONTRACT_KINDS: ContractKind[] = [
   "店舗賃貸借", "駐車場", "光熱・通信", "保険", "借入", "業務委託",
-  "リース・レンタル", "サブスク・利用契約", "管理画面・サービス", "その他",
+  "リース・レンタル", "サブスク・利用契約", "会計・銀行", "売上・決済", "集客・SNS",
+  "管理画面・サービス", "その他",
 ];
 
 export type Contract = {
@@ -69,6 +73,8 @@ export type Contract = {
   portalUrl?: string;
   /** ログインID・お客様番号など。パスワードは入れない */
   loginId?: string;
+  /** 管理ページで何を見るか。サイト一覧（/sites）に出す */
+  portalNote?: string;
   active: boolean;
   createdAt: string;
 };
