@@ -93,7 +93,14 @@ const TABLES = [
   { id: "C4", label: "C4", area: "C", x: 74, y: 27, w: 12, h: 18 },
   // T: 畳
   { id: "T1", label: "T1", area: "T", x: 52, y: 62, w: 34, h: 20 },
-];
+  // 2026-11-06 2階席（坂本さんの営業許可図面の配置から）。上の部屋に2卓とカウンター（2F-C）、下に2部屋
+  { id: "2F-1", label: "2F-1", area: "2F", floor: "2F", x: 10, y: 12, w: 26, h: 22 },
+  { id: "2F-2", label: "2F-2", area: "2F", floor: "2F", x: 42, y: 12, w: 26, h: 22 },
+  { id: "2F-C", label: "2F-C", area: "2F", floor: "2F", x: 74, y: 6, w: 18, h: 36 },
+  { id: "2F-3", label: "2F-3", area: "2F", floor: "2F", x: 14, y: 60, w: 28, h: 30 },
+  { id: "2F-4", label: "2F-4", area: "2F", floor: "2F", x: 56, y: 62, w: 26, h: 24 },
+] as { id: string; label: string; area: string; floor?: "2F"; x: number; y: number; w: number; h: number }[];
+const floorOf = (t: { floor?: "2F" }) => t.floor ?? "1F";
 
 const fmt = (n: number) => `¥${n.toLocaleString()}`;
 
@@ -149,6 +156,8 @@ export default function TablePage() {
   const [catOrder, setCatOrder] = useState<string[]>([]);
   const [mode, setMode] = useState<"day" | "night">(autoMode());
   const [selected, setSelected] = useState<string | null>(null);
+  // フロアマップに出す階
+  const [floor, setFloor] = useState<"1F" | "2F">("1F");
   const [cart, setCart] = useState<CartItem[]>([]);
   // カウンター会計の値引き（円）。割引ボタンで足していく
   const [discount, setDiscount] = useState(0);
@@ -1131,8 +1140,38 @@ export default function TablePage() {
         🥡 テイクアウト注文
       </button>
 
+      {/* 階の切り替え。使用中の席の数も出す */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+        {(["1F", "2F"] as const).map((f) => {
+          const busy = TABLES.filter((t) => floorOf(t) === f && orderFor(t.id)).length;
+          return (
+            <button
+              key={f}
+              onClick={() => setFloor(f)}
+              style={{
+                flex: 1, padding: "10px 0", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer",
+                border: floor === f ? "2px solid var(--accent)" : "1px solid var(--line)",
+                background: floor === f ? "var(--accent-weak)" : "var(--card)", color: "var(--ink)",
+              }}
+            >
+              {f === "1F" ? "1階" : "2階"}{busy > 0 ? `（使用中 ${busy}）` : ""}
+            </button>
+          );
+        })}
+      </div>
+
       {/* フロアマップ */}
       <div className="card" style={{ padding: 12, position: "relative", aspectRatio: "0.91", overflow: "hidden" }}>
+        {floor === "2F" && (
+          <>
+            <div style={{ position: "absolute", left: "4%", top: "3%", width: "92%", height: "43%", border: "1px dashed var(--line)", borderRadius: 8 }} />
+            <div style={{ position: "absolute", left: "40%", top: "49%", fontSize: 11, color: "var(--muted)" }}>廊下</div>
+            <div style={{ position: "absolute", left: "2%", top: "52%", fontSize: 10.5, color: "var(--muted)" }}>⬇ 階段</div>
+            <div style={{ position: "absolute", left: "4%", top: "56%", width: "44%", height: "40%", border: "1px dashed var(--line)", borderRadius: 8 }} />
+            <div style={{ position: "absolute", left: "50%", top: "56%", width: "46%", height: "40%", border: "1px dashed var(--line)", borderRadius: 8 }} />
+          </>
+        )}
+        {floor === "1F" && (<>
         {/* キッチン。レジはこの中の右上にある */}
         <div style={{
           position: "absolute", left: "16%", top: "84%", width: "44%", height: "14%",
@@ -1151,8 +1190,10 @@ export default function TablePage() {
           入口 ▶
         </div>
 
+        </>)}
+
         {/* テーブル */}
-        {TABLES.map((t) => {
+        {TABLES.filter((t) => floorOf(t) === floor).map((t) => {
           const order = orderFor(t.id);
           const isSelected = selected === t.id;
           const isOccupied = !!order;
@@ -1193,9 +1234,11 @@ export default function TablePage() {
         })}
 
         {/* 畳だけラベルを残す。A/B/Cはテーブル名で分かるので出さない */}
-        <div style={{ position: "absolute", left: "52%", top: "57%", fontSize: 10, color: "var(--muted)" }}>
-          畳
-        </div>
+        {floor === "1F" && (
+          <div style={{ position: "absolute", left: "52%", top: "57%", fontSize: 10, color: "var(--muted)" }}>
+            畳
+          </div>
+        )}
       </div>
 
       {/* 凡例 */}
