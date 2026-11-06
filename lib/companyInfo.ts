@@ -13,7 +13,13 @@ async function kv() {
   return createClient({ url, token });
 }
 
-export type InfoField = { key: string; label: string; hint?: string };
+export type InfoField = {
+  key: string;
+  label: string;
+  hint?: string;
+  /** 暗証番号など。画面では伏せて出し、押したときだけ見せる。コードには書かない（リポジトリが公開のため） */
+  secret?: boolean;
+};
 export type InfoGroup = { title: string; fields: InfoField[] };
 
 /** 画面に出す項目と並び順 */
@@ -59,6 +65,16 @@ export const GROUPS: InfoGroup[] = [
       { key: "opened", label: "開業日" },
       { key: "foodLicense", label: "飲食店営業許可番号" },
       { key: "foodHygieneManager", label: "食品衛生責任者" },
+    ],
+  },
+  {
+    // 2026-11-06 e-Taxの利用者識別番号を取得（提出先 彦根税務署）。
+    // 番号・暗証番号は画面から入れてKVにだけ置く。このファイルには書かない
+    title: "電子申告（e-Tax・eLTAX）",
+    fields: [
+      { key: "etaxId", label: "e-Tax 利用者識別番号（16桁）", secret: true },
+      { key: "etaxPin", label: "e-Tax 暗証番号", secret: true },
+      { key: "eltaxId", label: "eLTAX 利用者ID（地方税）", secret: true },
     ],
   },
   {

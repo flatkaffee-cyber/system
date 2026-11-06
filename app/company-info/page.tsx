@@ -6,7 +6,7 @@ import Nav from "@/components/Nav";
 // 会社情報。書類を書くときや、役所・銀行で聞かれたときにすぐ見られるように1枚にまとめる。
 // 値は lib/companyInfo.ts（最初から分かっているもの）＋画面で直した分（KV）。
 
-type Group = { title: string; fields: { key: string; label: string; hint?: string }[] };
+type Group = { title: string; fields: { key: string; label: string; hint?: string; secret?: boolean }[] };
 
 export default function CompanyInfo() {
   const [groups, setGroups] = useState<Group[]>([]);
@@ -16,6 +16,8 @@ export default function CompanyInfo() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [copied, setCopied] = useState("");
+  // 伏せてある項目のうち、いま見せているもの
+  const [shown, setShown] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     fetch("/api/company-info")
@@ -105,7 +107,18 @@ export default function CompanyInfo() {
                     title="押すとコピー"
                     style={{ display: "flex", justifyContent: "space-between", gap: 8, cursor: "pointer", fontSize: 15, marginTop: 2 }}
                   >
-                    <span style={{ wordBreak: "break-all", whiteSpace: "pre-wrap" }}>{v}</span>
+                    <span style={{ wordBreak: "break-all", whiteSpace: "pre-wrap" }}>
+                      {f.secret && !shown[f.key] ? "••••••••" : v}
+                      {f.secret && (
+                        <button
+                          className="ghost"
+                          onClick={(e) => { e.stopPropagation(); setShown({ ...shown, [f.key]: !shown[f.key] }); }}
+                          style={{ marginLeft: 8, padding: "1px 8px", fontSize: 11 }}
+                        >
+                          {shown[f.key] ? "隠す" : "表示"}
+                        </button>
+                      )}
+                    </span>
                     <span style={{ fontSize: 11, color: copied === f.key ? "var(--ok)" : "var(--muted)", whiteSpace: "nowrap" }}>
                       {copied === f.key ? "コピーしました" : "コピー"}
                     </span>
