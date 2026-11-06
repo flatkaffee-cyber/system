@@ -63,6 +63,8 @@ export async function POST(req: NextRequest) {
       billId: body.billId,
       portalUrl: portalUrl || undefined,
       loginId: String(body.loginId ?? "").trim() || undefined,
+      // 契約の画面の保存はこの項目を送らないので、送られたときだけ書く
+      ...(body.portalNote !== undefined ? { portalNote: String(body.portalNote).trim() || undefined } : {}),
       active: body.active ?? true,
     });
     if (body.file) await saveContractFile(id, body.file);
