@@ -177,3 +177,75 @@ export async function getPurchaseStats(
   const receipts = await getReceipts();
   return analyzePurchases(receipts, opts);
 }
+
+// ── 仕入れ先ごとの一覧 ───────────────────────────
+// 領収書の購入先（店）ごとに、何をいつ・いくらで買っているかをまとめる。
+// 金額は領収書の合計（送料・値引きも含めた実際に払った額）、品目は商品の行だけ。
+
+export type VendorItem = {
+  name: string;
+  count: number; // 買った日数
+  lastDate: string;
+  lastAmount: number;
+  totalAmount: number;
+};
+
+export type VendorStat = {
+  vendor: string;
+  visits: number; // 領収書の枚数
+  totalAmount: number;
+  firstDate: string;
+  lastDate: string;
+  daysSinceLast: number;
+  items: VendorItem[];
+};
+
+/** 表記ゆれ（全角・半角のスペース、前後の空白）をそろえた店名 */
+export const vendorKey = (v: string) => (v || "").replace(/[\s　]+/g, " ").trim() || "（店名なし）";
+
+export function analyzeVendors(receipts: SavedReceipt[]): VendorStat[] {
+  const today = jstToday();
+  type Acc = { vendor: string; visits: number; total: number; first: string; last: string; items: Map<string, VendorItem & { days: Set<string> }> };
+  const map = new Map<string, Acc>();
+  for (const r of receipts) {
+    if (!r.date) continue;
+    const key = vendorKey(r.vendor);
+    const v = map.get(key) ?? { vendor: key, visits: 0, total: 0, first: r.date, last: r.date, items: new Map() };
+    v.visits += 1;
+    v.total += r.total || 0;
+    if (r.date < v.first) v.first = r.date;
+    if (r.date > v.last) v.last = r.date;
+    for (const l of receiptLines(r)) {
+      if (isNoiseItem(l.name)) continue;
+      const k = normalizeItemName(l.name) || l.name;
+      const it = v.items.get(k) ?? { name: l.name, count: 0, lastDate: "", lastAmount: 0, totalAmount: 0, days: new Set<string>() };
+      it.days.add(r.date);
+      it.count = it.days.size;
+      it.totalAmount += l.amount || 0;
+      if (r.date >= it.lastDate) {
+        it.lastDate = r.date;
+        it.lastAmount = l.amount || 0;
+        it.name = l.name;
+      }
+      v.items.set(k, it);
+    }
+    map.set(key, v);
+  }
+  return [...map.values()]
+    .map((v) => ({
+      vendor: v.vendor,
+      visits: v.visits,
+      totalAmount: v.total,
+      firstDate: v.first,
+      lastDate: v.last,
+      daysSinceLast: dayDiff(today, v.last),
+      items: [...v.items.values()]
+        .map(({ days: _days, ...it }) => it)
+        .sort((a, b) => b.lastDate.localeCompare(a.lastDate) || b.totalAmount - a.totalAmount),
+    }))
+    .sort((a, b) => b.totalAmount - a.totalAmount);
+}
+
+export async function getVendorStats(): Promise<VendorStat[]> {
+  return analyzeVendors(await getReceipts());
+}

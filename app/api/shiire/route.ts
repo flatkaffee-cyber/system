@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { getPurchaseStats } from "@/lib/shiire";
+import { getPurchaseStats, getVendorStats } from "@/lib/shiire";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -10,6 +10,10 @@ export const maxDuration = 60;
 export async function GET(req: NextRequest) {
   try {
     const sp = req.nextUrl.searchParams;
+    // ?view=vendors で仕入れ先ごとの一覧
+    if (sp.get("view") === "vendors") {
+      return NextResponse.json({ vendors: await getVendorStats() });
+    }
     const soonDays = Number(sp.get("soon")) || 3;
     const minCount = Number(sp.get("min")) || 1;
     const stats = await getPurchaseStats({ soonDays, minCount });

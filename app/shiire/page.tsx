@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, Fragment } from "react";
 import Nav from "@/components/Nav";
 import InventorySheet from "@/components/InventorySheet";
+import VendorList from "@/components/VendorList";
 
 // 仕入先の発注ページ。1タップで飛べるようにここに置く。
 // 「お気に入り」「再購入」のように前に買ったものが並ぶページを優先する。
@@ -100,7 +101,7 @@ export default function Shiire() {
   const [summary, setSummary] = useState<{ total: number; overdue: number; soon: number; tracked: number } | null>(null);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"need" | "all" | "sheet">("need");
+  const [tab, setTab] = useState<"need" | "all" | "vendors" | "sheet">("need");
   const [advice, setAdvice] = useState("");
   const [adviceBusy, setAdviceBusy] = useState(false);
   const [openName, setOpenName] = useState<string | null>(null);
@@ -245,6 +246,7 @@ export default function Shiire() {
           [
             ["need", `そろそろ (${need.length})`],
             ["all", `全品目 (${stats.length})`],
+            ["vendors", "🏪 仕入れ先別"],
             ["sheet", "📦 仕入れ表"],
           ] as const
         ).map(([k, l]) => (
@@ -255,16 +257,17 @@ export default function Shiire() {
       </div>
 
       {tab === "sheet" && <InventorySheet />}
+      {tab === "vendors" && <VendorList />}
 
-      {tab !== "sheet" && loading && <div className="card" style={{ textAlign: "center", color: "var(--muted)" }}>集計中…</div>}
+      {(tab === "need" || tab === "all") && loading && <div className="card" style={{ textAlign: "center", color: "var(--muted)" }}>集計中…</div>}
 
-      {tab !== "sheet" && !loading && list.length === 0 && (
+      {(tab === "need" || tab === "all") && !loading && list.length === 0 && (
         <div className="card" style={{ textAlign: "center", color: "var(--muted)" }}>
           {tab === "need" ? "🎉 いま急いで買うものはありません。" : "データがありません。"}
         </div>
       )}
 
-      {tab !== "sheet" && !loading && base.length > 0 && (
+      {(tab === "need" || tab === "all") && !loading && base.length > 0 && (
         <div className="card" style={{ padding: 10 }}>
           <input
             value={q}
