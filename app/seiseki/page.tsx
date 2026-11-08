@@ -19,6 +19,7 @@ type Data = {
   sales: {
     total: number; orderCount: number; avgPerDay: number; byDay: { day: string; sales: number; count: number }[];
     square?: number; uber?: { total: number; count: number; lastDate: string | null };
+    events?: { ok: boolean; total: number; list: { date: string; label: string; amount: number }[] };
   };
   target: number;
   achieveRate: number | null;
@@ -94,7 +95,7 @@ export default function Seiseki() {
       <Nav />
       <h1>🏅 今月の成績</h1>
       <p className="lead">
-        売上はレジ（Square）の実績。原価と経費は決められた前提での概算です。
+        売上はレジ（Square）・Uber Eats・イベント出店の実績。原価と経費は決められた前提での概算です。
       </p>
 
       <div className="bar">
@@ -124,10 +125,17 @@ export default function Seiseki() {
               <div className="cap">今月の売上</div>
               <div className="num">{fmt(d.sales.total)}</div>
               <div className="sub">{d.sales.orderCount}件 ／ 1日平均 {fmt(d.sales.avgPerDay)}</div>
-              {d.sales.uber && d.sales.uber.total > 0 && (
+              {((d.sales.uber?.total ?? 0) > 0 || (d.sales.events?.total ?? 0) > 0) && (
                 <div className="sub">
-                  店内 {fmt(d.sales.square ?? 0)} ＋ Uber {fmt(d.sales.uber.total)}（{d.sales.uber.lastDate?.slice(5).replace("-", "/")}まで取り込み済み）
+                  店内 {fmt(d.sales.square ?? 0)}
+                  {d.sales.uber && d.sales.uber.total > 0 && (
+                    <> ＋ Uber {fmt(d.sales.uber.total)}（{d.sales.uber.lastDate?.slice(5).replace("-", "/")}まで取り込み済み）</>
+                  )}
+                  {d.sales.events && d.sales.events.total > 0 && <> ＋ イベント {fmt(d.sales.events.total)}</>}
                 </div>
+              )}
+              {d.sales.events && !d.sales.events.ok && (
+                <div className="sub warn">イベントの売上を読み込めなかったので、入っていません</div>
               )}
             </div>
             <div className="big">
@@ -168,6 +176,24 @@ export default function Seiseki() {
               <p className="note">
                 物販は売上の {Math.round((d.split.物販.sales / Math.max(1, d.sales.total)) * 1000) / 10}%。
                 カフェとしての実力を見るときは、こちらを除いた {fmt(d.split.カフェ.sales)} で考えます。
+              </p>
+            </section>
+          )}
+
+          {d.sales.events && d.sales.events.list.length > 0 && (
+            <section className="card">
+              <h2>イベント出店</h2>
+              <ul className="bd">
+                {d.sales.events.list.map((e) => (
+                  <li key={`${e.date}${e.label}`}>
+                    <span>{e.date.slice(5).replace("-", "/")} {e.label}</span>
+                    <b>{fmt(e.amount)}</b>
+                  </li>
+                ))}
+              </ul>
+              <p className="note">
+                出店の売上は Square を使わないので、freee に記帳した額（現金・PayPay）を足しています。
+                月末見込みは、イベントを除いたペースで出しています。
               </p>
             </section>
           )}
@@ -246,6 +272,7 @@ export default function Seiseki() {
         .num.good { color: #1a7f37; }
         .num.bad { color: #c53030; }
         .sub { font-size: 12px; color: #777; }
+        .sub.warn { color: #a05252; margin-top: 2px; }
         .gauge { height: 10px; background: #eee; border-radius: 99px; margin: 12px 0 0; overflow: hidden; }
         .gauge .fill { height: 100%; background: linear-gradient(90deg, #4299e1, #1a7f37); }
         .card { background: #fff; border: 1px solid #eee; border-radius: 12px; padding: 14px; margin-top: 14px; }

@@ -4,6 +4,8 @@ import { getSettings, saveSettings, type Settings } from "@/lib/seiseki";
 import { paymentsIn } from "@/lib/loans";
 import { getOverrides, splitByCategory } from "@/lib/salesCategory";
 import { getUberOrders, isCompleted } from "@/lib/uber";
+import { pickSource } from "@/lib/freeeMirror/source";
+import { eventSalesFromDeals, type EventSale } from "@/lib/keiri/eventSales";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -22,6 +24,14 @@ export async function GET(req: NextRequest) {
     const to = `${month}-${String(lastDay).padStart(2, "0")}`;
 
     const settings = await getSettings();
+    // イベント出店の売上は Square に入らないので、freee に手で記帳した分（科目は売上高、摘要に「イベント」）を足す。
+    // freee の写しが読めなくても成績は出す（ok=false を画面に出す）
+    const eventsP = (async () => {
+      const src = await pickSource(req);
+      const [deals, items] = await Promise.all([src.deals({ from, to }), src.accountItems()]);
+      const salesId = items.find((i) => i.name === "売上高")?.id;
+      return { ok: salesId !== undefined, list: salesId !== undefined ? eventSalesFromDeals(deals, salesId) : [] };
+    })().catch(() => ({ ok: false, list: [] as EventSale[] }));
     const res = await fetch(
       `${req.nextUrl.origin}/api/analytics?from=${from}&to=${to}&withEvents=1`,
       { cache: "no-store", headers: passAuth(req) },
@@ -43,6 +53,10 @@ export async function GET(req: NextRequest) {
     };
     split.カフェ.sales += uber.total;
 
+    const ev = await eventsP;
+    const events = { ok: ev.ok, total: ev.list.reduce((n, e) => n + e.amount, 0), list: ev.list };
+    split.カフェ.sales += events.total;
+
     const byDayMap = new Map<string, { day: string; sales: number; count: number }>(
       ((a?.sales?.byDay ?? []) as { day: string; sales: number; count: number }[]).map((x) => [x.day, { ...x }]),
     );
@@ -52,9 +66,15 @@ export async function GET(req: NextRequest) {
       d.count += 1;
       byDayMap.set(o.date, d);
     }
+    for (const e of events.list) {
+      const d = byDayMap.get(e.date) ?? { day: e.date, sales: 0, count: 0 };
+      d.sales += e.amount;
+      byDayMap.set(e.date, d);
+    }
     const byDay = [...byDayMap.values()].sort((p, q) => (p.day < q.day ? -1 : 1));
     const squareSales: number = a?.sales?.total ?? 0;
-    const sales = squareSales + uber.total;
+    const sales = squareSales + uber.total + events.total;
+    // 件数は注文の数。イベントは件数の記録が無いので数えない
     const orderCount = (a?.sales?.orderCount ?? 0) + uber.count;
 
     // 今月がまだ途中なら、残り日数と「あと1日いくら必要か」を出す
@@ -71,9 +91,11 @@ export async function GET(req: NextRequest) {
     const labor = Math.round(settings.laborCost * spentRate);
     const profit = gross - fixed - labor;
 
-    // 月末まで今のペースで進んだらどうなるか
-    const pace = doneDays > 0 ? sales / doneDays : 0;
-    const forecastSales = Math.round(pace * lastDay);
+    // 月末まで今のペースで進んだらどうなるか。
+    // イベントは一度きりの売上なので、ペースからは外してそのまま足す（ペースに混ぜると月末見込みが膨らむ）
+    const avgPerDay = doneDays > 0 ? sales / doneDays : 0;
+    const pace = doneDays > 0 ? (sales - events.total) / doneDays : 0;
+    const forecastSales = Math.round(pace * lastDay) + events.total;
     const forecastProfit =
       Math.round(forecastSales * (1 - settings.costRate)) -
       settings.fixedCost -
@@ -101,7 +123,7 @@ export async function GET(req: NextRequest) {
       split,
       settings,
       days: { total: lastDay, done: doneDays, left: leftDays },
-      sales: { total: sales, orderCount, byDay, avgPerDay: Math.round(pace), square: squareSales, uber },
+      sales: { total: sales, orderCount, byDay, avgPerDay: Math.round(avgPerDay), square: squareSales, uber, events },
       target,
       achieveRate: target ? Math.round((sales / target) * 1000) / 10 : null,
       needPerDay,
