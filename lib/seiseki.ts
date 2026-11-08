@@ -2,6 +2,8 @@
 // 売上はSquareの実績をそのまま使い、原価と経費はここに置いた前提で概算する。
 // 正確な決算はfreeeが正。これは「今月どうなっているか」を全員で見るための道具。
 
+import type { DayTarget } from "@/lib/keiri/dayTargets";
+
 const KEY = "seiseki:settings";
 
 async function kv() {
@@ -24,6 +26,8 @@ export type Settings = {
   targets: Record<string, number>;
   /** 経費の内訳。画面で「何にいくらかかっているか」を見せるためだけのもの */
   breakdown: { label: string; amount: number }[];
+  /** 日ごとの売上目標。"2026-11-14" → { store: 40000, label: "ゲームナイト" }。売上の画面に出す */
+  dayTargets: Record<string, DayTarget>;
 };
 
 // 売上計画シート（2026-06-27版）の数字と、8月の実績から割り出した経費。
@@ -50,6 +54,7 @@ export const DEFAULTS: Settings = {
     { label: "保険料", amount: 4000 },
     { label: "交際費", amount: 3000 },
   ],
+  dayTargets: {},
 };
 
 export async function getSettings(): Promise<Settings> {

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Nav from "@/components/Nav";
+import type { DayTargetSum } from "@/lib/keiri/dayTargets";
 
 type ProductRow = { name: string; qty: number; amount: number };
 type HourRow = { hour: number; count: number; amount: number };
@@ -81,6 +82,7 @@ export default function SalesPage() {
   );
 
   const [uber, setUber] = useState<{ total: number; count: number } | null>(null);
+  const [target, setTarget] = useState<DayTargetSum | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -89,15 +91,19 @@ export default function SalesPage() {
       const q = mode === "day" ? `date=${date}` : `from=${from}&to=${to}`;
       const uq = mode === "day" ? `from=${date}&to=${date}` : `from=${from}&to=${to}`;
       // Uber Eats は Square に入らないので、取り込んだ注文（毎週月曜）を別に取ってきて並べる
-      const [res, ures] = await Promise.all([
+      // 売上目標は今月の成績の設定に日ごとに入っている。取れなくても売上は出す
+      const [res, ures, tres] = await Promise.all([
         fetch(`/api/square/sales?${q}`),
         fetch(`/api/uber?${uq}`).catch(() => null),
+        fetch(`/api/day-targets?${uq}`).catch(() => null),
       ]);
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "取得失敗");
       setData(json);
       const uj = ures && ures.ok ? await ures.json() : null;
       setUber(uj ? { total: uj.subtotal, count: uj.count } : null);
+      const tj = tres && tres.ok ? await tres.json() : null;
+      setTarget(tj?.sum ?? null);
     } catch (e: any) {
       setErr(e.message);
     } finally {
@@ -243,6 +249,52 @@ export default function SalesPage() {
                 <div style={{ fontSize: 11.5, opacity: 0.8 }}>Uberは毎週月曜に取り込み。レジ締めはSquareだけで計算</div>
               </div>
             )}
+            {target && (() => {
+              const t = target;
+              const line = { marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.3)", fontSize: 13.5 } as const;
+              if (t.days === 0) {
+                return <div style={line}>{mode === "day" ? "定休日" : `定休日 ${t.closedDays}日`}（目標なし）</div>;
+              }
+              const storeActual = data.summary.totalSales + (uber?.total ?? 0);
+              const rate = t.store > 0 ? Math.round((storeActual / t.store) * 100) : null;
+              return (
+                <div style={line}>
+                  <div style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: "2px 10px" }}>
+                    <strong>目標 ¥{fmt(t.total)}</strong>
+                    {t.labels.length > 0 && <span style={{ fontSize: 12.5, opacity: 0.9 }}>{t.labels.join("・")}</span>}
+                    {mode === "range" && (
+                      <span style={{ fontSize: 12, opacity: 0.8 }}>
+                        {t.days}日分{t.closedDays ? `・定休日 ${t.closedDays}日` : ""}
+                      </span>
+                    )}
+                  </div>
+                  {t.store > 0 && (
+                    <>
+                      <div style={{ marginTop: 4, fontVariantNumeric: "tabular-nums" }}>
+                        店 ¥{fmt(storeActual)} ／ 目標 ¥{fmt(t.store)}
+                        {rate !== null && <strong style={{ marginLeft: 6 }}>{rate}%</strong>}
+                      </div>
+                      <div
+                        role="progressbar"
+                        aria-label="店の売上目標の達成"
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-valuenow={Math.min(100, rate ?? 0)}
+                        style={{ height: 6, marginTop: 5, borderRadius: 99, background: "rgba(255,255,255,0.25)", overflow: "hidden" }}
+                      >
+                        <div style={{ width: `${Math.min(100, rate ?? 0)}%`, height: "100%", background: "rgba(255,255,255,0.9)" }} />
+                      </div>
+                    </>
+                  )}
+                  {t.event > 0 && (
+                    <div style={{ marginTop: 6, fontSize: 12.5 }}>
+                      ＋ 店の外の出店 ¥{fmt(t.event)}
+                      <span style={{ opacity: 0.8 }}>（売上は freee に記帳したあと「今月の成績」に入る）</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
 
           {/* タブ */}
