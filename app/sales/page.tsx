@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Nav from "@/components/Nav";
 import type { DayTargetSum } from "@/lib/keiri/dayTargets";
 
@@ -83,8 +83,13 @@ export default function SalesPage() {
 
   const [uber, setUber] = useState<{ total: number; count: number } | null>(null);
   const [target, setTarget] = useState<DayTargetSum | null>(null);
+  // ◀▶ を続けて押すと読み込みが重なり、古い日の結果があとから届いて上書きすることがある。
+  // いちばん新しい読み込みの結果だけを使う
+  const loadSeq = useRef(0);
 
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
+    const stale = () => seq !== loadSeq.current;
     setLoading(true);
     setErr("");
     try {
@@ -98,16 +103,17 @@ export default function SalesPage() {
         fetch(`/api/day-targets?${uq}`).catch(() => null),
       ]);
       const json = await res.json();
+      const uj = ures && ures.ok ? await ures.json() : null;
+      const tj = tres && tres.ok ? await tres.json() : null;
+      if (stale()) return;
       if (!res.ok) throw new Error(json.error || "取得失敗");
       setData(json);
-      const uj = ures && ures.ok ? await ures.json() : null;
       setUber(uj ? { total: uj.subtotal, count: uj.count } : null);
-      const tj = tres && tres.ok ? await tres.json() : null;
       setTarget(tj?.sum ?? null);
     } catch (e: any) {
-      setErr(e.message);
+      if (!stale()) setErr(e.message);
     } finally {
-      setLoading(false);
+      if (!stale()) setLoading(false);
     }
   }, [mode, date, from, to]);
 
@@ -271,7 +277,7 @@ export default function SalesPage() {
                   {t.store > 0 && (
                     <>
                       <div style={{ marginTop: 4, fontVariantNumeric: "tabular-nums" }}>
-                        店 ¥{fmt(storeActual)} ／ 目標 ¥{fmt(t.store)}
+                        {t.event > 0 ? <>店 ¥{fmt(storeActual)} ／ 目標 ¥{fmt(t.store)}</> : <>いま ¥{fmt(storeActual)}</>}
                         {rate !== null && <strong style={{ marginLeft: 6 }}>{rate}%</strong>}
                       </div>
                       <div
