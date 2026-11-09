@@ -1,7 +1,8 @@
 "use client";
 
 // 売上計画のタブ（数字 → 売上計画）。月を選んで、その月の計画と実績を見る。PDFは印刷のページから
-import { useState } from "react";
+import { useRef, useState } from "react";
+import CopyRich from "@/components/CopyRich";
 import Link from "next/link";
 import Nav from "@/components/Nav";
 import SalesPlan, { useSeiseki } from "@/components/SalesPlan";
@@ -16,6 +17,7 @@ const shift = (m: string, n: number) => {
 export default function Keikaku() {
   const [month, setMonth] = useState(thisMonth());
   const { data, err } = useSeiseki(month);
+  const planRef = useRef<HTMLDivElement>(null);
   return (
     <div className="wrap" style={{ maxWidth: 960 }}>
       <header>
@@ -28,6 +30,7 @@ export default function Keikaku() {
         <strong style={{ fontSize: 15 }}>{Number(month.slice(0, 4))}年{Number(month.slice(5))}月</strong>
         <button className="ghost" onClick={() => setMonth(shift(month, 1))}>次の月 ▶</button>
         <span style={{ flex: 1 }} />
+        {data && <CopyRich target={planRef} label="📋 コピー（Docsに貼る）" />}
         <Link
           href={`/keikaku/print?month=${month}`}
           target="_blank"
@@ -40,7 +43,9 @@ export default function Keikaku() {
       {!data && !err && <div className="card" style={{ textAlign: "center", color: "var(--muted)" }}>読み込み中…</div>}
       {data && (
         <div className="card">
-          <SalesPlan data={data} />
+          <div ref={planRef}>
+            <SalesPlan data={data} />
+          </div>
         </div>
       )}
       <p className="hint">日ごとの目標を変えたいときは、チャットで「11月の目標を変えたい」と相談してください。</p>
