@@ -156,7 +156,9 @@ export default function Shiire() {
 
   // 「そろそろ」は周期が信頼できるものだけ（開業準備のまとめ買いを除く）
   const need = stats.filter((s) => s.reliable && (s.status === "overdue" || s.status === "soon"));
-  const base = tab === "need" ? need : stats;
+  // 一回きりの買い物（開業準備の備品など）は仕入れに入れない。2日以上に分けて買ったものだけ（2026-11-09 坂本さん）
+  const repeat = stats.filter((s) => s.count >= 2);
+  const base = tab === "need" ? need : repeat;
   const query = q.trim().toLowerCase();
   const list = base
     .filter((s) => !query || `${s.displayName} ${s.vendor} ${s.category}`.toLowerCase().includes(query))
@@ -248,7 +250,7 @@ export default function Shiire() {
         {(
           [
             ["need", `そろそろ (${need.length})`],
-            ["all", `全品目 (${stats.length})`],
+            ["all", `全品目 (${repeat.length})`],
             ["monthly", "📅 毎月の金額"],
             ["vendors", "🏪 仕入れ先別"],
             ["sheet", "📦 仕入れ表"],
@@ -261,7 +263,7 @@ export default function Shiire() {
       </div>
 
       {tab === "monthly" && loading && <div className="card" style={{ textAlign: "center", color: "var(--muted)" }}>集計中…</div>}
-      {tab === "monthly" && !loading && <PurchaseMonthly stats={stats} />}
+      {tab === "monthly" && !loading && <PurchaseMonthly stats={repeat} />}
       {tab === "sheet" && <InventorySheet />}
       {tab === "vendors" && <VendorList />}
 
