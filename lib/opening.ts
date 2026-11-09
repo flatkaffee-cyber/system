@@ -51,6 +51,11 @@ export type Task = {
   pendingOrder?: boolean;
   /** 「やった／今日はやらなくていい」を選ぶ作業。押したほうが記録される */
   choices?: [string, string];
+  /**
+   * 買ったときに消費期限を入れる作業。choices の on を選ぶと期限の欄が出る。
+   * 入れた期限は、この作業の下と「今週のスケジュール」の期限の日に出す
+   */
+  expiry?: { label: string; on: string };
   /** 冷凍庫から冷蔵庫へホットサンドを補充する作業（毎日） */
   hotsand?: "fridge";
   /** 夜にホットサンドの残り（冷凍庫＋冷蔵庫）を数えて入れる作業 */
@@ -300,9 +305,12 @@ export const TASKS: Task[] = [
     id: "prosciutto-buy",
     phase: "営業中",
     name: "アミカで生ハムを仕入れる",
-    detail: "2週に1回、A週の月曜に買う（アミカの店頭）。在庫確認の生ハムの数も見てから行く",
+    detail: "2週に1回、A週の月曜に買う（アミカの店頭）。在庫確認の生ハムの数も見てから行く。買ったら消費期限を入れる",
     weekday: 1,
     biweekly: true,
+    // 2026-11-09 行ったか行かなかったかを残し、買ったら消費期限を入れる（坂本さん）
+    choices: ["仕入れた", "足りていたので行かない"],
+    expiry: { label: "生ハム", on: "仕入れた" },
   },
   {
     // 2026-10-26 坂本さん決定：月曜と土曜に平和堂へ電話して発注する。牛乳・パンと一緒に卵・あみえびも。
@@ -316,6 +324,8 @@ export const TASKS: Task[] = [
       "在庫を見て、足りないものだけ買う（あるものは買わない）。食パンは水曜・日曜の仕込みの分も買う。" +
       "あみえびうま煮はあみえびクリームチーズ用（冷凍のタッパの残りを見る）",
     weekday: [1, 6],
+    // 2026-11-09 在庫が足りていて行かなかった日も、そうと分かるように2択にした（坂本さん）
+    choices: ["買い出しに行った", "足りていたので行かない"],
   },
   {
     id: "espresso-close",
@@ -566,6 +576,27 @@ export async function saveChoice(date: string, taskId: string, answer: string) {
   for (const d of keep) next[d] = all[d];
   await store.set(CHOICE_KEY, next);
   return all[date];
+}
+
+/* ── 買ったものの消費期限（生ハムなど） ───────────── */
+
+const EXPIRY_KEY = "opening:expiry";
+/** 作業id → いま使っている分の消費期限と、入れた日 */
+export type ExpiryMap = Record<string, { date: string; setOn: string }>;
+
+export async function getExpiries(): Promise<ExpiryMap> {
+  const store = await kv();
+  if (!store) return {};
+  return (await store.get<ExpiryMap>(EXPIRY_KEY)) ?? {};
+}
+
+export async function saveExpiry(taskId: string, date: string, setOn: string): Promise<ExpiryMap> {
+  const store = await kv();
+  if (!store) throw new Error("KV未設定");
+  const all = await getExpiries();
+  all[taskId] = { date, setOn };
+  await store.set(EXPIRY_KEY, all);
+  return all;
 }
 
 const WAFFLE_KEY = "opening:waffle";

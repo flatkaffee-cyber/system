@@ -25,6 +25,9 @@ type Task = {
   pendingOrder?: boolean;
   choices?: [string, string];
   answer?: string | null;
+  /** 買ったときに消費期限を入れる作業（生ハムなど） */
+  expiry?: { label: string; on: string };
+  expiryDate?: { date: string; setOn: string } | null;
   hotsand?: "fridge";
   daily?: "morning" | "afternoon" | "evening";
   dailyAction?: "buy" | "prep" | "refill";
@@ -288,6 +291,21 @@ export default function OpeningPage() {
     }
   };
 
+  const saveExpiryDate = async (taskId: string, date: string) => {
+    if (!date) return;
+    try {
+      const res = await fetch("/api/opening", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expiry: { taskId, date } }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "保存に失敗");
+    }
+  };
+
   // key は "fridge:クラシックメルト" のように作る
 
 
@@ -529,6 +547,34 @@ export default function OpeningPage() {
               </div>
             </div>
           )}
+          {t.expiry && (() => {
+            // いま使っている分の期限。買った日は期限を入れる欄を出す
+            const ex = t.expiryDate;
+            const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+            const left = ex ? Math.round((Date.parse(ex.date) - Date.parse(today)) / 86_400_000) : null;
+            const md = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
+            return (
+              <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 8 }}>
+                {t.answer === t.expiry.on && (
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 13, fontWeight: 700 }}>
+                    買った{t.expiry.label}の消費期限
+                    <input
+                      type="date"
+                      defaultValue={ex && ex.setOn === today ? ex.date : ""}
+                      onChange={(e) => saveExpiryDate(t.id, e.target.value)}
+                      style={{ width: "auto", padding: "6px 8px", fontSize: 14 }}
+                    />
+                  </label>
+                )}
+                {ex && left != null && (
+                  <div style={{ marginTop: 6, fontSize: 12.5, fontWeight: 700, color: left < 0 ? "#c0392b" : left <= 3 ? "#b9770e" : "var(--muted)" }}>
+                    いまの{t.expiry.label}の期限：{md(ex.date)}
+                    {left < 0 ? `（${-left}日過ぎています）` : left === 0 ? "（今日まで）" : `（あと${left}日）`}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
           {t.daily && daily && (() => {
             const slot = t.daily;
             const st = daily[slot];

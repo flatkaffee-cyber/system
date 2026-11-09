@@ -9,6 +9,7 @@ import {
   morningPlan,
   nightPlan,
   getChoices,
+  getExpiries,
   getHotsandCounts,
   fermentDays,
   saveHotsandCount,
@@ -17,6 +18,7 @@ import {
   weekdayDue,
   monthDayDue,
   saveChoice,
+  saveExpiry,
   saveWaffleCount,
   setWaffleBaked,
   todayJST,
@@ -61,6 +63,7 @@ export async function GET(req: NextRequest) {
     // 発注チェックは、届いていない発注があるときだけ出す
     const pending = await openOrders();
     const choices = await getChoices(date);
+    const expiries = await getExpiries();
     // 前日の昼に「翌日仕込む」を押していたら、今日の朝に仕込みを出す
     // 販売期間の外のメニュー（例 10〜3月のコールドブリュー）の作業は出さない
     const off = await offSeasonNames(Number(date.slice(5, 7)));
@@ -192,7 +195,9 @@ export async function GET(req: NextRequest) {
             ...t,
             done: done.includes(t.id),
             answer: choices[t.id] ?? null,
+            ...(t.expiry ? { expiryDate: expiries[t.id] ?? null } : {}),
             ...(t.weekday !== undefined ? { due: weekdayDue(t, date) } : {}),
+            ...(t.biweekly ? { weekA: isWeekA(date) } : {}),
           };
         }
         if (t.monthDays) {
@@ -254,6 +259,16 @@ export async function GET(req: NextRequest) {
         const items: WeekItem[] = TASKS
           .filter((t) => (weekdayDue(t, day) || monthDayDue(t, day)) && t.id !== "hotsand-sunday-check")
           .map((t) => ({ name: t.name, phase: t.phase, kind: "fixed" as const, ...(t.biweekly ? { note: "隔週・A週" } : {}) }));
+        // 買ったもの（生ハムなど）の消費期限の日。過ぎていたら今日に寄せる
+        for (const t of TASKS) {
+          const ex = t.expiry && expiries[t.id];
+          if (!ex) continue;
+          if (day === ex.date && day >= date) {
+            items.push({ name: `${t.expiry!.label}の消費期限`, phase: "営業中", kind: "interval", note: "この日まで" });
+          } else if (ex.date < date && day === date) {
+            items.push({ name: `${t.expiry!.label}の消費期限が過ぎています`, phase: "営業中", kind: "interval", note: `${Number(ex.date.slice(5, 7))}/${Number(ex.date.slice(8))}まで` });
+          }
+        }
         // ザワークラウトを冷蔵庫へ移す日（過ぎてまだ移していなければ今日に寄せる）
         if (krautPending && krautDue && day >= date && (day === krautDue || (krautDue < date && day === date))) {
           items.push({ name: "ザワークラウトを冷蔵庫に移す", phase: "仕込み", kind: "interval", note: krautDue < date ? "移す日を過ぎています" : `仕込んで${fermentDays(krautMade!)}日` });
@@ -344,6 +359,7 @@ export async function GET(req: NextRequest) {
 // POST /api/opening
 //   { taskId, done, date? }              … チェックの付け外し
 //   { choice: { taskId, answer }, date? } … 2択の作業でどちらを選んだか
+//   { expiry: { taskId, date } }         … 買ったもの（生ハムなど）の消費期限
 //   { dailyCount: {...}, date? }         … 牛乳・コールドブリュー・水を数えた結果
 //   { waffleBaked: true|false, date? }   … 朝、焼いたか冷蔵庫から出したか
 //   { waffleCounts, bakedAt?, date? }    … 夜のワッフル残数の記録
@@ -357,6 +373,7 @@ export async function POST(req: NextRequest) {
       bakedAt?: string;
       waffleBaked?: boolean;
       choice?: { taskId?: string; answer?: string };
+      expiry?: { taskId?: string; date?: string };
       dailyCount?: { slot?: Slot; values?: DailyValues };
       hotsandCount?: { classic?: number; garden?: number };
     };
@@ -371,6 +388,16 @@ export async function POST(req: NextRequest) {
       // どちらを選んでも「見た」ことに変わりはないので終わりにする
       await toggle(date, b.choice.taskId, true);
       return NextResponse.json({ ok: true, date, answers });
+    }
+
+    if (b.expiry?.taskId) {
+      const task = TASKS.find((t) => t.id === b.expiry!.taskId);
+      if (!task?.expiry) return NextResponse.json({ error: "期限を入れる作業ではありません" }, { status: 400 });
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(b.expiry.date ?? "")) {
+        return NextResponse.json({ error: "期限の日付が読めません" }, { status: 400 });
+      }
+      const expiries = await saveExpiry(task.id, b.expiry.date!, todayJST());
+      return NextResponse.json({ ok: true, expiries });
     }
 
     if (b.hotsandCount) {
