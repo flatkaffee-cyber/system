@@ -8,6 +8,10 @@ import { getHidden } from "@/lib/menuAdmin";
 
 // 終わったイベントの参加費や、もう使わない差額用の商品。売れていなくても一覧に出さない
 const RETIRED_PRODUCT = /参加費|花火|パーティのみ|（旧）|差額/;
+// パーティ・イベント用の商品。普段のメニューの分析には出さない（2026-11-09 坂本さん）。
+// 「ドリンク3杯のお得セット」は飲み放題の分類だが普段も売るので、分類ではなく名前で外す
+const PARTY_CATEGORY = new Set(["🎆 パーティ参加費", "🌵 テキーラ", "🍿 スナック", "メニュー未記載"]);
+const PARTY_NAME = /飲み放題|エントランス|場所代|ショット|テキーラ/;
 
 // 前の名前・表記ゆれ → 今の商品名（と種類）。2026-11-09 坂本さんの指摘（アイスティーは紅茶のIce、サンデーが2つある など）
 const NAME_ALIAS: Record<string, { name: string; variant?: string }> = {
@@ -20,6 +24,7 @@ const NAME_ALIAS: Record<string, { name: string; variant?: string }> = {
   "キリン一番搾り(中瓶)": { name: "キリン一番搾り（中瓶）" },
   "抹茶ラテ（ソイ）": { name: "抹茶ラテ" },
   "はちみつブルーチーズ・生ハム・クラッカーの盛合せ": { name: "ブルーチーズと生ハム盛り合わせ" },
+  "オリーブ・ザワークラウト・マッシュポテトの盛合せ": { name: "オリーブ・ザワークラウト・マッシュポテトの3種盛り" },
 };
 /** 今の商品名にそろえる。「スペシャルワッフルサンデー（チョコ/抹茶）」のような種類つきの前の名前は、元の商品にまとめる */
 function canonicalName(raw: string): { name: string; variant?: string } {
@@ -317,12 +322,17 @@ export async function GET(req: NextRequest) {
     // Squareのメニューにあるのに売れていない商品も全部並べる（原価表に載っていないものも）。
     // 提供停止にした商品は、売れていなければ出さない
     const catalogCategory: Record<string, string> = {};
+    // パーティ・イベント用の商品の名前（Squareの分類で決める）
+    const partyNames = new Set<string>();
     // 商品名 → Squareの種類の名前。売れていない種類も内訳に0で出すのに使う
     const catalogVariations: Record<string, string[]> = {};
     try {
       const [catalog, hidden] = await Promise.all([listItems(), getHidden()]);
       const hiddenSet = new Set(hidden);
-      for (const it of catalog) catalogVariations[it.name] = it.variations.map((v) => v.name).filter((n) => n && n !== "Regular");
+      for (const it of catalog) {
+        catalogVariations[it.name] = it.variations.map((v) => v.name).filter((n) => n && n !== "Regular");
+        if (PARTY_CATEGORY.has(it.category)) partyNames.add(it.name);
+      }
       for (const it of catalog) {
         if (hiddenSet.has(it.id) || byProduct[it.name] || menuNames.has(it.name) || isFlavorOf(it.name)) continue;
         if (RETIRED_PRODUCT.test(it.name)) continue;
@@ -336,6 +346,9 @@ export async function GET(req: NextRequest) {
     for (const m of menu) {
       categoryByName[m.name] = m.category;
       for (const alias of m.aliases ?? []) categoryByName[alias] = m.category;
+    }
+    for (const n of Object.keys(byProduct)) {
+      if (partyNames.has(n) || PARTY_NAME.test(n)) delete byProduct[n];
     }
     const products = Object.entries(byProduct)
       .map(([name, v]) => ({
