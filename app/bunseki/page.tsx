@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Nav from "@/components/Nav";
+import ProductChart from "@/components/ProductChart";
 
 // 経営分析。/api/analytics が Square売上・領収書・原価表を自動集計する。
 // 手入力の月次管理（/accounting）とは別に、実データをそのまま見るためのページ。
@@ -26,6 +27,8 @@ type Analytics = {
     gross: number; rate: number | null; hasCost: boolean; noCost: boolean;
     category: string;
     months: { month: string; qty: number; amount: number }[];
+    /** [日, 数, 売上] */
+    days: [string, number, number][];
   }[];
   productCostCoverage: {
     knownSales: number; unknownSales: number; knownCost: number; estGross: number;
@@ -71,7 +74,7 @@ export default function Bunseki() {
   const [data, setData] = useState<Analytics | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
-  const [tab, setTab] = useState<"pnl" | "products" | "expenses" | "days" | "month" | "weekday">("pnl");
+  const [tab, setTab] = useState<"pnl" | "products" | "graph" | "expenses" | "days" | "month" | "weekday">("pnl");
   const [openProduct, setOpenProduct] = useState<string | null>(null);
   const [productCat, setProductCat] = useState("すべて");
 
@@ -155,7 +158,7 @@ export default function Bunseki() {
           )}
 
           <div className="sub-tabs">
-            {([["pnl", "損益"], ["products", "商品別"], ["expenses", "支出"], ["days", "日別"], ["month", "月別"], ["weekday", "曜日別"]] as const).map(([k, l]) => (
+            {([["pnl", "損益"], ["products", "商品別"], ["graph", "グラフ"], ["expenses", "支出"], ["days", "日別"], ["month", "月別"], ["weekday", "曜日別"]] as const).map(([k, l]) => (
               <button key={k} className={`sub-tab ${tab === k ? "active" : ""}`} onClick={() => setTab(k)}>{l}</button>
             ))}
           </div>
@@ -201,6 +204,14 @@ export default function Bunseki() {
                   理論原価に含まれていません（商品別タブで「原価未登録」を確認）。
                 </p>
               )}
+            </div>
+          )}
+
+          {/* 商品のグラフ。商品を選んで、個数・売上を月・週・曜日で見る */}
+          {tab === "graph" && (
+            <div className="card">
+              <div className="cat-title">商品のグラフ</div>
+              <ProductChart products={data.products} openDays={data.sales.byDay.map((d) => d.day)} />
             </div>
           )}
 

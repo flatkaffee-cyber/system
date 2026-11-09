@@ -91,16 +91,24 @@ export async function GET(req: NextRequest) {
     let totalSales = 0, totalTax = 0;
     const byDay: Record<string, { sales: number; count: number }> = {};
     // months: 商品ごとの月別の数と売上（分析ページで商品を開いたときに出す）
-    type ProductAgg = { qty: number; amount: number; cost: number; months: Record<string, { qty: number; amount: number }> };
+    // days: 商品ごとの日別の数と売上（分析ページのグラフで、月・週・曜日に束ね直す）
+    type ProductAgg = {
+      qty: number; amount: number; cost: number;
+      months: Record<string, { qty: number; amount: number }>;
+      days: Record<string, { qty: number; amount: number }>;
+    };
     const byProduct: Record<string, ProductAgg> = {};
-    const addProduct = (name: string, mon: string, qty: number, amount: number, cost: number) => {
-      const p = (byProduct[name] = byProduct[name] || { qty: 0, amount: 0, cost: 0, months: {} });
+    const addProduct = (name: string, day: string, qty: number, amount: number, cost: number) => {
+      const p = (byProduct[name] = byProduct[name] || { qty: 0, amount: 0, cost: 0, months: {}, days: {} });
       p.qty += qty;
       p.amount += amount;
       p.cost += cost;
-      const m = (p.months[mon] = p.months[mon] || { qty: 0, amount: 0 });
+      const m = (p.months[day.slice(0, 7)] = p.months[day.slice(0, 7)] || { qty: 0, amount: 0 });
       m.qty += qty;
       m.amount += amount;
+      const d = (p.days[day] = p.days[day] || { qty: 0, amount: 0 });
+      d.qty += qty;
+      d.amount += amount;
     };
     const byTender: Record<string, { count: number; amount: number }> = {};
     // 時間帯別・曜日別（バイトのシフトをどこに入れるかの判断材料）。
@@ -157,12 +165,12 @@ export async function GET(req: NextRequest) {
       for (const li of o.line_items || []) {
         const name = li.name || "不明";
         const qty = parseInt(li.quantity) || 1;
-        addProduct(name, mon, qty, li.total_money?.amount || 0, (costByName[name] || 0) * qty);
+        addProduct(name, day, qty, li.total_money?.amount || 0, (costByName[name] || 0) * qty);
         // セット（スープセット・ドリンクセット・フルセット）の中のホットサンドも、ホットサンドの数に入れる。
         // 金額はセットの行に付いているので、ここでは数と原価だけ足す
         const v = li.variation_name || "";
         if (v !== name && (v === "クラシックメルト" || v === "ガーデンメルト")) {
-          addProduct(v, mon, qty, 0, (costByName[v] || 0) * qty);
+          addProduct(v, day, qty, 0, (costByName[v] || 0) * qty);
         }
       }
       for (const t of o.tenders || []) {
@@ -196,7 +204,7 @@ export async function GET(req: NextRequest) {
     // Squareの別名で売れていれば売れた商品なので載せない
     for (const m of menu) {
       const sold = [m.name, ...(m.aliases ?? [])].some((n) => byProduct[n]);
-      if (m.price !== null && !sold) byProduct[m.name] = { qty: 0, amount: 0, cost: 0, months: {} };
+      if (m.price !== null && !sold) byProduct[m.name] = { qty: 0, amount: 0, cost: 0, months: {}, days: {} };
     }
     const categoryByName: Record<string, string> = {};
     for (const m of menu) {
@@ -214,6 +222,10 @@ export async function GET(req: NextRequest) {
         months: Object.entries(v.months)
           .sort()
           .map(([month, mv]) => ({ month, ...mv })),
+        // [日, 数, 売上] の並び。量が多いので短い形で返す
+        days: Object.entries(v.days)
+          .sort()
+          .map(([d, dv]) => [d, dv.qty, dv.amount] as [string, number, number]),
         noCost: NO_COST_PRODUCT.test(name),
       }))
       .sort((a, b) => b.amount - a.amount || b.qty - a.qty);
