@@ -6,7 +6,7 @@ import Nav from "@/components/Nav";
 // レシピ。フードもドリンクもここにまとめる。厨房で見ながら作る前提なので、
 // 手順は大きな文字で1ステップずつ。押すと済みになって、どこまでやったか分かる。
 
-type Step = { text: string; timing?: string; photoId?: string; videoId?: string };
+type Step = { text: string; timing?: string; photoId?: string; photoSrc?: string; videoId?: string };
 type Recipe = {
   id: string;
   name: string;
@@ -282,9 +282,9 @@ export default function FoodPage() {
                             preload="metadata"
                             style={{ display: "block", marginTop: 8, maxWidth: "100%", borderRadius: 8 }}
                           />
-                        ) : s.photoId ? (
+                        ) : s.photoId || s.photoSrc ? (
                           <img
-                            src={`/api/food-recipe/photo?id=${s.photoId}`}
+                            src={s.photoId ? `/api/food-recipe/photo?id=${s.photoId}` : s.photoSrc}
                             alt=""
                             style={{ display: "block", marginTop: 8, maxWidth: "100%", borderRadius: 8 }}
                           />

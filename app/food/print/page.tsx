@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 // フードレシピの印刷用ページ。厨房に貼る・ファイルに綴じる想定。
 // 1品1ページで改ページし、写真も出す（動画は紙では見られないので出さない）。
 
-type Step = { text: string; timing?: string; photoId?: string; videoId?: string };
+type Step = { text: string; timing?: string; photoId?: string; photoSrc?: string; videoId?: string };
 type Recipe = {
   id: string;
   name: string;
@@ -95,9 +95,9 @@ export default function FoodPrintPage() {
               <div className="txt">
                 {s.text}
                 {s.timing && <div><span className="tm">⏱ {s.timing}</span></div>}
-                {s.photoId && (
+                {(s.photoId || s.photoSrc) && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img className="ph" src={`/api/food-recipe/photo?id=${s.photoId}`} alt="" />
+                  <img className="ph" src={s.photoId ? `/api/food-recipe/photo?id=${s.photoId}` : s.photoSrc} alt="" />
                 )}
                 {s.videoId && <div className="vid">▶ この手順は動画あり（システムで確認してください）</div>}
               </div>

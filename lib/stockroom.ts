@@ -187,7 +187,7 @@ export const SEED_ITEMS: Item[] = [
   { id: "gloves", name: "ニトリル手袋", group: "消耗品・包材", par: 1, unit: "箱" },
   { id: "dish-soap", name: "食器用洗剤", group: "消耗品・包材", par: 1, unit: "本" },
   { id: "sponge", name: "スポンジ", group: "消耗品・包材", par: 3, unit: "個" },
-  { id: "cooking-sheet", name: "クッキングシート（茶色・正方形）", group: "消耗品・包材", par: 1, unit: "袋", note: "シュガードーナツをのせて出す用。カインズなどで探し、無ければAmazonで注文" },
+  { id: "cooking-sheet", name: "クッキングシート（茶色・正方形）", group: "消耗品・包材", par: 1, unit: "袋", note: "シュガードーナツを包んで出す用（両端をねじる包み方は /food のレシピ）。カインズなどで探し、無ければAmazonで注文" },
   { id: "haiter", name: "ハイター", group: "消耗品・包材", par: 1, unit: "本", note: "ダスター類を毎晩つける" },
   { id: "alcohol-spray", name: "アルコールスプレー", group: "消耗品・包材", par: 1, unit: "本" },
   { id: "hand-soap", name: "ハンドソープ", group: "消耗品・包材", par: 1, unit: "本" },

@@ -37,6 +37,8 @@ export type Step = {
   timing?: string;
   /** 写真のid。/api/food-recipe/photo?id=... で取れる */
   photoId?: string;
+  /** 最初から入れておく写真（public/ の下のパス）。画面から撮った写真（photoId）があればそちらを出す */
+  photoSrc?: string;
   /** 動画のid。包み方など、静止画では伝わらない動きを残すため */
   videoId?: string;
 };
@@ -60,14 +62,16 @@ export type FoodRecipe = {
  */
 export const SEED_RECIPES: FoodRecipe[] = [
   {
-    // 2026-11-06 販売開始（1個400円）。提供はLegal Coffeeのようにクッキングシートにのせる
+    // 2026-11-06 販売開始（1個400円）。
+    // 2026-11-09 包み方を坂本さんの手順書（ドーナツの包み方）に差し替え。茶色の紙でミルキーのように両端をねじって包み、お皿にのせて出す
     id: "sugar-donut",
     name: "シュガードーナツ",
     category: "デザート",
-    minutes: 1,
+    minutes: 2,
     ingredients: [
       "シュガードーナツ 1個（朝に冷凍庫から出して自然解凍したもの）",
-      "クッキングシート（茶色・正方形）1枚",
+      "茶色の包み紙（クッキングシート）1枚",
+      "お皿・お手拭き",
     ],
     steps: [
       { text: "朝、ワッフルなどを準備する前に、ドーナツを冷凍庫から出して自然解凍しておく" },
@@ -76,11 +80,30 @@ export const SEED_RECIPES: FoodRecipe[] = [
         text: "温める場合はトースターで温める。表面の砂糖が少し溶けてツヤが出るくらいでOK",
         timing: "15〜20秒",
       },
-      { text: "茶色の正方形のクッキングシートにのせて提供" },
+      { text: "包み紙を1枚用意する", photoSrc: "/prep-photos/sugar-donut-wrap-1.jpg" },
+      {
+        text: "長い方の両端を、それぞれ2.5cmほど内側に折る",
+        timing: "両端 2.5cm",
+        photoSrc: "/prep-photos/sugar-donut-wrap-2.jpg",
+      },
+      { text: "ドーナツを紙のど真ん中に置く", photoSrc: "/prep-photos/sugar-donut-wrap-3.jpg" },
+      {
+        text: "ドーナツの輪郭に沿わせて、紙をぐるっと立ち上げる。両端の余った紙はあとでねじるので、ねじりやすいように軽く折り目をつけておく",
+        photoSrc: "/prep-photos/sugar-donut-wrap-4.jpg",
+      },
+      {
+        text: "両端をミルキーの包み紙のようにくるくるっとねじる。最後に先っちょを扇のようにパッと広げる（ここで見た目が決まる）",
+        photoSrc: "/prep-photos/sugar-donut-wrap-5.jpg",
+      },
+      {
+        text: "お皿にのせて、お手拭きを添えて提供",
+        photoSrc: "/prep-photos/sugar-donut-wrap-6.jpg",
+      },
     ],
     tips: [
       "表面の砂糖が焦げないように注意。溶けても時間が経てばまた固まる",
-      "温めない場合は解凍したものをそのまま出す",
+      "温めない場合は解凍したものをそのまま包む",
+      "ねじった先を扇のように広げると見た目が良くなる。手を抜かない",
     ],
   },
   {
