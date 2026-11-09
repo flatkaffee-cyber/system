@@ -36,7 +36,7 @@ type Order = {
   ticket_name?: string;
   total_money?: { amount: number };
   tenders?: unknown[];
-  line_items?: { name?: string; note?: string; quantity?: string; total_money?: { amount?: number } }[];
+  line_items?: { name?: string; variation_name?: string; note?: string; quantity?: string; total_money?: { amount?: number } }[];
 };
 
 // ロケーションIDは環境変数ではなくAPIから引く（他の画面と同じ取り方に揃える）
@@ -158,7 +158,7 @@ export async function POST(req: NextRequest) {
           if (isAmountOnly(hit)) {
             const items = (o.line_items ?? [])
               .filter((li) => li.name)
-              .map((li) => ({ name: String(li.name), qty: parseInt(li.quantity ?? "1") || 1, amount: li.total_money?.amount ?? 0 }));
+              .map((li) => ({ name: String(li.name), qty: parseInt(li.quantity ?? "1") || 1, amount: li.total_money?.amount ?? 0, ...(li.variation_name ? { variation: String(li.variation_name) } : {}) }));
             if (items.length) await saveFix(hit.id, items).catch(() => {});
           }
         }

@@ -3,7 +3,7 @@
 // こちらのシステムで作った注文（品目あり）と、数秒後にレジが作った金額だけの注文を、金額と時刻でつなぐ。
 // つないだ品目は lib/salesFix の対応表に入れ、売上の商品別に出す。
 
-export type SqLine = { name?: string; note?: string; quantity?: string; total_money?: { amount?: number } };
+export type SqLine = { name?: string; variation_name?: string; note?: string; quantity?: string; total_money?: { amount?: number } };
 export type SqOrder = {
   id: string;
   state: string;
@@ -13,7 +13,7 @@ export type SqOrder = {
   tenders?: unknown[];
   line_items?: SqLine[];
 };
-export type PosPair = { posId: string; sysId: string; items: { name: string; qty: number; amount: number }[] };
+export type PosPair = { posId: string; sysId: string; items: { name: string; qty: number; amount: number; variation?: string }[] };
 
 /** レジで金額だけ打った注文か（品目に名前が1つも無い） */
 export function isAmountOnly(o: SqOrder): boolean {
@@ -47,7 +47,7 @@ export function pairPosOrders(sysOrders: SqOrder[], posOrders: SqOrder[]): PosPa
       sysId: hit.s.id,
       items: (hit.s.line_items ?? [])
         .filter((li) => li.name)
-        .map((li) => ({ name: String(li.name), qty: parseInt(li.quantity ?? "1") || 1, amount: li.total_money?.amount ?? 0 })),
+        .map((li) => ({ name: String(li.name), qty: parseInt(li.quantity ?? "1") || 1, amount: li.total_money?.amount ?? 0, ...(li.variation_name ? { variation: String(li.variation_name) } : {}) })),
     });
   }
   return pairs;

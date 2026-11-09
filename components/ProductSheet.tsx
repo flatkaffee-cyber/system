@@ -25,7 +25,24 @@ const num = (n: number) => Math.round(n).toLocaleString();
 const pct = (a: number, b: number) => (b > 0 ? `${Math.round((a / b) * 1000) / 10}%` : "—");
 const nameOf = (n: string) => (n === "不明" ? "金額だけの注文" : n);
 
-export default function ProductSheet({ products }: { products: SheetProduct[] }) {
+export type SheetVariant = {
+  parent: string;
+  variant: string;
+  qty: number;
+  amount: number;
+  cost: number;
+  months: { month: string; qty: number; amount: number; cost?: number }[];
+};
+
+export default function ProductSheet({ products, variants = [] }: { products: SheetProduct[]; variants?: SheetVariant[] }) {
+  const [showVariants, setShowVariants] = useState(true);
+  const variantsOf = useMemo(() => {
+    const m = new Map<string, SheetVariant[]>();
+    for (const v of variants) m.set(v.parent, [...(m.get(v.parent) ?? []), v]);
+    // 種類が分からない分（前のカード会計）は最後に
+    for (const [k, list] of m) m.set(k, list.sort((a, b) => (a.variant === "種類が分からない" ? 1 : b.variant === "種類が分からない" ? -1 : b.qty - a.qty)));
+    return m;
+  }, [variants]);
   const [cols, setCols] = useState<Col[]>(["qty", "amount", "cost"]);
   const [rankBy, setRankBy] = useState<"amount" | "qty">("amount");
   const [hideZero, setHideZero] = useState(false);
@@ -123,6 +140,9 @@ export default function ProductSheet({ products }: { products: SheetProduct[] })
         <button style={chip(rankBy === "amount")} onClick={() => setRankBy("amount")}>売上</button>
         <button style={chip(rankBy === "qty")} onClick={() => setRankBy("qty")}>数</button>
         <button style={chip(hideZero)} onClick={() => setHideZero(!hideZero)}>0個の商品を隠す</button>
+        {variants.length > 0 && (
+          <button style={chip(showVariants)} onClick={() => setShowVariants(!showVariants)}>種類（フレーバー）ごとに出す</button>
+        )}
       </div>
 
       {/* 商品の表 */}
@@ -180,8 +200,10 @@ export default function ProductSheet({ products }: { products: SheetProduct[] })
                 </tr>
                 {g.list.map((p, i) => {
                   const by = Object.fromEntries(p.months.map((m) => [m.month, m]));
+                  const vs = showVariants ? variantsOf.get(p.name) ?? [] : [];
                   return (
-                    <tr key={p.name}>
+                    <Fragment key={p.name}>
+                    <tr>
                       <td style={{ ...cell, ...sticky, background: "var(--card)" }} title={nameOf(p.name)}>
                         <span style={{ display: "inline-block", width: 26, color: "var(--muted)", fontWeight: 700 }}>{i + 1}</span>
                         {nameOf(p.name)}
@@ -205,6 +227,28 @@ export default function ProductSheet({ products }: { products: SheetProduct[] })
                       ))}
                       <td style={cell}>{p.hasCost && p.amount > 0 ? pct(p.cost, p.amount) : p.noCost ? "対象外" : "—"}</td>
                     </tr>
+                    {/* 種類（フレーバー）ごとの内訳 */}
+                    {vs.map((v) => {
+                      const vb = Object.fromEntries(v.months.map((m) => [m.month, m]));
+                      return (
+                        <tr key={v.variant} style={{ color: "var(--muted)" }}>
+                          <td style={{ ...cell, ...sticky, background: "var(--card)", paddingLeft: 40, fontSize: 12 }}>└ {v.variant}</td>
+                          {months.map((m) => (
+                            <Fragment key={m}>
+                              {cols.map((c, ci) => {
+                                const val = (vb[m]?.[c] as number | undefined) ?? 0;
+                                return <td key={c} style={{ ...cell, ...monthEdge(ci), fontSize: 12 }}>{val === 0 ? "·" : fmt(c, val)}</td>;
+                              })}
+                            </Fragment>
+                          ))}
+                          {cols.map((c, ci) => (
+                            <td key={c} style={{ ...cell, ...monthEdge(ci), fontSize: 12 }}>{fmt(c, v[c])}</td>
+                          ))}
+                          <td style={{ ...cell, fontSize: 12 }}>{pct(v.qty, p.qty)}</td>
+                        </tr>
+                      );
+                    })}
+                    </Fragment>
                   );
                 })}
               </Fragment>
@@ -213,7 +257,7 @@ export default function ProductSheet({ products }: { products: SheetProduct[] })
         </table>
       </div>
       <div style={{ fontSize: 11.5, color: "var(--muted)" }}>
-        原価は原価表に載っている商品だけ（「—」は原価未登録）。ホットサンドの数には、セットの中のホットサンドも入っています（金額はセットの行）。
+        原価は原価表に載っている商品だけ（「—」は原価未登録）。種類の行の右端は、その商品の中の割合（数）です。11/9より前のカード会計は種類が残っていないので「種類が分からない」に入ります。ホットサンドの数には、セットの中のホットサンドも入っています（金額はセットの行）。
         表は縦にも横にも動かせます。商品名の列と見出しは動かしても残ります。
       </div>
     </div>

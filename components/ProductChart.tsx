@@ -62,9 +62,12 @@ function ticks(max: number): number[] {
 
 export default function ProductChart({
   products,
+  variants = [],
   openDays,
 }: {
   products: ChartProduct[];
+  /** 種類（フレーバー）ごと。名前は「ワッフル（チョコ）」の形 */
+  variants?: (ChartProduct & { parent?: string; variant?: string })[];
   /** 営業した日（売上のあった日）。1日あたりを出すのに使う */
   openDays: string[];
 }) {
@@ -72,6 +75,12 @@ export default function ProductChart({
     () => products.filter((p) => p.name !== "不明").sort((a, b) => b.amount - a.amount),
     [products],
   );
+  // 種類ごとも選べるようにする（ワッフルのチョコ・抹茶など）。「種類が分からない」は比べても意味がないので出さない
+  const flavors = useMemo(
+    () => variants.filter((v) => v.variant !== "種類が分からない").sort((a, b) => b.qty - a.qty),
+    [variants],
+  );
+  const pool = useMemo(() => [...sellable, ...flavors], [sellable, flavors]);
   const [picked, setPicked] = useState<string[]>(() => sellable.slice(0, 3).map((p) => p.name));
   const [x, setX] = useState<XMode>("month");
   const [y, setY] = useState<YMode>("qty");
@@ -115,7 +124,7 @@ export default function ProductChart({
   const series = useMemo(
     () =>
       picked
-        .map((name) => sellable.find((p) => p.name === name))
+        .map((name) => pool.find((p) => p.name === name))
         .filter((p): p is ChartProduct => !!p)
         .map((p) => {
           const sum: Record<string, number> = {};
@@ -129,7 +138,7 @@ export default function ProductChart({
           });
           return { name: p.name, color: colorOf[p.name] ?? COLORS[0], values };
         }),
-    [picked, sellable, keys, openIn, x, y, perDay, colorOf],
+    [picked, pool, keys, openIn, x, y, perDay, colorOf],
   );
 
   const maxV = Math.max(0, ...series.flatMap((s) => s.values));
@@ -153,6 +162,7 @@ export default function ProductChart({
   const labelEvery = n > 12 ? Math.ceil(n / 8) : 1;
 
   const list = sellable.filter((p) => !query || p.name.includes(query));
+  const flavorList = flavors.filter((p) => !query || p.name.includes(query));
 
   const seg = (on: boolean) => ({
     flex: 1, padding: "8px 0", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer",
@@ -387,6 +397,34 @@ export default function ProductChart({
             );
           })}
         </div>
+        {flavorList.length > 0 && (
+          <>
+            <div style={{ fontSize: 12.5, fontWeight: 700, margin: "12px 0 6px" }}>種類（フレーバー）ごと</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, maxHeight: 180, overflowY: "auto" }}>
+              {flavorList.map((p) => {
+                const on = picked.includes(p.name);
+                const full = !on && picked.length >= MAX;
+                return (
+                  <button
+                    key={p.name}
+                    onClick={() => toggle(p.name)}
+                    disabled={full}
+                    style={{
+                      padding: "5px 10px", borderRadius: 99, fontSize: 12.5, cursor: full ? "not-allowed" : "pointer",
+                      border: on ? `2px solid ${colorOf[p.name]}` : "1px solid var(--line)",
+                      background: on ? "var(--accent-weak)" : "var(--card)", color: "var(--ink)",
+                      opacity: full ? 0.45 : 1, fontWeight: on ? 700 : 400,
+                    }}
+                  >
+                    {p.name}
+                    <span style={{ color: "var(--muted)", marginLeft: 4, fontWeight: 400 }}>{p.qty}個</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>11/9より前のカード会計は種類が残っていないので、種類ごとの数は実際より少なめです。</div>
+          </>
+        )}
       </div>
     </div>
   );

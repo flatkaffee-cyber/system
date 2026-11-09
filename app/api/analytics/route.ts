@@ -115,6 +115,23 @@ export async function GET(req: NextRequest) {
       d.qty += qty;
       d.amount += amount;
     };
+    // 種類ごと（ワッフルのチョコ・抹茶、Hot/Iceなど）。商品名 → 種類名 → 集計。
+    // カード会計の写しは 2026-11-09 まで種類を持っていないので、その分は「種類が分からない」に入る
+    const byVariant: Record<string, Record<string, ProductAgg>> = {};
+    const addVariant = (name: string, vname: string, day: string, qty: number, amount: number, cost: number) => {
+      const vs = (byVariant[name] = byVariant[name] || {});
+      const p = (vs[vname] = vs[vname] || { qty: 0, amount: 0, cost: 0, months: {}, days: {} });
+      p.qty += qty;
+      p.amount += amount;
+      p.cost += cost;
+      const m = (p.months[day.slice(0, 7)] = p.months[day.slice(0, 7)] || { qty: 0, amount: 0, cost: 0 });
+      m.qty += qty;
+      m.amount += amount;
+      m.cost += cost;
+      const d = (p.days[day] = p.days[day] || { qty: 0, amount: 0 });
+      d.qty += qty;
+      d.amount += amount;
+    };
     const byTender: Record<string, { count: number; amount: number }> = {};
     // 時間帯別・曜日別（バイトのシフトをどこに入れるかの判断材料）。
     // 「営業した日数」で割って1日平均を出すため、時間帯ごとに日付も集める。
@@ -169,12 +186,18 @@ export async function GET(req: NextRequest) {
 
       const fixed = itemFixes[o.id];
       const lines: any[] = fixed?.length
-        ? fixed.map((f) => ({ name: f.name, quantity: String(f.qty), total_money: { amount: f.amount } }))
+        ? fixed.map((f) => ({ name: f.name, variation_name: f.variation, quantity: String(f.qty), total_money: { amount: f.amount } }))
         : o.line_items || [];
       for (const li of lines) {
         const name = li.name || "不明";
         const qty = parseInt(li.quantity) || 1;
         addProduct(name, day, qty, li.total_money?.amount || 0, (costByName[name] || 0) * qty);
+        {
+          // 種類。「Regular」は種類の無い商品なので数えない。名前と同じものも同じ
+          const vn = String(li.variation_name || "").trim();
+          const vname = !vn || vn === name || vn === "Regular" ? "種類が分からない" : vn;
+          addVariant(name, vname, day, qty, li.total_money?.amount || 0, (costByName[name] || 0) * qty);
+        }
         // セット（スープセット・ドリンクセット・フルセット）の中のホットサンドも、ホットサンドの数に入れる。
         // 金額はセットの行に付いているので、ここでは数と原価だけ足す
         const v = li.variation_name || "";
@@ -239,6 +262,24 @@ export async function GET(req: NextRequest) {
       }))
       .sort((a, b) => b.amount - a.amount || b.qty - a.qty);
 
+    // 種類が2つ以上ある商品だけ、種類ごとの内訳を返す
+    const variants = Object.entries(byVariant)
+      .filter(([, vs]) => Object.keys(vs).filter((k) => k !== "種類が分からない").length >= 2)
+      .flatMap(([parent, vs]) =>
+        Object.entries(vs).map(([v, a]) => ({
+          parent,
+          variant: v,
+          name: `${parent}（${v}）`,
+          qty: a.qty,
+          amount: a.amount,
+          cost: Math.round(a.cost),
+          category: categoryByName[parent] || "その他",
+          months: Object.entries(a.months).sort().map(([month, mv]) => ({ month, qty: mv.qty, amount: mv.amount, cost: Math.round(mv.cost) })),
+          days: Object.entries(a.days).sort().map(([d, dv]) => [d, dv.qty, dv.amount] as [string, number, number]),
+        })),
+      )
+      .sort((a, b) => b.amount - a.amount);
+
     const knownCost = products.filter((p) => p.hasCost).reduce((s, p) => s + p.cost, 0);
     const knownSales = products.filter((p) => p.hasCost).reduce((s, p) => s + p.amount, 0);
     const unknownSales = totalSales - knownSales;
@@ -293,6 +334,7 @@ export async function GET(req: NextRequest) {
           .sort((a, b) => a.weekday - b.weekday),
       },
       products,
+      variants,
       productCostCoverage: {
         // 原価表と突き合わせできた売上の割合。低いとき粗利は当てにならない
         knownSales, unknownSales, knownCost,

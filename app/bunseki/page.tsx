@@ -31,6 +31,13 @@ type Analytics = {
     /** [日, 数, 売上] */
     days: [string, number, number][];
   }[];
+  /** 種類ごと（ワッフルのチョコ・抹茶など）。種類が2つ以上ある商品だけ */
+  variants?: {
+    parent: string; variant: string; name: string; qty: number; amount: number; cost: number;
+    category: string;
+    months: { month: string; qty: number; amount: number; cost?: number }[];
+    days: [string, number, number][];
+  }[];
   productCostCoverage: {
     knownSales: number; unknownSales: number; knownCost: number; estGross: number;
   };
@@ -212,7 +219,7 @@ export default function Bunseki() {
           {tab === "sheet" && (
             <div className="card">
               <div className="cat-title">商品の表（カテゴリー別・月ごと）</div>
-              <ProductSheet products={data.products} />
+              <ProductSheet products={data.products} variants={data.variants ?? []} />
             </div>
           )}
 
@@ -220,7 +227,7 @@ export default function Bunseki() {
           {tab === "graph" && (
             <div className="card">
               <div className="cat-title">商品のグラフ</div>
-              <ProductChart products={data.products} openDays={data.sales.byDay.map((d) => d.day)} />
+              <ProductChart products={data.products} variants={data.variants ?? []} openDays={data.sales.byDay.map((d) => d.day)} />
             </div>
           )}
 
