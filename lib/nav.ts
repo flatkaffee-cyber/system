@@ -56,6 +56,7 @@ export const NAV_GROUPS: NavGroup[] = [
     { href: "/sales", label: "売上" },
     { href: "/uber", label: "Uber Eats" },
     { href: "/bunseki", label: "分析" },
+    { href: "/reports", label: "レポート" },
     { href: "/accounting", label: "経営" },
   ]),
   {

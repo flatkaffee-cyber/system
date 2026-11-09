@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>flat. 商品の売れ行き 11月</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Zen+Old+Mincho:wght@600;700&display=swap">
+<style>
+/* レイアウト: 1段の読み物。要点 → 前提 → 伸びている/落ちている表 → 売れていない → 決めたいこと */
+:root {
+  --bg: #fbfaf8;
+  --paper: #ffffff;
+  --ink: #23201c;
+  --sub: #5f5950;
+  --line: #e6e1d9;
+  --accent: #9a4f17;
+  --accent-soft: #f6ebe1;
+  --up: #1e7b3c;
+  --up-soft: #e5f3ea;
+  --down: #b23a2c;
+  --down-soft: #fbe9e6;
+  --bar: #c9b8a6;
+  --f-display: "Zen Old Mincho", "Hiragino Mincho ProN", "Yu Mincho", serif;
+  --f-body: "BIZ UDPGothic", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1b1916; --paper: #24211d; --ink: #efebe4; --sub: #b9b1a5; --line: #3a352f;
+    --accent: #e39a5c; --accent-soft: #3a2a1d; --up: #6fcf8f; --up-soft: #1f3326;
+    --down: #f08a7c; --down-soft: #3d2420; --bar: #6b5f52; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #1b1916; --paper: #24211d; --ink: #efebe4; --sub: #b9b1a5; --line: #3a352f;
+  --accent: #e39a5c; --accent-soft: #3a2a1d; --up: #6fcf8f; --up-soft: #1f3326;
+  --down: #f08a7c; --down-soft: #3d2420; --bar: #6b5f52; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--f-body);
+  font-size: 15px; line-height: 1.75;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 56px;
+}
+main { max-width: 760px; margin: 0 auto; display: grid; gap: 34px; }
+h1, h2 { font-family: var(--f-display); text-wrap: balance; line-height: 1.35; margin: 0; }
+h1 { font-size: 28px; }
+h2 { font-size: 20px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+h3 { font-size: 15px; margin: 0; }
+p { margin: 0; max-width: 65ch; }
+.meta { color: var(--sub); font-size: 13px; margin-top: 6px; }
+section { display: grid; gap: 14px; }
+.lead { display: grid; gap: 10px; padding: 16px 18px; background: var(--accent-soft); border-radius: 10px; }
+.lead ul { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; }
+ul { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; }
+.note { font-size: 13px; color: var(--sub); }
+.tablewrap { overflow-x: auto; background: var(--paper); border: 1px solid var(--line); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+th, td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+thead th { font-weight: 700; color: var(--sub); font-size: 12.5px; background: var(--paper); }
+tbody tr:last-child td { border-bottom: 0; }
+td.name { font-weight: 700; }
+.cell { display: inline-flex; align-items: center; gap: 6px; justify-content: flex-end; }
+.cell i { display: inline-block; height: 6px; border-radius: 3px; background: var(--bar); }
+.pill { display: inline-block; font-size: 12px; font-weight: 700; padding: 1px 8px; border-radius: 99px; }
+.pill.up { color: var(--up); background: var(--up-soft); }
+.pill.down { color: var(--down); background: var(--down-soft); }
+.pill.flat { color: var(--sub); background: var(--line); }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.box { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 8px; min-width: 0; }
+.ask { display: grid; gap: 12px; counter-reset: q; }
+.ask li { list-style: none; position: relative; padding-left: 2.2em; }
+.ask li::before { counter-increment: q; content: counter(q); position: absolute; left: 0; top: 1px; width: 1.6em; height: 1.6em; border-radius: 99px; background: var(--accent); color: var(--paper); font-weight: 700; font-size: 13px; display: grid; place-items: center; }
+.ask { padding: 0; margin: 0; }
+strong.num { font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+
+
+<main>
+  <p class="note"><a href="/reports" style="color:var(--accent)">← システムのレポート一覧に戻る</a></p>
+  <header>
+    <h1>商品の売れ行き（8月〜11月）</h1>
+    <p class="meta">来週の全体MTG用 ／ 2026年8月8日〜11月8日の店の通常営業 81日（イベントの時間は除く）／ Squareの注文から集計（カード会計の品目も入れた数字・11/9更新）</p>
+  </header>
+
+  <div class="lead">
+    <h3>要点</h3>
+    <ul>
+      <li><strong>ホットサンドが落ちている。</strong>クラシックとガーデンを合わせて1日 7.3個（8月）→ 5.0個（10月）→ 3.0個（11月）。特にガーデンは 3.2 → 1.0。仕込み品なので、売れ残りと期限切れに直結する。</li>
+      <li><strong>ワッフルは落ちていない。</strong>単品は減ったが、その分スペシャルワッフルサンデーに移っている。2つを合わせると1日 6〜7個でずっと同じ。サンデーのほうが200円高いので、移っているのは良い動き。</li>
+      <li><strong>カフェラテは一番安定している。</strong>1日 3.0〜3.6個で、3か月の数（255杯）は全商品で2番目。アメリカーノも11月に伸びている。</li>
+      <li><strong>夜のフードとカクテルがほとんど出ていない。</strong>夜フードは3か月で全部合わせて約65品（1日 0.8品）。カクテルは3か月で1〜2杯の品が十数種ある。</li>
+    </ul>
+  </div>
+
+  <section>
+    <h2>1日あたりの数（月ごと）</h2>
+    <p class="note">その月の営業日の数で割った数です（8月 23日・9月 24日・10月 27日・11月 7日）。営業日の数が違う月どうしも比べられます。11月は1〜8日だけなので、少しぶれます。</p>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>商品</th><th>8月</th><th>9月</th><th>10月</th><th>11月</th><th>動き</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="name">ワッフル</td><td>6.1</td><td>4.5</td><td>4.0</td><td>3.4</td><td><span class="pill down">減</span></td></tr>
+          <tr><td class="name">スペシャルワッフルサンデー</td><td>0.3</td><td>2.5</td><td>2.5</td><td>2.7</td><td><span class="pill up">増</span></td></tr>
+          <tr><td>　└ ワッフル＋サンデーの合計</td><td>6.4</td><td>7.1</td><td>6.6</td><td>6.1</td><td><span class="pill flat">横ばい</span></td></tr>
+          <tr><td class="name">クラシックメルト</td><td>4.1</td><td>2.5</td><td>3.0</td><td>2.0</td><td><span class="pill down">減</span></td></tr>
+          <tr><td class="name">ガーデンメルト</td><td>3.2</td><td>2.9</td><td>2.1</td><td>1.0</td><td><span class="pill down">減</span></td></tr>
+          <tr><td class="name">カフェラテ</td><td>3.0</td><td>3.3</td><td>3.1</td><td>3.6</td><td><span class="pill flat">安定</span></td></tr>
+          <tr><td class="name">アメリカーノ</td><td>1.7</td><td>1.1</td><td>1.4</td><td>2.1</td><td><span class="pill up">増</span></td></tr>
+          <tr><td class="name">抹茶ラテ</td><td>1.3</td><td>1.4</td><td>0.9</td><td>0.6</td><td><span class="pill down">減</span></td></tr>
+          <tr><td class="name">チョコレートミルク</td><td>1.6</td><td>0.8</td><td>1.3</td><td>1.0</td><td><span class="pill flat">横ばい</span></td></tr>
+          <tr><td class="name">ドリンクセット（10月から）</td><td>—</td><td>—</td><td>1.7</td><td>1.4</td><td><span class="pill flat">横ばい</span></td></tr>
+          <tr><td class="name">ティーカプチーノ（11月から）</td><td>—</td><td>—</td><td>—</td><td>1.3</td><td><span class="pill up">新</span></td></tr>
+          <tr><td class="name">ドリップコーヒー</td><td>0.2</td><td>1.2</td><td>0.4</td><td>0.7</td><td><span class="pill flat">ばらつき</span></td></tr>
+          <tr><td class="name">梅ライムソーダ</td><td>1.7</td><td>0.4</td><td>0.8</td><td>0</td><td><span class="pill down">減</span></td></tr>
+          <tr><td class="name">柚子レモネード</td><td>0.4</td><td>0.5</td><td>0.9</td><td>0.3</td><td><span class="pill flat">横ばい</span></td></tr>
+          <tr><td class="name">アフォガート</td><td>0.5</td><td>0.4</td><td>0.1</td><td>0.4</td><td><span class="pill flat">少ない</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">コールドブリューは4〜9月だけの商品なので外しました（8月 2.6 → 9月 1.9）。梅ライムソーダと抹茶ラテが減っているのは、寒くなった影響もありそうです。ホットサンドの数には、セットの中のホットサンドも入っています。11/8 は彦根シティマラソンの出店の日で、店の数字は少なめです。</p>
+  </section>
+
+  <section>
+    <h2>ワッフルのフレーバー</h2>
+    <div class="cols">
+      <div class="box">
+        <h3>ワッフル（単品）</h3>
+        <ul>
+          <li>プレーン 138個（42%）</li>
+          <li>チョコ 114個（35%）</li>
+          <li>抹茶 76個（23%）</li>
+        </ul>
+      </div>
+      <div class="box">
+        <h3>スペシャルワッフルサンデー</h3>
+        <ul>
+          <li>チョコ 45個（47%）</li>
+          <li>プレーン 31個（32%）</li>
+          <li>抹茶 20個（21%）</li>
+        </ul>
+      </div>
+    </div>
+    <p class="note">割合は、フレーバーが分かる分の中での割合です。11/9より前のカード会計はフレーバーが残っていないので、ワッフル 54個・サンデー 44個は分かりません。抹茶はどちらでも一番少なく、サンデーではチョコが一番人気です。</p>
+  </section>
+
+  <section>
+    <h2>3か月の合計（売上の多い順）</h2>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>商品</th><th>個数</th><th>売上</th><th>原価率</th></tr></thead>
+        <tbody>
+          <tr><td class="name">クラシックメルト</td><td>248</td><td><span class="cell"><i style="width:80px"></i>¥190,240</span></td><td>16.3%</td></tr>
+          <tr><td class="name">カフェラテ</td><td>255</td><td><span class="cell"><i style="width:70px"></i>¥165,801</span></td><td>12.9%</td></tr>
+          <tr><td class="name">ワッフル</td><td>382</td><td><span class="cell"><i style="width:69px"></i>¥163,459</span></td><td>8.2%</td></tr>
+          <tr><td class="name">ガーデンメルト</td><td>206</td><td><span class="cell"><i style="width:66px"></i>¥157,390</span></td><td>21.3%</td></tr>
+          <tr><td class="name">スペシャルワッフルサンデー</td><td>156</td><td><span class="cell"><i style="width:42px"></i>¥98,776</span></td><td>17.7%</td></tr>
+          <tr><td class="name">アメリカーノ</td><td>117</td><td><span class="cell"><i style="width:27px"></i>¥64,322</span></td><td>7.5%</td></tr>
+          <tr><td class="name">抹茶ラテ</td><td>91</td><td><span class="cell"><i style="width:25px"></i>¥59,195</span></td><td>16.0%</td></tr>
+          <tr><td class="name">コールドブリュー</td><td>117</td><td><span class="cell"><i style="width:25px"></i>¥58,462</span></td><td>7.4%</td></tr>
+          <tr><td class="name">チョコレートミルク</td><td>97</td><td><span class="cell"><i style="width:22px"></i>¥53,304</span></td><td>12.2%</td></tr>
+          <tr><td class="name">梅ライムソーダ</td><td>71</td><td><span class="cell"><i style="width:18px"></i>¥43,325</span></td><td>14.1%</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">店の通常営業の売上は3か月で ¥1,651,700。ホットサンド2種で約21%、ワッフルとサンデーで約16%、上の10品で約64%です。サンデーには前の名前の「スペシャルワッフルサンデー（チョコ/抹茶）」16個を足しています。ほかに物販の flat. Tシャツが8枚 ¥52,000。</p>
+  </section>
+
+  <section>
+    <h2>売れていないもの</h2>
+    <div class="cols">
+      <div class="box">
+        <h3>夜のフード（3か月の数）</h3>
+        <ul>
+          <li>マッシュポテトの生ハム包み 18</li>
+          <li>ブルーチーズと生ハムの盛り合わせ 12（2種の名前を合わせた数）</li>
+          <li>マッシュポテト 11</li>
+          <li>オリーブ・ザワークラウト・マッシュポテトの3種盛り 7（9月から出ていない）</li>
+          <li>Wabi-Sabi Shrimp 6</li>
+          <li>アヒージョ 5（提供停止にした）</li>
+          <li>バジルソーセージとザワークラウト 3</li>
+        </ul>
+        <p class="note">盛り合わせとアヒージョは原価率が47%と高い。</p>
+      </div>
+      <div class="box">
+        <h3>お酒</h3>
+        <ul>
+          <li>よく出るのは ドリンク3杯のお得セット 28・ハイボール 27・ハイネケン 16・コロナ 15・梅酒モヒート 15・レモンサワー 14</li>
+          <li>3か月で1〜2杯：ジントニック、ジンソーダ、ジンバック、梅サワー、紅茶サワー、緑茶ハイ、烏龍茶ハイ、ライムサワー、アマレットジンジャーなど</li>
+          <li>0杯：エスプレッソマティーニ、白ワイン</li>
+          <li>オリジナルカクテルのマイアミサンセット、アペロールマルガリータ、ココナッツベリークラウドは、9月から出ていない</li>
+        </ul>
+      </div>
+    </div>
+    <p class="note">メニューにあるのに0個の「チョコチップワッフル」「抹茶ワッフル」「ココアバナナ／ベリーバナナプロテイン」は、ワッフルやプロテインスムージーの種類として数えられているので、売れていないわけではありません。</p>
+  </section>
+
+  <section>
+    <h2>数字を見るうえでの注意</h2>
+    <ul>
+      <li>カード会計の品目は、レジに金額だけ渡す仕組みのため、システムの写しから数えています。写しが無い「金額だけの注文」は ¥36,450（約2%）だけ残っています。</li>
+      <li>同じ商品が別の名前で入っています（柚子レモネード／ゆずレモネード、Wabi-Sabi Shrimp／WABI-SABI Shrimp、ココナッツベリークラウド／ベリーココナッツクラウド、ジャスミンハイ／ジャスミン茶ハイ、ウーロンハイ／烏龍茶ハイ、キリン一番搾りが2つ）。上の数は、分かる範囲で足してあります。</li>
+      <li>シュガードーナツ（11/6から）は11/9までSquareに登録がなく、この集計に入っていません。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>MTGで決めたいこと（案）</h2>
+    <ol class="ask">
+      <li><strong>ホットサンドの売り方。</strong>ガーデンメルトを中心に、セットで勧める・ポップを出す・試食を出すなど、1日 3個 → 5個に戻す手を決める。戻らなければ仕込みの量を減らす。</li>
+      <li><strong>夜のフードを絞る。</strong>出ている2〜3品（生ハム包み・マッシュポテト・盛り合わせ）に絞り、9月から出ていない3種盛りは止めるか作り直す。</li>
+      <li><strong>お酒のメニューを絞る。</strong>3か月で0〜2杯の品を整理して、出ている品を前に出す。</li>
+      <li><strong>冬のドリンク。</strong>抹茶ラテと梅ライムソーダが減り、アメリカーノとティーカプチーノが伸びている。冬に押すドリンクを決める。</li>
+      <li><strong>抹茶ワッフル。</strong>ワッフルでもサンデーでも一番少ない（2割強）。残すか、季節の味に替えるかを決める。</li>
+    </ol>
+  </section>
+
+  <p class="note">商品をカテゴリーごとに月で並べた表と、商品を選んで月・週・曜日で見るグラフは、システムの「数字 → 分析」の「表」「グラフ」タブで見られます。</p>
+</main>
+
+</body>
+</html>
