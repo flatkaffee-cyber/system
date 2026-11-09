@@ -51,6 +51,7 @@ export const NAV_GROUPS: NavGroup[] = [
   ]),
   one("suji", "数字", [
     { href: "/seiseki", label: "今月の成績" },
+    { href: "/keikaku", label: "売上計画" },
     { href: "/monthly", label: "月次レポート" },
     { href: "/sales", label: "売上" },
     { href: "/uber", label: "Uber Eats" },
