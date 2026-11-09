@@ -13,7 +13,7 @@ export type SqOrder = {
   tenders?: unknown[];
   line_items?: SqLine[];
 };
-export type PosPair = { posId: string; sysId: string; items: { name: string; qty: number; amount: number; variation?: string }[] };
+export type PosPair = { posId: string; sysId: string; items: { name: string; qty: number; amount: number; variation?: string; note?: string }[] };
 
 /** レジで金額だけ打った注文か（品目に名前が1つも無い） */
 export function isAmountOnly(o: SqOrder): boolean {
@@ -47,7 +47,7 @@ export function pairPosOrders(sysOrders: SqOrder[], posOrders: SqOrder[]): PosPa
       sysId: hit.s.id,
       items: (hit.s.line_items ?? [])
         .filter((li) => li.name)
-        .map((li) => ({ name: String(li.name), qty: parseInt(li.quantity ?? "1") || 1, amount: li.total_money?.amount ?? 0, ...(li.variation_name ? { variation: String(li.variation_name) } : {}) })),
+        .map((li) => ({ name: String(li.name), qty: parseInt(li.quantity ?? "1") || 1, amount: li.total_money?.amount ?? 0, ...(li.variation_name ? { variation: String(li.variation_name) } : {}), ...(li.note ? { note: String(li.note) } : {}) })),
     });
   }
   return pairs;

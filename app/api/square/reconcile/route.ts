@@ -158,7 +158,7 @@ export async function POST(req: NextRequest) {
           if (isAmountOnly(hit)) {
             const items = (o.line_items ?? [])
               .filter((li) => li.name)
-              .map((li) => ({ name: String(li.name), qty: parseInt(li.quantity ?? "1") || 1, amount: li.total_money?.amount ?? 0, ...(li.variation_name ? { variation: String(li.variation_name) } : {}) }));
+              .map((li) => ({ name: String(li.name), qty: parseInt(li.quantity ?? "1") || 1, amount: li.total_money?.amount ?? 0, ...(li.variation_name ? { variation: String(li.variation_name) } : {}), ...(li.note ? { note: String(li.note) } : {}) }));
             if (items.length) await saveFix(hit.id, items).catch(() => {});
           }
         }

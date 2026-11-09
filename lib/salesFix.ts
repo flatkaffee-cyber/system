@@ -22,6 +22,8 @@ export type FixItem = {
   amount: number;
   /** 種類（ワッフルのチョコ・抹茶、Hot/Iceなど）。2026-11-09 から写す。前の分は無い */
   variation?: string;
+  /** 行のメモ。セットのドリンク（クラシックメルト／カフェラテICE）が入る。2026-11-09 から写す */
+  note?: string;
 };
 /** SquareのorderId → 実際に出した品目 */
 export type FixMap = Record<string, FixItem[]>;

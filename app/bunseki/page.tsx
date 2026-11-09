@@ -219,7 +219,11 @@ export default function Bunseki() {
           {tab === "sheet" && (
             <div className="card">
               <div className="cat-title">商品の表（カテゴリー別・月ごと）</div>
-              <ProductSheet products={data.products} variants={data.variants ?? []} />
+              <ProductSheet
+                products={data.products}
+                variants={data.variants ?? []}
+                openDays={Object.fromEntries(data.sales.byMonth.map((m) => [m.month, m.days]))}
+              />
             </div>
           )}
 

@@ -34,7 +34,37 @@ export type SheetVariant = {
   months: { month: string; qty: number; amount: number; cost?: number }[];
 };
 
-export default function ProductSheet({ products, variants = [] }: { products: SheetProduct[]; variants?: SheetVariant[] }) {
+// 月ごとの「1日あたり」を、その商品の平均（売り始めた月から）と比べた色。
+// 2026-11-09 坂本さん「平均を上げているのは緑、めっちゃ上げているのは青、普通は黒、やや下げているのは黄色、めっちゃ下げているのは赤」
+type Trend = "up2" | "up" | "flat" | "down" | "down2";
+const TREND: Record<Trend, { label: string; fg: string; bg: string }> = {
+  up2: { label: "とても上げている（平均の1.5倍以上）", fg: "#1d4f9c", bg: "#e3edfb" },
+  up: { label: "上げている（1.15〜1.5倍）", fg: "#1e7b3c", bg: "#e5f3ea" },
+  flat: { label: "ふつう（±15%）", fg: "var(--ink)", bg: "transparent" },
+  down: { label: "やや下げている（0.5〜0.85倍）", fg: "#8a6400", bg: "#fdf3cf" },
+  down2: { label: "とても下げている（0.5倍より下）", fg: "#b23a2c", bg: "#fbe5e2" },
+};
+function trendOf(months: string[], openDays: Record<string, number>, value: (m: string) => number, m: string): Trend | null {
+  const first = months.find((mm) => value(mm) > 0);
+  if (!first || m < first || !openDays[m]) return null;
+  const active = months.filter((mm) => mm >= first && openDays[mm]);
+  const days = active.reduce((s, mm) => s + openDays[mm], 0);
+  const total = active.reduce((s, mm) => s + value(mm), 0);
+  if (active.length < 2 || days === 0 || total === 0) return null;
+  const r = value(m) / openDays[m] / (total / days);
+  return r >= 1.5 ? "up2" : r >= 1.15 ? "up" : r > 0.85 ? "flat" : r >= 0.5 ? "down" : "down2";
+}
+
+export default function ProductSheet({
+  products,
+  variants = [],
+  openDays = {},
+}: {
+  products: SheetProduct[];
+  variants?: SheetVariant[];
+  /** 月 → 営業日の数。色を付けるのに使う（1日あたりで比べる） */
+  openDays?: Record<string, number>;
+}) {
   const [showVariants, setShowVariants] = useState(true);
   const variantsOf = useMemo(() => {
     const m = new Map<string, SheetVariant[]>();
@@ -82,6 +112,14 @@ export default function ProductSheet({ products, variants = [] }: { products: Sh
   }, [products, rankBy, hideZero]);
 
   const grand = groups.reduce((s, g) => s + g.total.amount, 0);
+  const [showTrend, setShowTrend] = useState(true);
+  // 数・売上のセルに色を付ける（原価には付けない）
+  const tint = (byMonth: Record<string, { qty: number; amount: number } | undefined>, c: Col, m: string): React.CSSProperties => {
+    if (!showTrend || c === "cost") return {};
+    const t = trendOf(months, openDays, (mm) => (byMonth[mm]?.[c] as number | undefined) ?? 0, m);
+    if (!t || t === "flat") return {};
+    return { color: TREND[t].fg, background: TREND[t].bg, fontWeight: 700 };
+  };
   const fmt = (c: Col, v: number) => (c === "qty" ? num(v) : v === 0 && c === "cost" ? "—" : yen(v));
   const toggleCol = (c: Col) =>
     setCols((cur) => (cur.includes(c) ? (cur.length > 1 ? cur.filter((x) => x !== c) : cur) : (["qty", "amount", "cost"] as Col[]).filter((x) => cur.includes(x) || x === c)));
@@ -143,7 +181,19 @@ export default function ProductSheet({ products, variants = [] }: { products: Sh
         {variants.length > 0 && (
           <button style={chip(showVariants)} onClick={() => setShowVariants(!showVariants)}>種類（フレーバー）ごとに出す</button>
         )}
+        <button style={chip(showTrend)} onClick={() => setShowTrend(!showTrend)}>平均と比べて色を付ける</button>
       </div>
+      {showTrend && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 12px", fontSize: 12, alignItems: "center" }}>
+          {(Object.keys(TREND) as Trend[]).map((t) => (
+            <span key={t} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <span style={{ display: "inline-block", minWidth: 28, textAlign: "center", padding: "1px 6px", borderRadius: 4, fontWeight: 700, color: TREND[t].fg, background: t === "flat" ? "var(--line)" : TREND[t].bg }}>12</span>
+              {TREND[t].label}
+            </span>
+          ))}
+          <span style={{ color: "var(--muted)" }}>月ごとの「1日あたり」を、その商品の平均（売り始めた月から）と比べています。</span>
+        </div>
+      )}
 
       {/* 商品の表 */}
       <div style={{ overflow: "auto", maxHeight: "75vh", border: "1px solid var(--line)", borderRadius: 8 }}>
@@ -189,7 +239,7 @@ export default function ProductSheet({ products, variants = [] }: { products: Sh
                   {months.map((m) => (
                     <Fragment key={m}>
                       {cols.map((c, ci) => (
-                        <td key={c} style={{ ...cell, ...monthEdge(ci), fontWeight: 700 }}>{fmt(c, g.byMonth[m]?.[c] ?? 0)}</td>
+                        <td key={c} style={{ ...cell, ...monthEdge(ci), fontWeight: 700, ...tint(g.byMonth, c, m) }}>{fmt(c, g.byMonth[m]?.[c] ?? 0)}</td>
                       ))}
                     </Fragment>
                   ))}
@@ -213,7 +263,7 @@ export default function ProductSheet({ products, variants = [] }: { products: Sh
                           {cols.map((c, ci) => {
                             const v = (by[m]?.[c] as number | undefined) ?? 0;
                             return (
-                              <td key={c} style={{ ...cell, ...monthEdge(ci), color: v === 0 ? "var(--muted)" : undefined }}>
+                              <td key={c} style={{ ...cell, ...monthEdge(ci), color: v === 0 ? "var(--muted)" : undefined, ...tint(by, c, m) }}>
                                 {v === 0 ? "·" : fmt(c, v)}
                               </td>
                             );
@@ -237,7 +287,7 @@ export default function ProductSheet({ products, variants = [] }: { products: Sh
                             <Fragment key={m}>
                               {cols.map((c, ci) => {
                                 const val = (vb[m]?.[c] as number | undefined) ?? 0;
-                                return <td key={c} style={{ ...cell, ...monthEdge(ci), fontSize: 12 }}>{val === 0 ? "·" : fmt(c, val)}</td>;
+                                return <td key={c} style={{ ...cell, ...monthEdge(ci), fontSize: 12, ...tint(vb, c, m) }}>{val === 0 ? "·" : fmt(c, val)}</td>;
                               })}
                             </Fragment>
                           ))}

@@ -59,6 +59,7 @@ async function copyItemsToPosOrder(payment: any, ourOrderId: string, ourOrder: a
       qty: parseInt(li.quantity) || 1,
       amount: li.total_money?.amount ?? 0,
       ...(li.variation_name ? { variation: String(li.variation_name) } : {}),
+      ...(li.note ? { note: String(li.note) } : {}),
     }));
   if (!items.length) return false;
   try {
