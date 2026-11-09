@@ -746,6 +746,20 @@ export default function OpeningPage() {
               })}
             </div>
           )}
+          {t.id === "stockroom-check" && (
+            <div onClick={(e) => e.stopPropagation()}>
+              <Link
+                href="/stockroom"
+                style={{
+                  display: "inline-block", marginTop: 7, fontSize: 13, fontWeight: 700,
+                  padding: "8px 14px", borderRadius: 8, textDecoration: "none",
+                  background: "var(--accent)", color: "#fff",
+                }}
+              >
+                📦 ストック確認を開く
+              </Link>
+            </div>
+          )}
           {t.orderList && (
             <div onClick={(e) => e.stopPropagation()}>
               <Link
