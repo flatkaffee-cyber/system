@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Nav from "@/components/Nav";
+import NippoCard from "@/components/NippoCard";
 import PrepGuide from "@/components/PrepGuide";
 
 // 出勤したらやることのチェックリスト。日付が変わればまっさらに戻る。
@@ -1048,6 +1049,9 @@ export default function OpeningPage() {
           </div>
         );
       })}
+
+      {/* 日報。その日シフトに入った人ごとに、書いたかどうかと中身 */}
+      {!loading && date && <NippoCard date={date} shifts={kin?.shifts ?? []} />}
 
       <p className="hint" style={{ textAlign: "center", marginTop: 12 }}>
         ※ チェックは<strong>朝6時</strong>にリセットされます。深夜0時をまたいでも、<br />
