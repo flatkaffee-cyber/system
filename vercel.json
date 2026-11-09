@@ -5,6 +5,10 @@
       "schedule": "0 21 * * *"
     },
     {
+      "path": "/api/cron/check-remind",
+      "schedule": "0,30 1,7,9,16 * * *"
+    },
+    {
       "path": "/api/cron/shift-remind",
       "schedule": "0 1 * * 4"
     },
