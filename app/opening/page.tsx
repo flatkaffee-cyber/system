@@ -291,8 +291,11 @@ export default function OpeningPage() {
     }
   };
 
+  // 期限を入れ直す欄を開いている作業（早いパックを使い切って次に移ったときなど）
+  const [editExpiry, setEditExpiry] = useState<string | null>(null);
   const saveExpiryDate = async (taskId: string, date: string) => {
     if (!date) return;
+    setEditExpiry(null);
     try {
       const res = await fetch("/api/opening", {
         method: "POST",
@@ -555,12 +558,12 @@ export default function OpeningPage() {
             const md = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
             return (
               <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 8 }}>
-                {t.answer === t.expiry.on && (
+                {(t.answer === t.expiry.on || editExpiry === t.id) && (
                   <label style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 13, fontWeight: 700 }}>
-                    買った{t.expiry.label}の消費期限
+                    {t.expiry.label}のいちばん近い消費期限
                     <input
                       type="date"
-                      defaultValue={ex && ex.setOn === today ? ex.date : ""}
+                      defaultValue={ex && (ex.setOn === today || editExpiry === t.id) ? ex.date : ""}
                       onChange={(e) => saveExpiryDate(t.id, e.target.value)}
                       style={{ width: "auto", padding: "6px 8px", fontSize: 14 }}
                     />
@@ -570,6 +573,17 @@ export default function OpeningPage() {
                   <div style={{ marginTop: 6, fontSize: 12.5, fontWeight: 700, color: left < 0 ? "#c0392b" : left <= 3 ? "#b9770e" : "var(--muted)" }}>
                     いまの{t.expiry.label}の期限：{md(ex.date)}
                     {left < 0 ? `（${-left}日過ぎています）` : left === 0 ? "（今日まで）" : `（あと${left}日）`}
+                    {editExpiry !== t.id && t.answer !== t.expiry.on && (
+                      <button
+                        onClick={() => setEditExpiry(t.id)}
+                        style={{
+                          marginLeft: 8, padding: "2px 8px", fontSize: 11.5, fontWeight: 700, borderRadius: 6,
+                          border: "1px solid var(--line)", background: "#fff", color: "var(--ink)", cursor: "pointer",
+                        }}
+                      >
+                        変える
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
