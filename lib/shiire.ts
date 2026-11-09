@@ -43,6 +43,8 @@ export type PurchaseStat = {
   /** 周期の信頼度。開業準備中にまとめ買いしただけの物を「定期購入」と誤認しないための指標 */
   reliable: boolean;
   spanDays: number; // 初回購入から前回購入までの期間
+  /** 月ごとの金額（"2026-10" → 円）。仕入れのページの「毎月の金額」に出す */
+  months: Record<string, number>;
 };
 
 const DAY = 86_400_000;
@@ -69,6 +71,7 @@ export function analyzePurchases(
     dates: string[];
     amounts: number[];
     lastDate: string;
+    months: Record<string, number>;
   };
   const map = new Map<string, Acc>();
 
@@ -87,10 +90,13 @@ export function analyzePurchases(
           dates: [r.date],
           amounts: [l.amount || 0],
           lastDate: r.date,
+          months: { [r.date.slice(0, 7)]: l.amount || 0 },
         });
       } else {
         cur.dates.push(r.date);
         cur.amounts.push(l.amount || 0);
+        const mon = r.date.slice(0, 7);
+        cur.months[mon] = (cur.months[mon] ?? 0) + (l.amount || 0);
         if (r.date > cur.lastDate) {
           cur.lastDate = r.date;
           cur.displayName = l.name;
@@ -157,6 +163,7 @@ export function analyzePurchases(
       status,
       reliable,
       spanDays,
+      months: a.months,
     });
   }
 

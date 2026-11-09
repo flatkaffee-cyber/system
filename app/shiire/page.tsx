@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, Fragment } from "react";
 import Nav from "@/components/Nav";
 import InventorySheet from "@/components/InventorySheet";
 import VendorList from "@/components/VendorList";
+import PurchaseMonthly from "@/components/PurchaseMonthly";
 
 // 仕入先の発注ページ。1タップで飛べるようにここに置く。
 // 「お気に入り」「再購入」のように前に買ったものが並ぶページを優先する。
@@ -61,6 +62,8 @@ type Stat = {
   status: "overdue" | "soon" | "ok" | "unknown";
   reliable: boolean;
   spanDays: number;
+  /** 月ごとの金額（"2026-10" → 円） */
+  months?: Record<string, number>;
 };
 
 const LABEL: Record<Stat["status"], { text: string; color: string }> = {
@@ -101,7 +104,7 @@ export default function Shiire() {
   const [summary, setSummary] = useState<{ total: number; overdue: number; soon: number; tracked: number } | null>(null);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"need" | "all" | "vendors" | "sheet">("need");
+  const [tab, setTab] = useState<"need" | "all" | "monthly" | "vendors" | "sheet">("need");
   const [advice, setAdvice] = useState("");
   const [adviceBusy, setAdviceBusy] = useState(false);
   const [openName, setOpenName] = useState<string | null>(null);
@@ -172,7 +175,7 @@ export default function Shiire() {
   };
 
   return (
-    <div className="wrap">
+    <div className="wrap" style={tab === "all" || tab === "monthly" || tab === "need" ? { maxWidth: 1280 } : undefined}>
       <header>
         <h1>🛒 仕入れ</h1>
         <p>
@@ -246,6 +249,7 @@ export default function Shiire() {
           [
             ["need", `そろそろ (${need.length})`],
             ["all", `全品目 (${stats.length})`],
+            ["monthly", "📅 毎月の金額"],
             ["vendors", "🏪 仕入れ先別"],
             ["sheet", "📦 仕入れ表"],
           ] as const
@@ -256,6 +260,8 @@ export default function Shiire() {
         ))}
       </div>
 
+      {tab === "monthly" && loading && <div className="card" style={{ textAlign: "center", color: "var(--muted)" }}>集計中…</div>}
+      {tab === "monthly" && !loading && <PurchaseMonthly stats={stats} />}
       {tab === "sheet" && <InventorySheet />}
       {tab === "vendors" && <VendorList />}
 

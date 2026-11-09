@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { EXCLUDE_WINDOWS, excludeOf } from "@/lib/salesEvents";
 import { getReceipts, receiptLines } from "@/lib/receipts";
 import { getMenuItems } from "@/lib/menu";
+import { getFixes } from "@/lib/salesFix";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -74,10 +75,13 @@ export async function GET(req: NextRequest) {
     endD.setDate(endD.getDate() + 1);
     const endISO = endD.toISOString();
 
-    const [orders, receipts, menu] = await Promise.all([
+    const [orders, receipts, menu, itemFixes] = await Promise.all([
       fetchOrders(beginISO, endISO),
       getReceipts(),
       getMenuItems(),
+      // カード会計はSquareのレジに金額だけ渡すので、Square側の注文には品目が残らない。
+      // 会計のときに写しておいた品目（lib/salesFix）で置き換える。売上の画面と同じやり方
+      getFixes().catch(() => ({} as Awaited<ReturnType<typeof getFixes>>)),
     ]);
 
     // ── 売上side ──────────────────────────────
@@ -94,7 +98,7 @@ export async function GET(req: NextRequest) {
     // days: 商品ごとの日別の数と売上（分析ページのグラフで、月・週・曜日に束ね直す）
     type ProductAgg = {
       qty: number; amount: number; cost: number;
-      months: Record<string, { qty: number; amount: number }>;
+      months: Record<string, { qty: number; amount: number; cost: number }>;
       days: Record<string, { qty: number; amount: number }>;
     };
     const byProduct: Record<string, ProductAgg> = {};
@@ -103,9 +107,10 @@ export async function GET(req: NextRequest) {
       p.qty += qty;
       p.amount += amount;
       p.cost += cost;
-      const m = (p.months[day.slice(0, 7)] = p.months[day.slice(0, 7)] || { qty: 0, amount: 0 });
+      const m = (p.months[day.slice(0, 7)] = p.months[day.slice(0, 7)] || { qty: 0, amount: 0, cost: 0 });
       m.qty += qty;
       m.amount += amount;
+      m.cost += cost;
       const d = (p.days[day] = p.days[day] || { qty: 0, amount: 0 });
       d.qty += qty;
       d.amount += amount;
@@ -162,7 +167,11 @@ export async function GET(req: NextRequest) {
       byMonth[mon].count += 1;
       byMonth[mon].days.add(day);
 
-      for (const li of o.line_items || []) {
+      const fixed = itemFixes[o.id];
+      const lines: any[] = fixed?.length
+        ? fixed.map((f) => ({ name: f.name, quantity: String(f.qty), total_money: { amount: f.amount } }))
+        : o.line_items || [];
+      for (const li of lines) {
         const name = li.name || "不明";
         const qty = parseInt(li.quantity) || 1;
         addProduct(name, day, qty, li.total_money?.amount || 0, (costByName[name] || 0) * qty);
@@ -221,7 +230,7 @@ export async function GET(req: NextRequest) {
         category: categoryByName[name] || "その他",
         months: Object.entries(v.months)
           .sort()
-          .map(([month, mv]) => ({ month, ...mv })),
+          .map(([month, mv]) => ({ month, qty: mv.qty, amount: mv.amount, cost: Math.round(mv.cost) })),
         // [日, 数, 売上] の並び。量が多いので短い形で返す
         days: Object.entries(v.days)
           .sort()
