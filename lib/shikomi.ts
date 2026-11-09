@@ -48,7 +48,7 @@ export type Task = {
   steps?: string[];
   /** 仕込み方がまだ下書き（店のやり方を聞いて直す前）。画面に「下書き」と出す */
   stepsDraft?: boolean;
-  /** この名前のメニューが販売期間の外なら出さない（lib/menuAdmin の販売期間） */
+  /** この名前のメニューを売っていない（販売期間の外・提供停止）なら出さない（lib/menuAdmin） */
   menuName?: string;
   /** 使う材料（lib/stockroom の品目id）。在庫確認で「次の仕込みに要るもの」として並べる */
   needs?: string[];
@@ -293,6 +293,8 @@ export const TASKS: Task[] = [
     id: "ajillo-set",
     name: "アヒージョのセット仕込み",
     kind: "仕込み",
+    // メニュー編集でアヒージョを提供停止にしたら、仕込みの予定にも出さない
+    menuName: "アヒージョ",
     intervalDays: 7,
     shelfLifeDays: 14, // 冷凍。仮
     batch: 6, // 仮

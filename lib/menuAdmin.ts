@@ -161,15 +161,20 @@ export function inSeason(season: Season | undefined, month: number): boolean {
 export const jstMonth = () => new Date(Date.now() + 9 * 3600_000).getUTCMonth() + 1;
 
 /**
- * いま販売期間の外にある商品の名前。業務チェックで、売っていない商品の作業（コールドブリューの残数・仕込み）を止めるのに使う。
+ * いま売っていない商品の名前（販売期間の外か、メニュー編集で「提供停止」にしたもの）。
+ * 業務チェックで、売っていない商品の作業（コールドブリューの残数・アヒージョの仕込みなど）を止めるのに使う。
+ * 2026-11-09 提供停止も含めた（アヒージョを止めても仕込みの予定に残っていたため）。
  * Squareに届かないときは空（＝止めない）を返す
  */
 export async function offSeasonNames(month = jstMonth()): Promise<string[]> {
   try {
-    const seasons = await getSeasons();
-    if (!Object.keys(seasons).length) return [];
+    const [seasons, hidden] = await Promise.all([getSeasons(), getHidden()]);
+    if (!Object.keys(seasons).length && !hidden.length) return [];
+    const hiddenSet = new Set(hidden);
     const { listItems } = await import("@/lib/squareCatalog");
-    return (await listItems()).filter((i) => !inSeason(seasons[i.id], month)).map((i) => i.name);
+    return (await listItems())
+      .filter((i) => hiddenSet.has(i.id) || !inSeason(seasons[i.id], month))
+      .map((i) => i.name);
   } catch {
     return [];
   }
