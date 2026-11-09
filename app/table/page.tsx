@@ -94,12 +94,20 @@ const TABLES = [
   // T: 畳
   { id: "T1", label: "T1", area: "T", x: 52, y: 62, w: 34, h: 20 },
   // 2026-11-06 2階席（坂本さんの営業許可図面の配置から）。上の部屋に2卓とカウンター（2F-C）、下に2部屋
-  { id: "2F-1", label: "2F-1", area: "2F", floor: "2F", x: 10, y: 12, w: 26, h: 22 },
-  { id: "2F-2", label: "2F-2", area: "2F", floor: "2F", x: 42, y: 12, w: 26, h: 22 },
-  { id: "2F-C", label: "2F-C", area: "2F", floor: "2F", x: 74, y: 6, w: 18, h: 36 },
-  { id: "2F-3", label: "2F-3", area: "2F", floor: "2F", x: 14, y: 60, w: 28, h: 30 },
+  { id: "2F-1", label: "2F-1", area: "2F", floor: "2F", x: 8, y: 12, w: 24, h: 22 },
+  { id: "2F-2", label: "2F-2", area: "2F", floor: "2F", x: 35, y: 12, w: 24, h: 22 },
+  // 2026-11-09 2F-Cと2F-3は1つの席で4組まで別々に会計できるよう、4つに分けた（坂本さん）。
+  // 2F-C（カウンター）は縦に並べ、席名と金額を1行に出す
+  { id: "2F-C-1", label: "2F-C-1", area: "2F", floor: "2F", x: 62, y: 6, w: 30, h: 7.8, row: true },
+  { id: "2F-C-2", label: "2F-C-2", area: "2F", floor: "2F", x: 62, y: 15.4, w: 30, h: 7.8, row: true },
+  { id: "2F-C-3", label: "2F-C-3", area: "2F", floor: "2F", x: 62, y: 24.8, w: 30, h: 7.8, row: true },
+  { id: "2F-C-4", label: "2F-C-4", area: "2F", floor: "2F", x: 62, y: 34.2, w: 30, h: 7.8, row: true },
+  { id: "2F-3-1", label: "2F-3-1", area: "2F", floor: "2F", x: 7, y: 59, w: 18, h: 16 },
+  { id: "2F-3-2", label: "2F-3-2", area: "2F", floor: "2F", x: 27, y: 59, w: 18, h: 16 },
+  { id: "2F-3-3", label: "2F-3-3", area: "2F", floor: "2F", x: 7, y: 77, w: 18, h: 16 },
+  { id: "2F-3-4", label: "2F-3-4", area: "2F", floor: "2F", x: 27, y: 77, w: 18, h: 16 },
   { id: "2F-4", label: "2F-4", area: "2F", floor: "2F", x: 56, y: 62, w: 26, h: 24 },
-] as { id: string; label: string; area: string; floor?: "2F"; x: number; y: number; w: number; h: number }[];
+] as { id: string; label: string; area: string; floor?: "2F"; x: number; y: number; w: number; h: number; row?: boolean }[];
 const floorOf = (t: { floor?: "2F" }) => t.floor ?? "1F";
 
 const fmt = (n: number) => `¥${n.toLocaleString()}`;
@@ -156,8 +164,8 @@ export default function TablePage() {
   const [catOrder, setCatOrder] = useState<string[]>([]);
   const [mode, setMode] = useState<"day" | "night">(autoMode());
   const [selected, setSelected] = useState<string | null>(null);
-  // フロアマップに出す階
-  const [floor, setFloor] = useState<"1F" | "2F">("1F");
+  // 夜の画面で開いているところ。1階・2階のフロアマップか、カウンター会計（店内かテイクアウトかを選ぶ）
+  const [floor, setFloor] = useState<"1F" | "2F" | "counter">("1F");
   const [cart, setCart] = useState<CartItem[]>([]);
   // カウンター会計の値引き（円）。割引ボタンで足していく
   const [discount, setDiscount] = useState(0);
@@ -857,7 +865,7 @@ export default function TablePage() {
         <>
           {takeout && (
             <button
-              onClick={() => { setTakeout(false); setOrderType("店内"); setCart([]); setDiscount(0); setPayMode(false); setPaypayView(false); setPayResult(null); }}
+              onClick={() => { setTakeout(false); setFloor("1F"); setOrderType("店内"); setCart([]); setDiscount(0); setPayMode(false); setPaypayView(false); setPayResult(null); }}
               style={{
                 width: "100%", padding: "10px 0", marginBottom: 10, borderRadius: 10,
                 border: "1px solid var(--line)", background: "#fff", fontSize: 14,
@@ -1128,38 +1136,57 @@ export default function TablePage() {
       {/* ===== 夜モード ===== */}
       {mode === "night" && !takeout && (<>
 
-      {/* テイクアウト（夜でも受けられる） */}
-      <button
-        onClick={() => { setTakeout(true); setOrderType("テイクアウト"); setSelected(null); setCart([]); setDiscount(0); setPayMode(false); setPaypayView(false); setPayResult(null); }}
-        style={{
-          width: "100%", padding: "14px 0", marginBottom: 12, borderRadius: 10,
-          border: "none", background: "#8e6f4e", color: "#fff",
-          fontSize: 15, fontWeight: 700, cursor: "pointer",
-        }}
-      >
-        🥡 テイクアウト注文
-      </button>
-
-      {/* 階の切り替え。使用中の席の数も出す */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-        {(["1F", "2F"] as const).map((f) => {
-          const busy = TABLES.filter((t) => floorOf(t) === f && orderFor(t.id)).length;
+      {/* 1階・2階・カウンター会計の切り替え。階には使用中の席の数も出す */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+        {(["1F", "2F", "counter"] as const).map((f) => {
+          const busy = f === "counter" ? 0 : TABLES.filter((t) => floorOf(t) === f && orderFor(t.id)).length;
+          const on = floor === f;
           return (
             <button
               key={f}
-              onClick={() => setFloor(f)}
+              onClick={() => {
+                setFloor(f);
+                if (f === "counter") { setSelected(null); setCart([]); setDiscount(0); setPayMode(false); setPaypayView(false); setPayResult(null); }
+              }}
               style={{
                 flex: 1, padding: "10px 0", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer",
-                border: floor === f ? "2px solid var(--accent)" : "1px solid var(--line)",
-                background: floor === f ? "var(--accent-weak)" : "var(--card)", color: "var(--ink)",
+                border: on ? "2px solid var(--accent)" : "1px solid var(--line)",
+                background: on ? "var(--accent-weak)" : "var(--card)", color: "var(--ink)",
+                lineHeight: 1.3,
               }}
             >
-              {f === "1F" ? "1階" : "2階"}{busy > 0 ? `（使用中 ${busy}）` : ""}
+              {f === "1F" ? "1階" : f === "2F" ? "2階" : "カウンター会計"}
+              {busy > 0 && <span style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--muted)" }}>使用中 {busy}</span>}
             </button>
           );
         })}
       </div>
 
+      {/* カウンター会計：その場で会計する。店内かテイクアウトかを先に選ぶ（税率が変わる） */}
+      {floor === "counter" && (
+        <div className="card" style={{ padding: 14 }}>
+          <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 10, fontWeight: 600 }}>
+            お店で食べますか？ 持ち帰りますか？
+          </div>
+          <div style={{ display: "flex", gap: 10 }}>
+            {(["店内", "テイクアウト"] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => { setTakeout(true); setOrderType(t); setSelected(null); setCart([]); setDiscount(0); setPayMode(false); setPaypayView(false); setPayResult(null); }}
+                style={{
+                  flex: 1, padding: "22px 0", borderRadius: 12,
+                  border: "1px solid var(--line)", background: "var(--card)", color: "var(--ink)",
+                  fontSize: 17, fontWeight: 800, cursor: "pointer",
+                }}
+              >
+                {t === "店内" ? "🍽 店内" : "🥡 テイクアウト"}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {floor !== "counter" && (<>
       {/* フロアマップ */}
       <div className="card" style={{ padding: 12, position: "relative", aspectRatio: "0.91", overflow: "hidden" }}>
         {floor === "2F" && (
@@ -1212,12 +1239,13 @@ export default function TablePage() {
                 background: isOccupied ? "var(--accent)" : "var(--card)",
                 color: isOccupied ? "#fff" : "var(--ink)",
                 display: "flex",
-                flexDirection: "column",
+                flexDirection: t.row ? "row" : "column",
                 alignItems: "center",
                 justifyContent: "center",
+                gap: t.row ? 6 : 0,
                 cursor: "pointer",
                 padding: 0,
-                fontSize: 14,
+                fontSize: t.id.length > 4 ? 13 : 14,
                 fontWeight: 700,
                 transition: "all 0.15s",
                 boxShadow: isSelected ? "0 0 0 2px var(--accent-weak)" : "none",
@@ -1225,7 +1253,7 @@ export default function TablePage() {
             >
               {t.label}
               {isOccupied && (
-                <span style={{ fontSize: 10, fontWeight: 500, marginTop: 2 }}>
+                <span style={{ fontSize: 10, fontWeight: 500, marginTop: t.row ? 0 : 2 }}>
                   {fmt(order.total)}
                 </span>
               )}
@@ -1252,6 +1280,8 @@ export default function TablePage() {
           注文中
         </span>
       </div>
+
+      </>)}
 
       {/* 選択中のテーブル */}
       {selected && (
