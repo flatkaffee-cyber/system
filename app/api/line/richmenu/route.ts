@@ -167,3 +167,52 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "エラー" }, { status: 500 });
   }
 }
+
+// PUT { name, chatBarText, size, areas, imageBase64, replaceId? }
+//   → ボタンの数や位置を変えた新しいリッチメニューを作り、全員の既定にする。replaceId があれば古いほうを消す。
+//   2026-11-12 「イベント申込」1つだったメニューを、「イベント申込」「スタンプカード」の2つに分けるときに足した
+export async function PUT(req: NextRequest) {
+  try {
+    const b = (await req.json()) as {
+      name?: string;
+      chatBarText?: string;
+      size?: { width: number; height: number };
+      areas?: { bounds: { x: number; y: number; width: number; height: number }; action: Record<string, unknown> }[];
+      imageBase64?: string;
+      replaceId?: string;
+    };
+    if (!b.name || !b.chatBarText || !b.size || !b.areas?.length || !b.imageBase64) {
+      return NextResponse.json({ error: "name・chatBarText・size・areas・imageBase64 が必要です" }, { status: 400 });
+    }
+    const created = await fetch(`${API}/richmenu`, {
+      method: "POST",
+      headers: hdrs(),
+      body: JSON.stringify({ size: b.size, selected: true, name: b.name, chatBarText: b.chatBarText, areas: b.areas }),
+    });
+    const cd = await created.json();
+    if (!created.ok) {
+      return NextResponse.json({ error: cd.message || `作成に失敗(${created.status})`, details: cd }, { status: created.status });
+    }
+    const newId = cd.richMenuId as string;
+    const up = await fetch(`https://api-data.line.me/v2/bot/richmenu/${newId}/content`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`, "Content-Type": "image/png" },
+      body: new Uint8Array(Buffer.from(b.imageBase64, "base64")),
+    });
+    if (!up.ok) {
+      // 画像が入らなかったメニューは使えないので消す（今のメニューはそのまま）
+      await fetch(`${API}/richmenu/${newId}`, { method: "DELETE", headers: hdrs() });
+      return NextResponse.json({ error: `画像の登録に失敗(${up.status}): ${(await up.text()).slice(0, 200)}` }, { status: 500 });
+    }
+    const def = await fetch(`${API}/user/all/richmenu/${newId}`, { method: "POST", headers: hdrs() });
+    if (!def.ok) {
+      return NextResponse.json({ error: `既定にできませんでした(${def.status})`, newId }, { status: 500 });
+    }
+    if (b.replaceId && b.replaceId !== newId) {
+      await fetch(`${API}/richmenu/${b.replaceId}`, { method: "DELETE", headers: hdrs() });
+    }
+    return NextResponse.json({ ok: true, id: newId });
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : "エラー" }, { status: 500 });
+  }
+}
