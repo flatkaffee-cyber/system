@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { SET_NAMES, parseSetNote } from "@/lib/setMenu";
 import { getFixes } from "@/lib/salesFix";
 
 export const runtime = "nodejs";
@@ -285,17 +286,34 @@ export async function GET(req: NextRequest) {
 
     const cashTotal = byTender["現金"]?.amount || 0;
 
-    // 商品別集計
-    const productMap: Record<string, { qty: number; amount: number }> = {};
+    // 商品別集計。セット（スープセット・ドリンクセット・フルセット）は、メモから中身（ホットサンド・ドリンク）も数える
+    const productMap: Record<string, { qty: number; amount: number; hotsand?: Record<string, number>; drinks?: Record<string, number> }> = {};
     for (const o of orders) {
       for (const item of o.items) {
         if (!productMap[item.name]) productMap[item.name] = { qty: 0, amount: 0 };
-        productMap[item.name].qty += item.qty;
-        productMap[item.name].amount += item.amount;
+        const pm = productMap[item.name];
+        pm.qty += item.qty;
+        pm.amount += item.amount;
+        const c = SET_NAMES.has(item.name) ? parseSetNote(item.note) : null;
+        if (c) {
+          pm.hotsand ??= {};
+          pm.hotsand[c.hotsand] = (pm.hotsand[c.hotsand] ?? 0) + item.qty;
+          if (c.drink) {
+            pm.drinks ??= {};
+            pm.drinks[c.drink] = (pm.drinks[c.drink] ?? 0) + item.qty;
+          }
+        }
       }
     }
+    const sortCount = (m?: Record<string, number>) =>
+      m ? Object.entries(m).sort(([, a], [, b]) => b - a).map(([name, qty]) => ({ name, qty })) : undefined;
     const byProduct = Object.entries(productMap)
-      .map(([name, v]) => ({ name, ...v }))
+      .map(([name, v]) => ({
+        name,
+        qty: v.qty,
+        amount: v.amount,
+        ...(v.hotsand ? { contents: { hotsand: sortCount(v.hotsand)!, drinks: sortCount(v.drinks) ?? [] } } : {}),
+      }))
       .sort((a, b) => b.amount - a.amount);
 
     // 時間帯別集計

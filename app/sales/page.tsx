@@ -4,7 +4,23 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import Nav from "@/components/Nav";
 import type { DayTargetSum } from "@/lib/keiri/dayTargets";
 
-type ProductRow = { name: string; qty: number; amount: number };
+type ProductRow = {
+  name: string; qty: number; amount: number;
+  /** セットの中身（ホットサンド・ドリンク）。金額はセットの行に入っているので数だけ */
+  contents?: { hotsand: { name: string; qty: number }[]; drinks: { name: string; qty: number }[] };
+};
+
+/** セットの中身を1行で（「ガーデンメルト2・クラシックメルト1／エスプレッソ2・カフェラテHOT1」） */
+function SetContents({ c }: { c?: ProductRow["contents"] }) {
+  if (!c) return null;
+  const join = (xs: { name: string; qty: number }[]) => xs.map((x) => `${x.name}${x.qty}`).join("・");
+  return (
+    <div style={{ fontSize: 11.5, color: "var(--muted)", fontWeight: 400, marginTop: 2, lineHeight: 1.6 }}>
+      中身：{join(c.hotsand)}
+      {c.drinks.length > 0 && <>／{join(c.drinks)}</>}
+    </div>
+  );
+}
 type HourRow = { hour: number; count: number; amount: number };
 type OrderRow = {
   id: string;
@@ -498,6 +514,7 @@ export default function SalesPage() {
                         >
                           ×{p.qty}
                         </span>
+                        <SetContents c={p.contents} />
                       </div>
                       <span style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
                         ¥{fmt(p.amount)}
@@ -525,6 +542,7 @@ export default function SalesPage() {
                     <tr key={p.name}>
                       <td style={{ textAlign: "left", fontWeight: 600 }}>
                         {p.name}
+                        <SetContents c={p.contents} />
                       </td>
                       <td className="mono">{p.qty}</td>
                       <td className="mono" style={{ fontWeight: 700 }}>

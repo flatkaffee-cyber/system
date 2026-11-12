@@ -23,3 +23,13 @@ export const setNote = (hotsand: string, drink?: string) => (drink ? `${hotsand}
 /** 販売期間の外のドリンク（例 10〜3月のコールドブリュー）を除いたセットのドリンク */
 export const setDrinksInSeason = (offSeason: string[]) =>
   SET_DRINKS.filter((d) => !offSeason.some((n) => d === n || d.includes(n) || n.includes(d)));
+
+/** セットの商品名（スープセット・ドリンクセット・フルセット） */
+export const SET_NAMES = new Set(["スープセット", "ドリンクセット", "フルセット"]);
+
+/** セットの行のメモ（「ガーデンメルト／カフェラテHOT」）を、ホットサンドとドリンクに分ける */
+export function parseSetNote(note?: string): { hotsand: string; drink?: string } | null {
+  const parts = (note ?? "").split("／").map((x) => x.trim()).filter(Boolean);
+  if (!parts.length) return null;
+  return { hotsand: parts[0], ...(parts[1] ? { drink: parts[1] } : {}) };
+}
