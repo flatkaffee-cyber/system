@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import Nav from "@/components/Nav";
+import StampIssue, { rememberStampAmount } from "@/components/StampIssue";
 import { SET_WITH_DRINK, setDrinksInSeason, setNote } from "@/lib/setMenu";
 
 type MenuItem = {
@@ -616,6 +617,8 @@ export default function TablePage() {
         modifiers: c.modifiers,
       }));
       const total = Math.max(0, cart.reduce((s, c) => s + c.price * c.quantity, 0) - discount);
+      // スタンプカードのQRの金額に使う（カードはSquareのアプリへ移るので、ここで覚えておく）
+      rememberStampAmount(total);
 
       // 注文作成（ticket_name: "counter"）
       const orderRes = await fetch("/api/square/order", {
@@ -753,6 +756,7 @@ export default function TablePage() {
         }
       }
 
+      rememberStampAmount(amount);
       if (method === "card") {
         if (!squareAppId) throw new Error("Square Application IDが未設定です");
         sessionStorage.setItem("card_pending_order", targetId);
@@ -819,6 +823,11 @@ export default function TablePage() {
       </header>
       <Nav />
 
+      {/* スタンプカード。カード払いのあとや、あとから出したいときはここから */}
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+        <StampIssue compact />
+      </div>
+
       {/* 昼/夜 切替 */}
       <div className="sub-tabs" style={{ marginBottom: 12 }}>
         <button className={`sub-tab ${mode === "day" && !party ? "active" : ""}`} onClick={() => { setMode("day"); setParty(false); setTakeout(false); setOrderType("店内"); setSelected(null); setCart([]); setDiscount(0); setPayMode(false); setPaypayView(false); setPayResult(null); }}>
@@ -883,6 +892,7 @@ export default function TablePage() {
               {payResult.change > 0 && (
                 <div style={{ fontSize: 22, fontWeight: 800, color: "var(--accent)" }}>お釣り: {fmt(payResult.change)}</div>
               )}
+              <div style={{ marginTop: 12 }}><StampIssue /></div>
               <button className="primary" onClick={() => { setPayResult(null); setCart([]); setDiscount(0); setErr(""); setMsg(""); setPayMode(false); setTendered(""); }} style={{ marginTop: 16 }}>
                 次の注文へ
               </button>
@@ -1755,6 +1765,7 @@ export default function TablePage() {
                       お釣り: {fmt(payResult.change)}
                     </div>
                   )}
+                  <div style={{ marginTop: 12 }}><StampIssue /></div>
                   <button
                     className="primary"
                     onClick={() => {

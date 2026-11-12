@@ -18,6 +18,8 @@ const PUBLIC_EXACT = new Set([
   "/api/shift/ics",
   // LINEのサーバーが叩くもの
   "/api/line/webhook",
+  // スタンプカード（お客さんがLINEから開く）。本人はLINEのトークンでルートの中で確かめる
+  "/api/stamp/me",
   "/api/line/friendship",
   // 外部サービスから戻ってくる先。ここを止めると連携が壊れる
   "/api/freee/callback",

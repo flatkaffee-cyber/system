@@ -21,6 +21,7 @@ export const NAV_GROUPS: NavGroup[] = [
     { href: "/opening", label: "業務チェック" },
     { href: "/table", label: "注文" },
     { href: "/kitchen", label: "KDS" },
+    { href: "/stamp", label: "スタンプカード" },
     { href: "/schedule", label: "店舗予定" },
     { href: "/instagram", label: "インスタ" },
   ]),

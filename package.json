@@ -12,9 +12,11 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.70.0",
     "@supabase/supabase-js": "^2.118.0",
+    "@types/qrcode": "^1.5.5",
     "@vercel/blob": "^2.8.0",
     "@vercel/kv": "^3.0.0",
     "next": "^15.5.19",
+    "qrcode": "^1.5.4",
     "react": "19.1.1",
     "react-dom": "19.1.1",
     "zod": "^4.4.3"
