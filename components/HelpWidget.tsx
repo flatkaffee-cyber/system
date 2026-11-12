@@ -63,6 +63,9 @@ export default function HelpWidget() {
 
   // 経理の画面は店舗側と分けているので、使い方チャットを出さない
   if (isKeiriPath(path)) return null;
+  // お客さんが開くページ（スタンプカード・イベント申込・ログイン）には、スタッフ用のチャットを出さない
+  // （2026-11-12 坂本さん。スタンプカードの画面に「使い方を聞く」が出ていた）。管理の /event/kanri などは出す
+  if (isCustomerPath(path)) return null;
 
   if (!open) {
     return (
@@ -255,5 +258,18 @@ export default function HelpWidget() {
         }
       `}</style>
     </div>
+  );
+}
+
+/** お客さんが開くページ。middleware で合言葉なしに通しているページと同じ */
+function isCustomerPath(path: string | null): boolean {
+  if (!path) return false;
+  if (path.endsWith("/kanri")) return false;
+  return (
+    path === "/login" ||
+    path === "/e" || path.startsWith("/e/") ||
+    path === "/event" || path.startsWith("/event/") ||
+    path === "/natsumatsuri" || path.startsWith("/natsumatsuri/") ||
+    path === "/djnight"
   );
 }
