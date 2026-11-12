@@ -157,6 +157,16 @@ export async function cardForLine(lineUserId: string, name: string): Promise<Car
   return c;
 }
 
+/** カードを消す（試しに作ったカードなど）。LINEとのひも付けも外すので、次に開くと新しいカードになる */
+export async function deleteCard(id: string): Promise<boolean> {
+  const s = await store();
+  const c = await getCard(id);
+  if (!c) return false;
+  await s.hdel(CARDS, id);
+  if (c.lineUserId && (await s.hget<string>(BY_LINE, c.lineUserId)) === id) await s.hdel(BY_LINE, c.lineUserId);
+  return true;
+}
+
 /** スタンプを足す。10個でドリンク1杯、30個でごほうび（選ぶ）を渡し、30個を超えた分は次のカードへ */
 export function addStamps(c: Card, n: number, entry: Omit<LogEntry, "at" | "type" | "stamps">): Card {
   const now = new Date().toISOString();

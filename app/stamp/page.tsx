@@ -16,6 +16,20 @@ const md = (iso: string | null) => {
 export default function StampAdmin() {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [err, setErr] = useState("");
+  // 消す前にもう一度押してもらう（ダイアログは使わない）
+  const [delId, setDelId] = useState<string | null>(null);
+  const remove = async (id: string) => {
+    setErr("");
+    try {
+      const r = await fetch("/api/stamp", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "消せませんでした");
+      setRows((cur) => (cur ?? []).filter((x) => x.id !== id));
+      setDelId(null);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "消せませんでした");
+    }
+  };
   useEffect(() => {
     fetch("/api/stamp")
       .then(async (r) => {
@@ -56,6 +70,7 @@ export default function StampAdmin() {
                   <th style={cell}>集めた枚数</th>
                   <th style={cell}>未使用チケット</th>
                   <th style={cell}>最後に来た日</th>
+                  <th style={cell} />
                 </tr>
               </thead>
               <tbody>
@@ -67,6 +82,16 @@ export default function StampAdmin() {
                     <td style={cell}>{r.completed}</td>
                     <td style={cell}>{r.tickets}</td>
                     <td style={cell}>{md(r.lastAt ?? r.createdAt)}</td>
+                    <td style={cell}>
+                      {delId === r.id ? (
+                        <span style={{ display: "inline-flex", gap: 6 }}>
+                          <button onClick={() => remove(r.id)} style={{ padding: "4px 10px", borderRadius: 6, border: "none", background: "#b23a2c", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>消す</button>
+                          <button onClick={() => setDelId(null)} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid var(--line)", background: "#fff", fontSize: 12, cursor: "pointer" }}>やめる</button>
+                        </span>
+                      ) : (
+                        <button onClick={() => setDelId(r.id)} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid var(--line)", background: "#fff", color: "var(--muted)", fontSize: 12, cursor: "pointer" }}>カードを消す</button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
