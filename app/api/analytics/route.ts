@@ -155,6 +155,12 @@ export async function GET(req: NextRequest) {
       months: Record<string, { qty: number; amount: number; cost: number }>;
       days: Record<string, { qty: number; amount: number }>;
     };
+    // セットの中身（ホットサンド・ドリンク）。商品別の画面で、セットの行の下に出す
+    const setContents: Record<string, { hotsand: Record<string, number>; drinks: Record<string, number> }> = {};
+    const addSetContent = (set: string, kind: "hotsand" | "drinks", label: string, qty: number) => {
+      const c = (setContents[set] ??= { hotsand: {}, drinks: {} });
+      c[kind][label] = (c[kind][label] ?? 0) + qty;
+    };
     const byProduct: Record<string, ProductAgg> = {};
     const addProduct = (name: string, day: string, qty: number, amount: number, cost: number) => {
       const p = (byProduct[name] = byProduct[name] || { qty: 0, amount: 0, cost: 0, months: {}, days: {} });
@@ -260,10 +266,12 @@ export async function GET(req: NextRequest) {
           for (const t of tokens) {
             if (t === "クラシックメルト" || t === "ガーデンメルト") {
               addProduct(t, day, qty, 0, (costByName[t] || 0) * qty);
+              addSetContent(name, "hotsand", t, qty);
               continue;
             }
             const dr = setDrinkOf(t);
             if (dr) {
+              addSetContent(name, "drinks", t, qty);
               addProduct(dr.name, day, qty, 0, 0);
               addVariant(dr.name, dr.variant ?? "種類が分からない", day, qty, 0, 0);
             }
@@ -366,6 +374,14 @@ export async function GET(req: NextRequest) {
           .sort()
           .map(([d, dv]) => [d, dv.qty, dv.amount] as [string, number, number]),
         noCost: NO_COST_PRODUCT.test(name),
+        ...(setContents[name]
+          ? {
+              contents: {
+                hotsand: Object.entries(setContents[name].hotsand).sort(([, a], [, b]) => b - a).map(([n, q]) => ({ name: n, qty: q })),
+                drinks: Object.entries(setContents[name].drinks).sort(([, a], [, b]) => b - a).map(([n, q]) => ({ name: n, qty: q })),
+              },
+            }
+          : {}),
       }))
       .sort((a, b) => b.amount - a.amount || b.qty - a.qty);
 

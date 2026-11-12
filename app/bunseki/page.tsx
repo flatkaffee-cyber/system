@@ -30,6 +30,8 @@ type Analytics = {
     months: { month: string; qty: number; amount: number; cost?: number }[];
     /** [日, 数, 売上] */
     days: [string, number, number][];
+    /** セットの中身（ホットサンド・ドリンク）。数だけ */
+    contents?: { hotsand: { name: string; qty: number }[]; drinks: { name: string; qty: number }[] };
   }[];
   /** 種類ごと（ワッフルのチョコ・抹茶など）。種類が2つ以上ある商品だけ */
   variants?: {
@@ -280,6 +282,13 @@ export default function Bunseki() {
                           <span className="mono" style={{ width: 52, textAlign: "right" }}>{p.qty}個</span>
                           <span className="mono" style={{ width: 78, textAlign: "right", fontWeight: 700 }}>{fmt(p.amount)}</span>
                         </div>
+                        {p.contents && (
+                          // セットの中身。金額はセットの行に入っているので数だけ
+                          <div style={{ fontSize: 11.5, color: "var(--muted)", margin: "2px 0 0 14px", lineHeight: 1.6, whiteSpace: "normal" }}>
+                            中身：{p.contents.hotsand.map((x) => `${x.name}${x.qty}`).join("・")}
+                            {p.contents.drinks.length > 0 && <>／{p.contents.drinks.map((x) => `${x.name}${x.qty}`).join("・")}</>}
+                          </div>
+                        )}
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
                           <div style={{ flex: 1, height: 5, background: "var(--line)", borderRadius: 3 }}>
                             <div style={{ width: `${(p.amount / maxAmount) * 100}%`, height: "100%", background: RANK_STYLE[r].fg, borderRadius: 3 }} />
