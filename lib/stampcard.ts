@@ -65,10 +65,13 @@ async function store() {
   return s;
 }
 
-const CARDS = "stamp:cards";
+// カードは1枚ずつハッシュの1項目に置く（1枚書くときに、ほかの人のカードを書き戻さないため）
+const CARDS = "stamp:card";
 const BY_LINE = "stamp:byLine";
 const codeKey = (c: string) => `stamp:code:${c}`;
 const orderKey = (o: string) => `stamp:order:${o}`;
+const lockKey = (id: string) => `stamp:lock:${id}`;
+const usedKey = (ticketId: string) => `stamp:used:${ticketId}`;
 
 const rid = (n: number) => {
   const a = "abcdefghijkmnpqrstuvwxyz23456789";
@@ -86,27 +89,50 @@ export function stampsFor(amount: number, run: boolean): number {
 }
 
 export async function getCards(): Promise<Record<string, Card>> {
-  return ((await (await store()).get<Record<string, Card>>(CARDS)) ?? {});
+  return ((await (await store()).hgetall<Record<string, Card>>(CARDS)) ?? {});
+}
+async function getCard(id: string): Promise<Card | null> {
+  return ((await (await store()).hget<Card>(CARDS, id)) ?? null);
 }
 async function saveCard(c: Card) {
-  const s = await store();
-  const all = (await s.get<Record<string, Card>>(CARDS)) ?? {};
-  all[c.id] = c;
-  await s.set(CARDS, all);
+  await (await store()).hset(CARDS, { [c.id]: c });
 }
 
-/** LINEのアカウントのカード。無ければ作る */
+/**
+ * 1枚のカードを、ほかの書き込みと重ならないように読み直して書き換える。
+ * 同じお客さんが2台で同時に押しても、片方の変更が消えないようにする
+ */
+async function withCard<T>(id: string, fn: (c: Card) => T | Promise<T>): Promise<{ card: Card; result: T }> {
+  const s = await store();
+  const token = rid(8);
+  for (let i = 0; i < 30; i++) {
+    const ok = await s.set(lockKey(id), token, { nx: true, ex: 10 });
+    if (ok) {
+      try {
+        const c = await getCard(id);
+        if (!c) throw new Error("カードが見つかりません");
+        const result = await fn(c);
+        await saveCard(c);
+        return { card: c, result };
+      } finally {
+        if ((await s.get<string>(lockKey(id))) === token) await s.del(lockKey(id));
+      }
+    }
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  throw new Error("混み合っています。少し待ってから、もう一度押してください");
+}
+
+/** LINEのアカウントのカード。無ければ作る（同時に2回開いても、カードは1枚だけ） */
 export async function cardForLine(lineUserId: string, name: string): Promise<Card> {
   const s = await store();
-  const idx = (await s.get<Record<string, string>>(BY_LINE)) ?? {};
-  const all = await getCards();
-  const found = idx[lineUserId] && all[idx[lineUserId]];
-  if (found) {
-    if (name && found.name !== name) {
-      found.name = name;
-      await saveCard(found);
+  const known = await s.hget<string>(BY_LINE, lineUserId);
+  if (known) {
+    const c = await getCard(known);
+    if (c) {
+      if (name && c.name !== name) return (await withCard(c.id, (x) => void (x.name = name))).card;
+      return c;
     }
-    return found;
   }
   const c: Card = {
     id: rid(10),
@@ -120,8 +146,14 @@ export async function cardForLine(lineUserId: string, name: string): Promise<Car
     createdAt: new Date().toISOString(),
   };
   await saveCard(c);
-  idx[lineUserId] = c.id;
-  await s.set(BY_LINE, idx);
+  const won = await s.hsetnx(BY_LINE, lineUserId, c.id);
+  if (!won) {
+    // ほぼ同時に別の画面がカードを作っていた。そちらを使う
+    await s.hdel(CARDS, c.id);
+    const other = await s.hget<string>(BY_LINE, lineUserId);
+    const oc = other ? await getCard(other) : null;
+    if (oc) return oc;
+  }
   return c;
 }
 
@@ -168,41 +200,59 @@ export async function issueCode(amount: number, run: boolean, orderId?: string):
   return { code, stamps };
 }
 
-/** お客さんがQRを読んだ。1回きり（読んだら消す） */
-export async function redeemCode(c: Card, code: string): Promise<{ card: Card; added: number } | { error: string }> {
+/** お客さんがQRを読んだ。1回きり（読むのと消すのを一度にやるので、2人が同時に読んでも1人にしか付かない） */
+export async function redeemCode(cardId: string, code: string): Promise<{ card: Card; added: number } | { error: string }> {
   const s = await store();
-  const v = await s.get<IssuedCode>(codeKey(code));
+  const v = await s.getdel<IssuedCode>(codeKey(code));
   if (!v) return { error: "このQRは使えません（使用済みか、15分を過ぎています）。お店の人に声をかけてください" };
-  const removed = await s.del(codeKey(code));
-  if (!removed) return { error: "このQRはもう使われています" };
-  addStamps(c, v.stamps, { amount: v.amount, run: v.run });
-  await saveCard(c);
-  return { card: c, added: v.stamps };
+  const { card } = await withCard(cardId, (c) => addStamps(c, v.stamps, { amount: v.amount, run: v.run }));
+  return { card, added: v.stamps };
 }
 
-/** チケットを使う（お店の人の前で押してもらう） */
-export async function useTicket(c: Card, ticketId: string): Promise<Card> {
-  const t = c.tickets.find((x) => x.id === ticketId);
-  if (!t) throw new Error("チケットが見つかりません");
-  if (t.usedAt) throw new Error("このチケットはもう使っています");
-  if (t.kind === "goal") throw new Error("先に、Tシャツかドリンクチケットを選んでください");
-  t.usedAt = new Date().toISOString();
-  c.log.unshift({ at: t.usedAt, type: "use", note: t.kind === "tshirt" ? "Tシャツ" : "ドリンク1杯" });
-  await saveCard(c);
-  return c;
+/** チケットを使う（お店の人の前で押してもらう）。2台で同時に押しても1回しか使えない */
+export async function useTicket(cardId: string, ticketId: string): Promise<Card> {
+  const s = await store();
+  const first = await s.set(usedKey(ticketId), "1", { nx: true, ex: 400 * 86_400 });
+  if (!first) throw new Error("このチケットはもう使っています");
+  try {
+    return (
+      await withCard(cardId, (c) => {
+        const t = c.tickets.find((x) => x.id === ticketId);
+        if (!t) throw new Error("チケットが見つかりません");
+        if (t.usedAt) throw new Error("このチケットはもう使っています");
+        if (t.kind === "goal") throw new Error("先に、Tシャツかドリンクチケットを選んでください");
+        t.usedAt = new Date().toISOString();
+        c.log.unshift({ at: t.usedAt, type: "use", note: t.kind === "tshirt" ? "Tシャツ" : "ドリンク1杯" });
+      })
+    ).card;
+  } catch (e) {
+    // 使えなかったときは、印を外して元に戻す
+    await s.del(usedKey(ticketId));
+    throw e;
+  }
 }
 
-/** 30個のごほうびを選ぶ。Tシャツ1枚か、ドリンクチケット5枚 */
-export async function chooseGoal(c: Card, ticketId: string, choice: "tshirt" | "drink5"): Promise<Card> {
-  const t = c.tickets.find((x) => x.id === ticketId);
-  if (!t || t.kind !== "goal" || t.usedAt) throw new Error("選べるごほうびが見つかりません");
-  const now = new Date().toISOString();
-  c.tickets = c.tickets.filter((x) => x.id !== ticketId);
-  if (choice === "tshirt") c.tickets.push({ id: rid(8), kind: "tshirt", from: `${CARD_SIZE}個`, createdAt: now });
-  else for (let i = 0; i < 5; i++) c.tickets.push({ id: rid(8), kind: "drink", from: `${CARD_SIZE}個`, createdAt: now });
-  c.log.unshift({ at: now, type: "choose", note: choice === "tshirt" ? "Tシャツ" : "ドリンクチケット5枚" });
-  await saveCard(c);
-  return c;
+/** 30個のごほうびを選ぶ。Tシャツ1枚か、ドリンクチケット5枚（1回だけ選べる） */
+export async function chooseGoal(cardId: string, ticketId: string, choice: "tshirt" | "drink5"): Promise<Card> {
+  const s = await store();
+  const first = await s.set(usedKey(ticketId), "1", { nx: true, ex: 400 * 86_400 });
+  if (!first) throw new Error("このごほうびはもう選んでいます");
+  try {
+    return (
+      await withCard(cardId, (c) => {
+        const t = c.tickets.find((x) => x.id === ticketId);
+        if (!t || t.kind !== "goal" || t.usedAt) throw new Error("選べるごほうびが見つかりません");
+        const now = new Date().toISOString();
+        c.tickets = c.tickets.filter((x) => x.id !== ticketId);
+        if (choice === "tshirt") c.tickets.push({ id: rid(8), kind: "tshirt", from: `${CARD_SIZE}個`, createdAt: now });
+        else for (let i = 0; i < 5; i++) c.tickets.push({ id: rid(8), kind: "drink", from: `${CARD_SIZE}個`, createdAt: now });
+        c.log.unshift({ at: now, type: "choose", note: choice === "tshirt" ? "Tシャツ" : "ドリンクチケット5枚" });
+      })
+    ).card;
+  } catch (e) {
+    await s.del(usedKey(ticketId));
+    throw e;
+  }
 }
 
 /** お客さんの画面に出す形（LINEのIDは出さない） */

@@ -31,17 +31,17 @@ export async function POST(req: NextRequest) {
     let card = await cardForLine(me.sub, me.name);
     let added = 0;
     if (b.code) {
-      const r = await redeemCode(card, String(b.code).trim());
+      const r = await redeemCode(card.id, String(b.code).trim());
       if ("error" in r) return NextResponse.json({ error: r.error, card: publicCard(card) }, { status: 400 });
       card = r.card;
       added = r.added;
     }
-    if (b.use) card = await useTicket(card, b.use);
+    if (b.use) card = await useTicket(card.id, b.use);
     if (b.choose) {
       if (b.choice !== "tshirt" && b.choice !== "drink5") {
         return NextResponse.json({ error: "Tシャツかドリンクチケットを選んでください" }, { status: 400 });
       }
-      card = await chooseGoal(card, b.choose, b.choice);
+      card = await chooseGoal(card.id, b.choose, b.choice);
     }
     return NextResponse.json({ ok: true, added, card: publicCard(card) });
   } catch (e) {
