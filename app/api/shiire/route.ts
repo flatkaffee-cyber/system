@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { getPurchaseStats, getVendorStats } from "@/lib/shiire";
+import { excludeReason, getPurchaseStats, getShiireHidden, getVendorStats, setShiireHidden } from "@/lib/shiire";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -16,16 +16,19 @@ export async function GET(req: NextRequest) {
     }
     const soonDays = Number(sp.get("soon")) || 3;
     const minCount = Number(sp.get("min")) || 1;
-    const stats = await getPurchaseStats({ soonDays, minCount });
+    const [all, hiddenList] = await Promise.all([getPurchaseStats({ soonDays, minCount }), getShiireHidden()]);
+    const hidden = new Set(hiddenList);
+    // 仕入れではないもの（交通費・開業準備の資材・外した品目）に印を付ける。画面はこれを出さない
+    const stats = all.map((s) => ({ ...s, excluded: excludeReason(s, hidden) }));
     // 「そろそろ」の件数は、周期が信頼できる品目だけで数える
-    const rel = stats.filter((s) => s.reliable);
+    const rel = stats.filter((s) => s.reliable && !s.excluded);
     const summary = {
       total: stats.length,
       overdue: rel.filter((s) => s.status === "overdue").length,
       soon: rel.filter((s) => s.status === "soon").length,
       tracked: rel.length,
     };
-    return NextResponse.json({ summary, stats });
+    return NextResponse.json({ summary, stats, hidden: hiddenList });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "集計に失敗", stats: [] },
@@ -104,5 +107,16 @@ export async function POST(req: NextRequest) {
       { error: e instanceof Error ? e.message : "アドバイス生成に失敗" },
       { status: 500 },
     );
+  }
+}
+
+// PUT { name, hide } → その品目を仕入れのページに出さない／戻す
+export async function PUT(req: NextRequest) {
+  try {
+    const b = (await req.json()) as { name?: string; hide?: boolean };
+    if (!b.name) return NextResponse.json({ error: "name が必要です" }, { status: 400 });
+    return NextResponse.json({ ok: true, hidden: await setShiireHidden(String(b.name), b.hide !== false) });
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : "保存に失敗" }, { status: 500 });
   }
 }

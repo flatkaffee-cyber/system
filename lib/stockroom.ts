@@ -38,6 +38,10 @@ export type Item = {
   group: Group;
   /** ストックルームに常に置いておく数 */
   par: number;
+  /** 倉庫に置いておく数（ストックルームの補充分を含めた、店全体で持っておきたい数）。画面で直す */
+  warehousePar?: number;
+  /** 領収書の品名とつなぐ言葉。無ければ品目名（かっこの中も）から作る */
+  buyWords?: string[];
   /** 数え方の単位。缶・本・袋・kg など */
   unit: string;
   /** 仕込み品は倉庫から補充できないので、足りなければ発注ではなく仕込み */
@@ -71,7 +75,8 @@ export const SEED_ITEMS: Item[] = [
   { id: "lemon-j", name: "レモンジュース（お酒にプラス）", group: "ドリンク（ノンアル）", par: 2, unit: "本", buyId: 24, orderQty: 1 },
   { id: "gf-j", name: "グレープフルーツジュース（お酒にプラス）", group: "ドリンク（ノンアル）", par: 2, unit: "本" },
   { id: "yuzu", name: "ゆず茶", group: "ドリンク（ノンアル）", par: 1, unit: "瓶" },
-  { id: "ume-j", name: "梅ジュース", group: "ドリンク（ノンアル）", par: 1, unit: "本" },
+  // 2026-11-14 坂本さん: 梅シロップと梅ジュースは同じもの。1つにまとめた（ume-syrup は消した）
+  { id: "ume-j", name: "梅シロップ（梅ジュース）", group: "ドリンク（ノンアル）", par: 1, unit: "本" },
 
   // ドリンク（酒）— ほとんど動かないので1本
   { id: "beer-heineken", name: "ハイネケン", group: "ドリンク（酒）", par: 6, unit: "本", buyId: 26, orderQty: 24 },
@@ -97,8 +102,8 @@ export const SEED_ITEMS: Item[] = [
 
   // フード
   { id: "milk", name: "牛乳", group: "フード", par: 5, unit: "本" },
-  { id: "bread", name: "食パン", group: "フード", par: 6, unit: "斤" },
-  { id: "ham", name: "切り落としハム", group: "フード", par: 500, unit: "g" },
+  { id: "bread", name: "食パン", group: "フード", par: 6, unit: "斤", buyWords: ["食パン", "朝の輝き", "朝の耀き", "ロイヤル6枚", "本仕込", "超熟"] },
+  { id: "ham", name: "切り落としハム", group: "フード", par: 500, unit: "g", buyWords: ["切り落としハム", "ハム切り", "ショルダーハム"] },
   { id: "prosciutto", name: "生ハム", group: "フード", par: 2, unit: "パック" },
   { id: "cream-cheese", name: "クリームチーズ", group: "フード", par: 2, unit: "個" },
   { id: "blue-cheese", name: "ブルーチーズ", group: "フード", par: 1, unit: "個" },
@@ -166,10 +171,10 @@ export const SEED_ITEMS: Item[] = [
   // コーヒー・茶
   { id: "drip-beans", name: "ドリップ用コーヒー豆", group: "コーヒー・茶", par: 1, unit: "kg" },
   { id: "chai", name: "チャイの茶葉", group: "コーヒー・茶", par: 1, unit: "袋" },
-  { id: "green-tea", name: "緑茶", group: "コーヒー・茶", par: 2, unit: "本" },
+  // 2026-11-14 坂本さん: 緑茶は仕入れていないので外し、ウーロン茶を足した
+  { id: "oolong-tea", name: "ウーロン茶", group: "コーヒー・茶", par: 2, unit: "本" },
   { id: "jasmine-tea", name: "ジャスミン茶", group: "コーヒー・茶", par: 2, unit: "本" },
   // ドリンク（シロップ・割り材）
-  { id: "ume-syrup", name: "梅シロップ", group: "ドリンク（ノンアル）", par: 1, unit: "本" },
   { id: "vanilla-syrup", name: "バニラシロップ", group: "ドリンク（ノンアル）", par: 1, unit: "本" },
   { id: "blackberry-syrup", name: "ブラックベリーシロップ", group: "ドリンク（ノンアル）", par: 1, unit: "本" },
   { id: "grenadine", name: "グレナデンシロップ", group: "ドリンク（酒）", par: 1, unit: "本" },
@@ -219,6 +224,46 @@ async function loadItems(): Promise<Record<string, Item>> {
 }
 
 /** 画面で直した分を反映した品目一覧 */
+/** 品目名から、領収書の品名とつなぐ言葉を作る。「梅シロップ（梅ジュース）」→ 梅シロップ・梅ジュース */
+export function buyWordsOf(i: Item): string[] {
+  if (i.buyWords?.length) return i.buyWords;
+  const n = i.name.normalize("NFKC");
+  const inside = [...n.matchAll(/[（(]([^）)]+)[）)]/g)].map((m) => m[1]);
+  const base = n.replace(/[（(][^）)]*[）)]/g, "").trim();
+  // かっこの中は「缶」「冷凍」などの説明のこともあるので、2文字以上で、説明っぽくないものだけ使う
+  const extra = inside.filter((w) => w.length >= 2 && !/冷凍|缶|お酒|焼き済み|ふた付き|黒・緑|中瓶|茶色|正方形|100g/.test(w));
+  return [base, ...extra].filter((w) => w.length >= 2);
+}
+
+const squash = (s: string) => s.normalize("NFKC").replace(/[\s　・]/g, "").toLowerCase();
+
+/**
+ * 領収書の品名が、この品目を買ったものか。
+ * 言葉がそのまま入っているか、言葉の文字が近い間隔で順に並んでいれば同じとみなす
+ * （「ツナ缶」と「ライトツナフレーク缶」のように、間に言葉が挟まる書き方があるため）
+ */
+export function isPurchaseOf(i: Item, lineName: string): boolean {
+  const line = squash(lineName);
+  for (const w0 of buyWordsOf(i)) {
+    const w = squash(w0);
+    if (w.length < 2) continue;
+    if (line.includes(w)) return true;
+    if (w.length < 3) continue;
+    // 文字が順に並んでいて、間があきすぎていないか
+    let pos = -1;
+    let start = -1;
+    let ok = true;
+    for (const ch of w) {
+      const k = line.indexOf(ch, pos + 1);
+      if (k < 0) { ok = false; break; }
+      if (start < 0) start = k;
+      pos = k;
+    }
+    if (ok && pos - start <= w.length + 6) return true;
+  }
+  return false;
+}
+
 export async function getItems(): Promise<Item[]> {
   const edited = await loadItems();
   const map = new Map<string, Item>();

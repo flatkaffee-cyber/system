@@ -256,3 +256,51 @@ export function analyzeVendors(receipts: SavedReceipt[]): VendorStat[] {
 export async function getVendorStats(): Promise<VendorStat[]> {
   return analyzeVendors(await getReceipts());
 }
+
+/* ── 仕入れに出すものだけにする（2026-11-14 坂本さん）──────────────
+ * 仕入れのページは、材料と消耗品を「そろそろ買う」「毎月いくら」で見るためのもの。
+ * 交通費・保険料などの科目と、開業準備で一回きり買った物（木材・金具・レジ袋など）は出さない。
+ * 判断がつかないものは、画面の「外す」で坂本さんが外せる（KV shiire:hidden）。 */
+
+/** 仕入れとして見る科目 */
+export const STOCK_CATEGORIES = new Set(["仕入高", "消耗品費"]);
+
+/** 仕入れではない物（開業準備の資材・道具・お店でもらう袋・印刷など） */
+export const NOT_STOCK =
+  /木材|カフェ板|集成材|リノベ柱|ナット|フランジ|ボルト|ビス|額金具|ヤスリ|レバーハンドル|マスキングテープ|塗装|レジ袋|レジブクロ|袋代|プリント代|部門0|タイマー|スキレット|ココット|ピッチャー|タンブラー|トング|ホゾンヨウキ|保存容器|ラック|速達/;
+
+export type ExcludeReason = "category" | "keyword" | "hidden";
+
+export function excludeReason(s: Pick<PurchaseStat, "name" | "displayName" | "category">, hidden: Set<string>): ExcludeReason | null {
+  if (hidden.has(s.name)) return "hidden";
+  if (!STOCK_CATEGORIES.has(s.category)) return "category";
+  if (NOT_STOCK.test(s.displayName) || NOT_STOCK.test(s.name)) return "keyword";
+  return null;
+}
+
+async function shiireKv() {
+  const url = process.env.KV_REST_API_URL ?? process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!url || !token) return null;
+  const { createClient } = await import("@vercel/kv");
+  return createClient({ url, token });
+}
+const HIDDEN_KEY = "shiire:hidden";
+
+/** 画面で「外す」を押した品目（正規化した品目名） */
+export async function getShiireHidden(): Promise<string[]> {
+  const s = await shiireKv();
+  if (!s) return [];
+  return (await s.get<string[]>(HIDDEN_KEY)) ?? [];
+}
+
+export async function setShiireHidden(name: string, hide: boolean): Promise<string[]> {
+  const s = await shiireKv();
+  if (!s) throw new Error("KV未設定");
+  const cur = new Set((await s.get<string[]>(HIDDEN_KEY)) ?? []);
+  if (hide) cur.add(name);
+  else cur.delete(name);
+  const next = [...cur];
+  await s.set(HIDDEN_KEY, next);
+  return next;
+}

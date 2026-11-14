@@ -14,11 +14,15 @@ type Item = {
   name: string;
   group: string;
   par: number;
+  /** 倉庫に置いておく数 */
+  warehousePar?: number;
   unit: string;
   madeInHouse?: boolean;
   keepDays?: number;
   note?: string;
 };
+/** 最近（14日以内）に買ったもの。領収書の品名から */
+type RecentBuy = { date: string; name: string; daysAgo: number };
 /** 仕込み品を最後に仕込んだ日と、あと何日もつか */
 type MadeAt = { date: string; daysAgo: number; keepDays: number; daysLeft: number };
 /** いまの在庫確認。倉庫に無かったものを発注したかどうかを追う */
@@ -68,6 +72,10 @@ export default function StockroomPage() {
   const [results, setResults] = useState<Record<string, Result>>({});
   const [pending, setPending] = useState<Record<string, Pending>>({});
   const [madeAt, setMadeAt] = useState<Record<string, MadeAt>>({});
+  const [recentBuys, setRecentBuys] = useState<Record<string, RecentBuy>>({});
+  // 倉庫に置いておく数を直している品目
+  const [whId, setWhId] = useState<string | null>(null);
+  const [whVal, setWhVal] = useState("");
   const [nextPrep, setNextPrep] = useState<NextPrep | null>(null);
   const [current, setCurrent] = useState<Current | null>(null);
   const [lastDate, setLastDate] = useState<string | null>(null);
@@ -101,6 +109,7 @@ export default function StockroomPage() {
       setItems(d.items || []);
       setPending(d.pending || {});
       setMadeAt(d.madeAt || {});
+      setRecentBuys(d.recentBuys || {});
       setNextPrep(d.nextPrep || null);
       setCurrent(d.current || null);
       setLastDate(d.lastDate);
@@ -205,6 +214,23 @@ export default function StockroomPage() {
       });
       if (!res.ok) throw new Error((await res.json()).error);
       setEditId(null);
+      await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "保存失敗");
+    }
+  };
+
+  const saveWarehouse = async (item: Item) => {
+    const v = Number(whVal);
+    if (!Number.isFinite(v) || v < 0) return;
+    try {
+      const res = await fetch("/api/stockroom", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ item: { ...item, warehousePar: v } }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      setWhId(null);
       await load();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "保存失敗");
@@ -638,6 +664,37 @@ export default function StockroomPage() {
                           }}>発注済み・到着待ち</span>
                         )}
                       </div>
+                      {/* 最近買ったもの。在庫が足りているかを一緒に見てもらう */}
+                      {recentBuys[i.id] && (
+                        <div style={{ fontSize: 11.5, color: "#1d4f9c", marginTop: 3, lineHeight: 1.6 }}>
+                          🛒 {Number(recentBuys[i.id].date.slice(5, 7))}/{Number(recentBuys[i.id].date.slice(8, 10))}に
+                          「{recentBuys[i.id].name}」を仕入れています（{recentBuys[i.id].daysAgo === 0 ? "今日" : `${recentBuys[i.id].daysAgo}日前`}）。在庫は十分ですか？
+                        </div>
+                      )}
+                      {/* 倉庫に置いておく数（画面で直せる） */}
+                      {!i.madeInHouse && (whId === i.id ? (
+                        <div style={{ display: "flex", gap: 6, marginTop: 4, alignItems: "center", flexWrap: "wrap" }}>
+                          <span style={{ fontSize: 12, color: "var(--muted)" }}>倉庫に</span>
+                          <input
+                            id={`wh-${i.id}`}
+                            type="number"
+                            value={whVal}
+                            onChange={(e) => setWhVal(e.target.value)}
+                            style={{ width: 80, fontSize: 13, padding: "5px 8px" }}
+                          />
+                          <span style={{ fontSize: 12, color: "var(--muted)" }}>{i.unit}</span>
+                          <button onClick={() => saveWarehouse(i)} style={{ fontSize: 12, padding: "5px 12px", borderRadius: 6, border: "none", background: "var(--ok)", color: "#fff", cursor: "pointer", fontWeight: 700 }}>保存</button>
+                          <button onClick={() => setWhId(null)} style={{ fontSize: 12, padding: "5px 10px", borderRadius: 6, border: "1px solid var(--line)", background: "#fff", cursor: "pointer" }}>やめる</button>
+                        </div>
+                      ) : (
+                        <div
+                          onClick={() => { setWhId(i.id); setWhVal(i.warehousePar !== undefined ? String(i.warehousePar) : ""); }}
+                          style={{ fontSize: 12, color: "var(--muted)", marginTop: 2, cursor: "pointer" }}
+                        >
+                          倉庫にあるべき数: <strong style={{ color: "var(--ink)" }}>{i.warehousePar !== undefined ? `${i.warehousePar}${i.unit}` : "未設定"}</strong>
+                          <span style={{ marginLeft: 4, fontSize: 10.5 }}>（タップで変更）</span>
+                        </div>
+                      ))}
                       {madeAt[i.id] && (
                         <div style={{
                           fontSize: 11.5, marginTop: 3, lineHeight: 1.6,
@@ -679,7 +736,7 @@ export default function StockroomPage() {
                           onClick={() => { setEditId(i.id); setEditPar(String(i.par)); }}
                           style={{ fontSize: 12, color: "var(--muted)", marginTop: 2, cursor: "pointer" }}
                         >
-                          目安: <strong style={{ color: "var(--ink)" }}>{i.par}{i.unit}</strong><span style={{ color: "var(--muted)", marginLeft: 4 }}>（メモ。この数を切ったら発注、という決まりではない）</span>
+                          ストックルームに置く数: <strong style={{ color: "var(--ink)" }}>{i.par}{i.unit}</strong><span style={{ color: "var(--muted)", marginLeft: 4 }}>（メモ。この数を切ったら発注、という決まりではない）</span>
                           <span style={{ marginLeft: 4, fontSize: 10.5 }}>（タップで変更）</span>
                           {i.note && <span style={{ marginLeft: 6 }}>／ {i.note}</span>}
                         </div>

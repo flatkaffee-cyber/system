@@ -64,6 +64,8 @@ type Stat = {
   spanDays: number;
   /** 月ごとの金額（"2026-10" → 円） */
   months?: Record<string, number>;
+  /** 仕入れではないもの（category=交通費など / keyword=開業準備の資材など / hidden=画面で外した） */
+  excluded?: "category" | "keyword" | "hidden" | null;
 };
 
 const LABEL: Record<Stat["status"], { text: string; color: string }> = {
@@ -155,9 +157,25 @@ export default function Shiire() {
   };
 
   // 「そろそろ」は周期が信頼できるものだけ（開業準備のまとめ買いを除く）
-  const need = stats.filter((s) => s.reliable && (s.status === "overdue" || s.status === "soon"));
+  // 仕入れではないもの（交通費・保険料、木材やレジ袋など開業準備の一回きりの物、画面で外した物）は出さない（2026-11-14 坂本さん）
+  const stock = stats.filter((s) => !s.excluded);
+  const need = stock.filter((s) => s.reliable && (s.status === "overdue" || s.status === "soon"));
   // 一回きりの買い物（開業準備の備品など）は仕入れに入れない。2日以上に分けて買ったものだけ（2026-11-09 坂本さん）
-  const repeat = stats.filter((s) => s.count >= 2);
+  const repeat = stock.filter((s) => s.count >= 2);
+  const hiddenStats = stats.filter((s) => s.excluded === "hidden");
+  const hide = async (name: string, h: boolean) => {
+    try {
+      const res = await fetch("/api/shiire", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, hide: h }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      setStats((cur) => cur.map((x) => (x.name === name ? { ...x, excluded: h ? "hidden" : null } : x)));
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "保存に失敗");
+    }
+  };
   const base = tab === "need" ? need : repeat;
   const query = q.trim().toLowerCase();
   const list = base
@@ -300,6 +318,7 @@ export default function Shiire() {
                       {c.label}{sortKey === c.key ? (sortAsc ? " ▲" : " ▼") : ""}
                     </th>
                   ))}
+                  <th style={{ padding: "6px 8px", borderBottom: "1px solid var(--line)", fontSize: 12, color: "var(--muted)", whiteSpace: "nowrap" }} />
                 </tr>
               </thead>
               <tbody>
@@ -331,10 +350,19 @@ export default function Shiire() {
                         <td style={td}>{s.vendor}</td>
                         <td style={{ ...td, textAlign: "right" }} className="mono">{s.count}</td>
                         <td style={{ ...td, textAlign: "right" }} className="mono">¥{s.totalAmount.toLocaleString()}</td>
+                        <td style={{ ...td, textAlign: "center" }}>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); hide(s.name, true); }}
+                            title="仕入れではないので、このページに出さない"
+                            style={{ fontSize: 11.5, padding: "3px 8px", borderRadius: 6, border: "1px solid var(--line)", background: "#fff", color: "var(--muted)", cursor: "pointer" }}
+                          >
+                            外す
+                          </button>
+                        </td>
                       </tr>
                       {open && (
                         <tr style={{ background: bg }}>
-                          <td colSpan={COLUMNS.length} style={{ ...td, whiteSpace: "normal", fontSize: 12, color: "var(--muted)" }}>
+                          <td colSpan={COLUMNS.length + 1} style={{ ...td, whiteSpace: "normal", fontSize: 12, color: "var(--muted)" }}>
                             科目：{s.category} ／ 買った日：{s.dates.map((d) => d.slice(5).replace("-", "/")).join("・")}
                             {s.nextDueDate && ` ／ 次の目安：${s.nextDueDate.slice(5).replace("-", "/")}`}
                           </td>
@@ -347,8 +375,24 @@ export default function Shiire() {
             </table>
           </div>
           <p className="hint" style={{ margin: "6px 0 0" }}>
-            列の名前を押すと並べ替えできます（もう一度押すと逆順）。行を押すと、買った日の一覧が出ます。{list.length}件
+            列の名前を押すと並べ替えできます（もう一度押すと逆順）。行を押すと、買った日の一覧が出ます。{list.length}件。
+            仕入れではない物（開業準備の資材など）は「外す」でこのページから消せます。交通費・保険料と、木材・金具・レジ袋などは最初から出していません。
           </p>
+          {hiddenStats.length > 0 && (
+            <div style={{ marginTop: 10, fontSize: 12.5, color: "var(--muted)", display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+              外した品目（{hiddenStats.length}）：
+              {hiddenStats.map((s) => (
+                <button
+                  key={s.name}
+                  onClick={() => hide(s.name, false)}
+                  title="仕入れのページに戻す"
+                  style={{ fontSize: 12, padding: "3px 8px", borderRadius: 99, border: "1px solid var(--line)", background: "#fff", cursor: "pointer" }}
+                >
+                  {s.displayName} ↩
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

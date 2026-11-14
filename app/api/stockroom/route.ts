@@ -30,6 +30,8 @@ function nextPrepDay(today: string): string {
   return today;
 }
 import { getInventoryItems } from "@/lib/inventory";
+import { getReceipts, receiptLines } from "@/lib/receipts";
+import { isPurchaseOf } from "@/lib/stockroom";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -94,6 +96,26 @@ export async function GET(req: NextRequest) {
     // 仕込み品は「いつ仕込んだか」と「あと何日もつか」を出す。
     // 半分を切っていなくても、日持ちを過ぎていれば仕込み直す必要がある。
     const [records, shikomiTasks] = await Promise.all([getRecords(), getShikomiTasks()]);
+    // 最近（14日以内）に買ったもの。領収書の品名と品目をつなぐ。
+    // 「11/10 にツナ缶を仕入れています。在庫は十分ですか？」と在庫確認の画面に出す（2026-11-14 坂本さん）
+    const recentBuys: Record<string, { date: string; name: string; daysAgo: number }> = {};
+    try {
+      const since = new Date(Date.parse(`${today}T00:00:00Z`) - 14 * 86_400_000).toISOString().slice(0, 10);
+      const receipts = (await getReceipts()).filter((r) => r.date && r.date >= since && r.date <= today);
+      for (const r of receipts) {
+        for (const l of receiptLines(r)) {
+          if (!l.name) continue;
+          for (const i of items) {
+            if (i.madeInHouse || !isPurchaseOf(i, l.name)) continue;
+            const prev = recentBuys[i.id];
+            if (!prev || r.date > prev.date) recentBuys[i.id] = { date: r.date, name: l.name, daysAgo: daysBetween(r.date, today) };
+          }
+        }
+      }
+    } catch {
+      /* 領収書が読めなくても在庫確認はできる */
+    }
+
     const madeAt: Record<string, { date: string; daysAgo: number; keepDays: number; daysLeft: number }> = {};
     for (const i of items) {
       // 日持ちは仕込みの消費期限（lib/shikomi）を正とする。無ければ在庫側の keepDays
@@ -183,6 +205,7 @@ export async function GET(req: NextRequest) {
       items,
       pending,
       madeAt,
+      recentBuys,
       nextPrep,
       current,
       lastDate: last?.date ?? null,
@@ -229,6 +252,9 @@ export async function POST(req: NextRequest) {
         name: String(b.item.name).trim(),
         group: (b.item.group as Item["group"]) || cur?.group || "フード",
         par: Number(b.item.par ?? 0),
+        ...(b.item.warehousePar !== undefined && b.item.warehousePar !== null
+          ? { warehousePar: Math.max(0, Number(b.item.warehousePar) || 0) }
+          : cur?.warehousePar !== undefined ? { warehousePar: cur.warehousePar } : {}),
         unit: String(b.item.unit || cur?.unit || "個"),
         madeInHouse: b.item.madeInHouse ?? cur?.madeInHouse,
         note: b.item.note ?? cur?.note,
