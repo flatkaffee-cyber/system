@@ -366,10 +366,11 @@ export const DEFAULT_MENU: MenuItem[] = [
   },
   {
     id: "berry-coconut-cloud", name: "ココナッツベリークラウド", category: "🍸 Original Cocktail",
-    cost: 130, price: 650,
+    // 2026-11-18 坂本さん: ベリーのシロップはグレナデンで代用する（ブラックベリーシロップはもう買わない）
+    cost: 120, price: 650,
     ingredients: [
       { name: "ドライジン（GORDON'S）", unit: "ml", capacity: 700, purchasePrice: 1264, usage: 34, cost: 61 },
-      { name: "ブラックベリーシロップ", unit: "ml", capacity: 700, purchasePrice: 1293, usage: 12, cost: 22 },
+      { name: "グレナデンシロップ（サントリー）", unit: "ml", capacity: 780, purchasePrice: 788, usage: 12, cost: 12 },
       { name: "ココナッツミルク（CHAOKOH）", unit: "ml", capacity: 9600, purchasePrice: 6880, usage: 22, cost: 16 },
       { name: "グアバジュース（グロリア）", unit: "ml", capacity: 1000, purchasePrice: 397, usage: 77, cost: 31 },
     ],

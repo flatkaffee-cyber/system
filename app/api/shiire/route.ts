@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { excludeReason, getPurchaseStats, getShiireHidden, getVendorStats, setShiireHidden } from "@/lib/shiire";
+import { excludeReason, getPurchaseSheet, getPurchaseStats, getShiireHidden, getVendorStats, setSheetRowHidden, setShiireHidden } from "@/lib/shiire";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -13,6 +13,10 @@ export async function GET(req: NextRequest) {
     // ?view=vendors で仕入れ先ごとの一覧
     if (sp.get("view") === "vendors") {
       return NextResponse.json({ vendors: await getVendorStats() });
+    }
+    // ?view=sheet で仕入れ表（短い品目名・食材と備品・買う先）
+    if (sp.get("view") === "sheet") {
+      return NextResponse.json(await getPurchaseSheet());
     }
     const soonDays = Number(sp.get("soon")) || 3;
     const minCount = Number(sp.get("min")) || 1;
@@ -113,7 +117,10 @@ export async function POST(req: NextRequest) {
 // PUT { name, hide } → その品目を仕入れのページに出さない／戻す
 export async function PUT(req: NextRequest) {
   try {
-    const b = (await req.json()) as { name?: string; hide?: boolean };
+    const b = (await req.json()) as { name?: string; keys?: string[]; hide?: boolean };
+    if (b.keys?.length) {
+      return NextResponse.json({ ok: true, hidden: await setSheetRowHidden(b.keys.map(String), b.hide !== false) });
+    }
     if (!b.name) return NextResponse.json({ error: "name が必要です" }, { status: 400 });
     return NextResponse.json({ ok: true, hidden: await setShiireHidden(String(b.name), b.hide !== false) });
   } catch (e) {

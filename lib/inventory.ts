@@ -128,7 +128,7 @@ export const DEFAULT_INVENTORY: InventoryItem[] = [
     capacity: 500,
     price: 780,
     supplier: "A-プライス",
-    url: "https://a-price.jp/products/1100928",
+    url: "https://a-price.jp/products/1100928?variant=48403168428224", // 2026-11-18 坂本さん: 冷凍ライムはここから
     note: "1枚約50g。1ドリンクに1枚使用",
     addedDate: "2026-07-26",
   },

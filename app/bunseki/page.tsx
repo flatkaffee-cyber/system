@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Nav from "@/components/Nav";
 import ProductChart from "@/components/ProductChart";
 import ProductSheet from "@/components/ProductSheet";
+import PurchaseMonthlyTab from "@/components/PurchaseMonthlyTab";
 
 // 経営分析。/api/analytics が Square売上・領収書・原価表を自動集計する。
 // 手入力の月次管理（/accounting）とは別に、実データをそのまま見るためのページ。
@@ -84,7 +85,7 @@ export default function Bunseki() {
   const [data, setData] = useState<Analytics | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
-  const [tab, setTab] = useState<"pnl" | "products" | "sheet" | "graph" | "expenses" | "days" | "month" | "weekday">("pnl");
+  const [tab, setTab] = useState<"pnl" | "products" | "sheet" | "graph" | "shiire" | "expenses" | "days" | "month" | "weekday">("pnl");
   const [openProduct, setOpenProduct] = useState<string | null>(null);
   const [productCat, setProductCat] = useState("すべて");
 
@@ -116,7 +117,7 @@ export default function Bunseki() {
   };
 
   return (
-    <div className="wrap" style={tab === "sheet" || tab === "graph" ? { maxWidth: 1280 } : undefined}>
+    <div className="wrap" style={tab === "sheet" || tab === "graph" || tab === "shiire" ? { maxWidth: 1280 } : undefined}>
       <header>
         <h1>🔍 経営分析</h1>
         <p>Square売上・領収書・原価表からの自動集計（手入力なし）</p>
@@ -168,7 +169,7 @@ export default function Bunseki() {
           )}
 
           <div className="sub-tabs">
-            {([["pnl", "損益"], ["products", "商品別"], ["sheet", "表"], ["graph", "グラフ"], ["expenses", "支出"], ["days", "日別"], ["month", "月別"], ["weekday", "曜日別"]] as const).map(([k, l]) => (
+            {([["pnl", "損益"], ["products", "商品別"], ["sheet", "表"], ["graph", "グラフ"], ["shiire", "仕入れ"], ["expenses", "支出"], ["days", "日別"], ["month", "月別"], ["weekday", "曜日別"]] as const).map(([k, l]) => (
               <button key={k} className={`sub-tab ${tab === k ? "active" : ""}`} onClick={() => setTab(k)}>{l}</button>
             ))}
           </div>
@@ -228,6 +229,9 @@ export default function Bunseki() {
               />
             </div>
           )}
+
+          {/* 仕入れの毎月の金額（仕入れのページから移した）。期間の選択には関係なく、領収書の全期間 */}
+          {tab === "shiire" && <PurchaseMonthlyTab />}
 
           {/* 商品のグラフ。商品を選んで、個数・売上を月・週・曜日で見る */}
           {tab === "graph" && (

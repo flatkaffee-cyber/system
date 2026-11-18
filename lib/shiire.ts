@@ -267,7 +267,7 @@ export const STOCK_CATEGORIES = new Set(["仕入高", "消耗品費"]);
 
 /** 仕入れではない物（開業準備の資材・道具・お店でもらう袋・印刷など） */
 export const NOT_STOCK =
-  /木材|カフェ板|集成材|リノベ柱|ナット|フランジ|ボルト|ビス|額金具|ヤスリ|レバーハンドル|マスキングテープ|塗装|レジ袋|レジブクロ|袋代|プリント代|部門0|タイマー|スキレット|ココット|ピッチャー|タンブラー|トング|ホゾンヨウキ|保存容器|ラック|速達/;
+  /木材|カフェ板|集成材|リノベ柱|ナット|フランジ|ボルト|ビス|額金具|ヤスリ|レバーハンドル|はんぺん|マスキングテープ|塗装|レジ袋|レジブクロ|袋代|プリント代|部門0|タイマー|スキレット|ココット|ピッチャー|タンブラー|トング|ホゾンヨウキ|保存容器|ラック|速達/;
 
 export type ExcludeReason = "category" | "keyword" | "hidden";
 
@@ -303,4 +303,116 @@ export async function setShiireHidden(name: string, hide: boolean): Promise<stri
   const next = [...cur];
   await s.set(HIDDEN_KEY, next);
   return next;
+}
+
+/* ── 仕入れ表（2026-11-18 坂本さん）──────────────────────────
+ * 仕入れのページを開いたら、買っている物の一覧（仕入れ表）を出す。
+ * ・品目名は「牛乳」「ツナ缶」のように短く。領収書の「豊富牛乳公社 サロベツ 4コ×218」のような書き方は出さない
+ *   → 在庫確認の品目につながる物はその名前にまとめ（銘柄違いの牛乳も1行）、つながらない物は数や単価を取った名前にする
+ * ・食材と備品に分ける（在庫確認の分類、無ければ科目: 仕入高=食材・消耗品費=備品）
+ * ・買う先は、在庫確認の品目の発注先（buyId）か、仕入れ表（lib/inventory）の同じ名前の物から出す */
+
+export type SheetRow = {
+  name: string;
+  kind: "食材" | "備品";
+  /** まとめた領収書の品目名（正規化したもの）。「外す」で全部外すため */
+  keys: string[];
+  /** 直近の領収書の書き方（行を開いたときだけ出す） */
+  lastLine: string;
+  lastDate: string;
+  lastAmount: number;
+  daysSinceLast: number;
+  vendor: string;
+  count: number;
+  avgIntervalDays: number | null;
+  totalAmount: number;
+  months: Record<string, number>;
+  buy: { supplier: string; url: string; price: number } | null;
+};
+
+/** 領収書の品名から、数・単価・入り数を取って短くする */
+export function cleanItemName(raw: string): string {
+  let s = raw.normalize("NFKC").trim();
+  s = s.replace(/[（(][^）)]*[\d@×x][^）)]*[）)]/g, ""); // (2個×単858) など
+  s = s.replace(/\s*[\d]+\s*(コ|個|本|袋|枚|点|缶|P|p|パック)\s*[×x].*$/u, "");
+  s = s.replace(/\s*@\s*[\d,]+.*$/u, "");
+  s = s.replace(/\s*[×x]\s*(単)?[\d,]+.*$/u, "");
+  s = s.replace(/\s+[\d]+\s*(コ|個|本|袋|枚|点|缶)$/u, "");
+  s = s.replace(/\s{2,}/g, " ").trim();
+  return s || raw;
+}
+
+const median = (xs: number[]): number | null => {
+  if (!xs.length) return null;
+  const a = [...xs].sort((x, y) => x - y);
+  const m = Math.floor(a.length / 2);
+  return a.length % 2 ? a[m] : Math.round(((a[m - 1] + a[m]) / 2) * 10) / 10;
+};
+
+export async function getPurchaseSheet(): Promise<{ rows: SheetRow[]; hidden: string[] }> {
+  const [stats, hiddenList] = await Promise.all([getPurchaseStats({ minCount: 1 }), getShiireHidden()]);
+  const { getItems, isPurchaseOf } = await import("@/lib/stockroom");
+  const { getInventoryItems } = await import("@/lib/inventory");
+  const [items, inventory] = await Promise.all([getItems(), getInventoryItems()]);
+  const hidden = new Set(hiddenList);
+  const byInvId = new Map(inventory.map((i) => [i.id, i]));
+  const sq = (s: string) => s.normalize("NFKC").replace(/[\s　・]/g, "");
+  const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+
+  type Acc = { row: SheetRow; dates: Set<string> };
+  const map = new Map<string, Acc>();
+  for (const s of stats) {
+    if (excludeReason(s, hidden)) continue;
+    const item = items.find((i) => !i.madeInHouse && (isPurchaseOf(i, s.displayName) || isPurchaseOf(i, s.name)));
+    const name = item ? item.name.replace(/[（(][^）)]*[）)]/g, "").trim() || item.name : cleanItemName(s.displayName);
+    const kind: SheetRow["kind"] = item ? (item.group === "消耗品・包材" ? "備品" : "食材") : s.category === "消耗品費" ? "備品" : "食材";
+    const key = `${kind}:${name}`;
+    let acc = map.get(key);
+    if (!acc) {
+      const inv =
+        (item?.buyId !== undefined ? byInvId.get(item.buyId) : undefined) ??
+        inventory.find((v) => sq(v.name) === sq(name) || sq(v.name).includes(sq(name)) || sq(name).includes(sq(v.name)));
+      acc = {
+        dates: new Set(),
+        row: {
+          name, kind, keys: [], lastLine: s.displayName, lastDate: "", lastAmount: 0, daysSinceLast: 0,
+          vendor: s.vendor, count: 0, avgIntervalDays: null, totalAmount: 0, months: {},
+          buy: inv && (inv.url || inv.supplier) ? { supplier: inv.supplier, url: inv.url, price: inv.price } : null,
+        },
+      };
+      map.set(key, acc);
+    }
+    const r = acc.row;
+    r.keys.push(s.name);
+    for (const d of s.dates) acc.dates.add(d);
+    r.totalAmount += s.totalAmount;
+    for (const [m, v] of Object.entries(s.months ?? {})) r.months[m] = (r.months[m] ?? 0) + v;
+    if (s.lastDate > r.lastDate) {
+      r.lastDate = s.lastDate;
+      r.lastAmount = s.lastAmount;
+      r.lastLine = s.displayName;
+      r.vendor = s.vendor || r.vendor;
+    }
+  }
+  const rows: SheetRow[] = [];
+  for (const { row, dates } of map.values()) {
+    const ds = [...dates].sort();
+    // 一回きりの買い物は出さない（2日以上に分けて買った物だけ）
+    if (ds.length < 2) continue;
+    const gaps: number[] = [];
+    for (let i = 1; i < ds.length; i++) gaps.push(Math.round((Date.parse(ds[i]) - Date.parse(ds[i - 1])) / 86_400_000));
+    row.count = ds.length;
+    row.avgIntervalDays = median(gaps);
+    row.daysSinceLast = Math.round((Date.parse(today) - Date.parse(row.lastDate)) / 86_400_000);
+    rows.push(row);
+  }
+  rows.sort((a, b) => (a.kind === b.kind ? b.lastDate.localeCompare(a.lastDate) : a.kind === "食材" ? -1 : 1));
+  return { rows, hidden: hiddenList };
+}
+
+/** 仕入れ表の1行を外す／戻す（まとめた品目名を全部） */
+export async function setSheetRowHidden(keys: string[], hide: boolean): Promise<string[]> {
+  let cur: string[] = [];
+  for (const k of keys) cur = await setShiireHidden(k, hide);
+  return cur;
 }

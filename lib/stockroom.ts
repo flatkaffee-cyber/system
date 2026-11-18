@@ -176,7 +176,7 @@ export const SEED_ITEMS: Item[] = [
   { id: "jasmine-tea", name: "ジャスミン茶", group: "コーヒー・茶", par: 2, unit: "本" },
   // ドリンク（シロップ・割り材）
   { id: "vanilla-syrup", name: "バニラシロップ", group: "ドリンク（ノンアル）", par: 1, unit: "本" },
-  { id: "blackberry-syrup", name: "ブラックベリーシロップ", group: "ドリンク（ノンアル）", par: 1, unit: "本" },
+  // 2026-11-18 ブラックベリーシロップは外した（ココナッツベリークラウドはグレナデンで代用）
   { id: "grenadine", name: "グレナデンシロップ", group: "ドリンク（酒）", par: 1, unit: "本" },
   { id: "cassis", name: "カシスリキュール", group: "ドリンク（酒）", par: 1, unit: "本" },
   // 仕込み品（作ったものの在庫）
