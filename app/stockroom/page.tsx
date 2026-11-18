@@ -57,6 +57,18 @@ type HistRow = {
   madeInHouse: boolean; result: Result | null;
 };
 
+/** 倉庫になかった物を、買うお店ごとにまとめる。未発注のお店が上、仕込む物と未登録は下 */
+function shopGroups(rows: CurrentRow[]): [string, CurrentRow[]][] {
+  const m = new Map<string, CurrentRow[]>();
+  for (const r of rows) {
+    const k = r.madeInHouse ? "仕込む" : r.buy?.supplier || "";
+    m.set(k, [...(m.get(k) ?? []), r]);
+  }
+  const rank = (k: string, rs: CurrentRow[]) =>
+    k === "仕込む" ? 3 : k === "" ? 2 : rs.every((r) => r.ordered) ? 1 : 0;
+  return [...m.entries()].sort((a, b) => rank(a[0], a[1]) - rank(b[0], b[1]) || b[1].length - a[1].length);
+}
+
 const GROUPS = [
   "ドリンク（ノンアル）",
   "ドリンク（酒）",
@@ -288,65 +300,24 @@ export default function StockroomPage() {
         </div>
       </div>
 
-      {nextPrep && (
-        <div className="card" style={{ padding: "12px 14px" }}>
-          <div className="cat-title">
-            次の仕込み日 {nextPrep.date.slice(5).replace("-", "/")}（{nextPrep.weekday}）に仕込むもの
-          </div>
-          {nextPrep.items.length === 0 ? (
-            <p className="hint" style={{ margin: "4px 0 0" }}>この日に仕込むものはありません</p>
-          ) : (
-            <>
-              <p className="hint" style={{ margin: "4px 0 6px" }}>
-                材料が足りるかをこの確認で見てください。下の一覧で「倉庫にない」を押した材料は赤くなります。
-              </p>
-              {nextPrep.items.map((p) => (
-                <div key={p.id} style={{ padding: "8px 0", borderTop: "1px solid var(--line-soft, #eee)" }}>
-                  <div style={{ fontSize: 14, fontWeight: 700 }}>
-                    {p.name}
-                    <span style={{ marginLeft: 6, color: "#9c5f22" }}>{p.batch}</span>
-                  </div>
-                  <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 1 }}>{p.reasons.join("・")}</div>
-                  {p.needs.length > 0 && (
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 6 }}>
-                      {p.needs.map((n) => {
-                        const r = results[n.id];
-                        return (
-                          <span
-                            key={n.id}
-                            style={{
-                              fontSize: 12, padding: "3px 9px", borderRadius: 999, fontWeight: r ? 700 : 400,
-                              border: `1px solid ${r === "short" ? "#e0b4b4" : r === "ok" ? "#b7dfc0" : "var(--line)"}`,
-                              background: r === "short" ? "#fde8e8" : r === "ok" ? "#eaf6ec" : "#fff",
-                              color: r === "short" ? "#c0392b" : r === "ok" ? "var(--ok)" : "var(--ink)",
-                            }}
-                          >
-                            {r === "short" ? "✕ " : r === "ok" ? "✓ " : ""}{n.name}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </>
-          )}
-        </div>
-      )}
-
       {current?.active && current.rows.length > 0 && (
         <div className="card" style={{ padding: "12px 14px", borderColor: "#e8d5b0", background: "#fdf6ec" }}>
           <div className="cat-title">
-            📌 いまの在庫確認（{current.date.slice(5).replace("-", "/")}）
+            📌 倉庫になかった物（{current.date.slice(5).replace("-", "/")}の確認）
             <span style={{ fontWeight: 400, fontSize: 11.5, color: "var(--muted)", marginLeft: 6 }}>
-              {current.daysSince === 0 ? "今日" : `${current.daysSince}日前`}・
-              あと{current.activeDays - current.daysSince}日で履歴に移ります
+              未発注 {current.rows.filter((r) => !r.madeInHouse && !r.ordered).length}品 ／ 全{current.rows.length}品
             </span>
           </div>
           <p className="hint" style={{ margin: "4px 0 8px" }}>
-            倉庫に無かったものです。発注したかどうかがここで分かります。
+            お店ごとにまとめています。🛒 を押すと発注するサイトが開きます。発注したら「✓ 発注した」を押してください（全部発注するまでここに出ます）。
           </p>
-          {current.rows.map((r) => {
+          {shopGroups(current.rows).map(([shop, rows]) => (
+            <div key={shop} style={{ marginTop: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "6px 0", fontWeight: 800, fontSize: 14 }}>
+                <span>{shop === "仕込む" ? "🍳 仕込む物" : shop === "" ? "❓ 買う先が未登録" : `🏪 ${shop}`}</span>
+                <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)" }}>{rows.length}品</span>
+              </div>
+          {rows.map((r) => {
             const done = r.madeInHouse || !!r.ordered;
             return (
               <div
@@ -380,8 +351,8 @@ export default function StockroomPage() {
                           🛒 {r.buy.supplier || "購入ページ"}で買う ↗
                         </a>
                       ) : (
-                        <span style={{ fontSize: 11.5, color: "#c0392b", padding: "5px 0" }}>
-                          購入先のリンク未設定
+                        <span style={{ fontSize: 11.5, color: r.buy?.supplier ? "var(--muted)" : "#c0392b", padding: "5px 0" }}>
+                          {r.buy?.supplier ? `${r.buy.supplier}で買う（店頭）` : "買う先が未登録（仕入れ → 🔗買う先の登録）"}
                         </span>
                       )}
                       {ordering?.id !== r.id && (
@@ -469,6 +440,8 @@ export default function StockroomPage() {
               </div>
             );
           })}
+            </div>
+          ))}
           {current.rows.some((r) => !r.madeInHouse && !r.ordered) && (
             <Link
               href="/purchase"
@@ -480,6 +453,52 @@ export default function StockroomPage() {
             >
               📋 発注リストで発注する（未発注 {current.rows.filter((r) => !r.madeInHouse && !r.ordered).length}品）
             </Link>
+          )}
+        </div>
+      )}
+
+      {nextPrep && (
+        <div className="card" style={{ padding: "12px 14px" }}>
+          <div className="cat-title">
+            次の仕込み日 {nextPrep.date.slice(5).replace("-", "/")}（{nextPrep.weekday}）に仕込むもの
+          </div>
+          {nextPrep.items.length === 0 ? (
+            <p className="hint" style={{ margin: "4px 0 0" }}>この日に仕込むものはありません</p>
+          ) : (
+            <>
+              <p className="hint" style={{ margin: "4px 0 6px" }}>
+                材料が足りるかをこの確認で見てください。下の一覧で「倉庫にない」を押した材料は赤くなります。
+              </p>
+              {nextPrep.items.map((p) => (
+                <div key={p.id} style={{ padding: "8px 0", borderTop: "1px solid var(--line-soft, #eee)" }}>
+                  <div style={{ fontSize: 14, fontWeight: 700 }}>
+                    {p.name}
+                    <span style={{ marginLeft: 6, color: "#9c5f22" }}>{p.batch}</span>
+                  </div>
+                  <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 1 }}>{p.reasons.join("・")}</div>
+                  {p.needs.length > 0 && (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 6 }}>
+                      {p.needs.map((n) => {
+                        const r = results[n.id];
+                        return (
+                          <span
+                            key={n.id}
+                            style={{
+                              fontSize: 12, padding: "3px 9px", borderRadius: 999, fontWeight: r ? 700 : 400,
+                              border: `1px solid ${r === "short" ? "#e0b4b4" : r === "ok" ? "#b7dfc0" : "var(--line)"}`,
+                              background: r === "short" ? "#fde8e8" : r === "ok" ? "#eaf6ec" : "#fff",
+                              color: r === "short" ? "#c0392b" : r === "ok" ? "var(--ok)" : "var(--ink)",
+                            }}
+                          >
+                            {r === "short" ? "✕ " : r === "ok" ? "✓ " : ""}{n.name}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </>
           )}
         </div>
       )}

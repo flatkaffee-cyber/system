@@ -31,7 +31,8 @@ function nextPrepDay(today: string): string {
 }
 import { getInventoryItems } from "@/lib/inventory";
 import { getReceipts, receiptLines } from "@/lib/receipts";
-import { isPurchaseOf } from "@/lib/stockroom";
+import { buyWordsOf, isPurchaseOf } from "@/lib/stockroom";
+import { getPurchaseSheet } from "@/lib/shiire";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -137,12 +138,36 @@ export async function GET(req: NextRequest) {
     const ACTIVE_DAYS = 3;
     const allOrders = await getOrders();
     // 発注先のリンクと単価。ここから直接買いに行けるようにする
-    const invById = new Map((await getInventoryItems()).map((i) => [i.id, i]));
+    const inventory = await getInventoryItems();
+    const invById = new Map(inventory.map((i) => [i.id, i]));
+    // 発注先が登録されていない品目は、仕入れ表の同じ名前の物か、領収書でいつも買っている店を出す（2026-11-18）
+    const sq = (s: string) => s.normalize("NFKC").replace(/[\s　（）()・]/g, "").toLowerCase();
+    let sheet: Awaited<ReturnType<typeof getPurchaseSheet>>["rows"] = [];
+    try {
+      sheet = (await getPurchaseSheet()).rows;
+    } catch {
+      /* 領収書が読めなくても、登録済みの発注先は出す */
+    }
+    const findBuy = (item: (typeof items)[number]) => {
+      if (item.madeInHouse) return null;
+      const inv =
+        (item.buyId != null ? invById.get(item.buyId) : undefined) ??
+        inventory.find((v) => sq(v.name) === sq(item.name) || buyWordsOf(item).some((w) => sq(w).length >= 2 && sq(v.name).includes(sq(w))));
+      if (inv) return { url: inv.url || null, supplier: inv.supplier || null, price: inv.price ?? null };
+      const row = sheet.find((r) => r.name === item.name || isPurchaseOf(item, r.name) || isPurchaseOf(item, r.lastLine));
+      if (row?.buy) return { url: row.buy.url || null, supplier: row.buy.supplier || null, price: row.buy.price ?? null };
+      if (row?.vendor) return { url: null, supplier: row.vendor, price: null };
+      return null;
+    };
     const current = last
       ? {
           date: last.date,
           daysSince: since ?? 0,
-          active: (since ?? 0) < ACTIVE_DAYS,
+          // 3日経っても、まだ発注していない物があれば出し続ける
+          active: (since ?? 0) < ACTIVE_DAYS || shortIds.some((id) => {
+            const it = byId.get(id);
+            return !!it && !it.madeInHouse && !allOrders.some((x) => x.orderedAt >= last.date && x.lines.some((l) => l.itemId === id));
+          }),
           activeDays: ACTIVE_DAYS,
           note: last.note ?? "",
           rows: shortIds
@@ -162,12 +187,7 @@ export async function GET(req: NextRequest) {
                 par: item.par,
                 madeInHouse: !!item.madeInHouse,
                 orderQty: item.orderQty ?? 1,
-                buy: (() => {
-                  if (item.madeInHouse || item.buyId == null) return null;
-                  const inv = invById.get(item.buyId);
-                  if (!inv) return null;
-                  return { url: inv.url || null, supplier: inv.supplier || null, price: inv.price ?? null };
-                })(),
+                buy: findBuy(item),
                 ordered: o
                   ? {
                       orderedAt: o.orderedAt,
