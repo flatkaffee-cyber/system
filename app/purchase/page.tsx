@@ -40,6 +40,7 @@ export default function PurchasePage() {
   const [cands, setCands] = useState<Candidate[]>([]);
   const [toPrepare, setToPrepare] = useState<{ itemId: string; name: string; unit: string }[]>([]);
   const [waiting, setWaiting] = useState<{ itemId: string; name: string; orderedAt: string }[]>([]);
+  const [boughtInStore, setBoughtInStore] = useState<{ itemId: string; name: string; unit: string; date: string; vendor: string; qty: number }[]>([]);
   const [open, setOpen] = useState<Order[]>([]);
   const [history, setHistory] = useState<Order[]>([]);
   const [today, setToday] = useState("");
@@ -70,6 +71,7 @@ export default function PurchasePage() {
       setCands(d.candidates || []);
       setToPrepare(d.toPrepare || []);
       setWaiting(d.waiting || []);
+      setBoughtInStore(d.boughtInStore || []);
       setOpen(d.open || []);
       setHistory(d.history || []);
       setToday(d.today || "");
@@ -512,6 +514,21 @@ export default function PurchasePage() {
               </p>
             )}
           </div>
+
+          {/* 店で買って領収書を登録したもの。もう手元にあるので出さない */}
+          {boughtInStore.length > 0 && (
+            <div className="card" style={{ padding: "12px 14px" }}>
+              <div className="cat-title">🧾 店で買ったので出していないもの（{boughtInStore.length}品）</div>
+              {boughtInStore.map((b) => (
+                <div key={b.itemId} style={{ fontSize: 13, padding: "7px 0", borderTop: "1px solid var(--line-soft, #eee)" }}>
+                  {b.name}
+                  <span style={{ fontSize: 11.5, color: "var(--muted)", marginLeft: 6 }}>
+                    {md(b.date)}に{b.vendor || "店"}で{b.qty}{b.unit}（領収書）
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* 発注済みで届き待ちのため今回出さなかったもの */}
           {waiting.length > 0 && (

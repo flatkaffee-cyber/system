@@ -34,6 +34,8 @@ type CurrentRow = {
   /** 仕入れ表の購入先。ここから直接買いに行く */
   buy?: { url: string | null; supplier: string | null; price: number | null } | null;
   ordered: { orderedAt: string; qty: number; unit: string; arrivedAt: string | null } | null;
+  /** 店で買って領収書を登録したもの */
+  bought?: { date: string; vendor: string; line: string; qty: number; qtyGuessed: boolean; qtyEdited: boolean } | null;
 };
 type PaidBy = "card" | "own" | "cash";
 const PAID_LABEL: Record<PaidBy, string> = { card: "💳 会社カード", own: "🙋 立替", cash: "💴 現金" };
@@ -65,7 +67,7 @@ function shopGroups(rows: CurrentRow[]): [string, CurrentRow[]][] {
     m.set(k, [...(m.get(k) ?? []), r]);
   }
   const rank = (k: string, rs: CurrentRow[]) =>
-    k === "仕込む" ? 3 : k === "" ? 2 : rs.every((r) => r.ordered) ? 1 : 0;
+    k === "仕込む" ? 3 : k === "" ? 2 : rs.every((r) => r.ordered || r.bought) ? 1 : 0;
   return [...m.entries()].sort((a, b) => rank(a[0], a[1]) - rank(b[0], b[1]) || b[1].length - a[1].length);
 }
 
@@ -133,6 +135,23 @@ export default function StockroomPage() {
     }
   }, []);
 
+
+  // 店で買った数を直す（領収書から読めなかったとき・まとめ買いのとき）
+  const saveBoughtQty = async (since: string, itemId: string, qty: number, before: number) => {
+    if (!Number.isFinite(qty) || qty === before) return;
+    try {
+      const res = await fetch("/api/stockroom", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ storeBuyQty: { since, itemId, qty } }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || "保存に失敗");
+      setMsg("買った数を直しました");
+      await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "保存に失敗");
+    }
+  };
 
   const recordOrder = async (r: CurrentRow) => {
     if (!ordering || ordering.id !== r.id || orderSaving) return;
@@ -305,11 +324,11 @@ export default function StockroomPage() {
           <div className="cat-title">
             📌 倉庫になかった物（{current.date.slice(5).replace("-", "/")}の確認）
             <span style={{ fontWeight: 400, fontSize: 11.5, color: "var(--muted)", marginLeft: 6 }}>
-              未発注 {current.rows.filter((r) => !r.madeInHouse && !r.ordered).length}品 ／ 全{current.rows.length}品
+              未発注 {current.rows.filter((r) => !r.madeInHouse && !r.ordered && !r.bought).length}品 ／ 全{current.rows.length}品
             </span>
           </div>
           <p className="hint" style={{ margin: "4px 0 8px" }}>
-            お店ごとにまとめています。🛒 を押すと発注するサイトが開きます。発注したら「✓ 発注した」を押してください（全部発注するまでここに出ます）。
+            お店ごとにまとめています。🛒 を押すと発注するサイトが開きます。発注したら「✓ 発注した」を押してください（全部発注するまでここに出ます）。別の店で買ったときは、領収書を登録すれば自動で「店で買った」になります。
           </p>
           {shopGroups(current.rows).map(([shop, rows]) => (
             <div key={shop} style={{ marginTop: 10 }}>
@@ -318,7 +337,7 @@ export default function StockroomPage() {
                 <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)" }}>{rows.length}品</span>
               </div>
           {rows.map((r) => {
-            const done = r.madeInHouse || !!r.ordered;
+            const done = r.madeInHouse || !!r.ordered || !!r.bought;
             return (
               <div
                 key={r.id}
@@ -332,11 +351,31 @@ export default function StockroomPage() {
                   <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 2, lineHeight: 1.6 }}>
                     {r.madeInHouse
                       ? "仕込み品なので発注ではなく仕込みます"
+                      : r.bought
+                        ? `${r.bought.date.slice(5).replace("-", "/")}に${r.bought.vendor || "店"}で買った（領収書：${r.bought.line}）`
                       : r.ordered
                         ? `${r.ordered.orderedAt.slice(5).replace("-", "/")}に${r.ordered.qty}${r.ordered.unit}を発注${r.ordered.arrivedAt ? `／${r.ordered.arrivedAt.slice(5).replace("-", "/")}に到着` : "／まだ届いていません"}`
                         : "まだ発注していません"}
                   </div>
-                  {!r.madeInHouse && !r.ordered && (
+                  {r.bought && current && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, fontSize: 12.5 }}>
+                      買った数
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        defaultValue={r.bought.qty}
+                        onBlur={(e) => saveBoughtQty(current.date, r.id, Number(e.target.value), r.bought!.qty)}
+                        style={{ width: 64, padding: "4px 6px", fontSize: 14 }}
+                      />
+                      {r.unit}
+                      {r.bought.qtyGuessed && <span style={{ fontSize: 11, color: "#c0392b" }}>領収書から数が読めなかったので1にしています</span>}
+                      {r.bought.qty < r.par && !r.bought.qtyGuessed && (
+                        <span style={{ fontSize: 11, color: "#b7791f" }}>置く数（{r.par}{r.unit}）より少ない</span>
+                      )}
+                    </div>
+                  )}
+                  {!r.madeInHouse && !r.ordered && !r.bought && (
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
                       {r.buy?.url ? (
                         <a
@@ -433,6 +472,8 @@ export default function StockroomPage() {
                 }}>
                   {r.madeInHouse
                     ? "仕込む"
+                    : r.bought
+                      ? "店で買った"
                     : r.ordered
                       ? r.ordered.arrivedAt ? "届いた" : "発注済み"
                       : "未発注"}
@@ -442,7 +483,7 @@ export default function StockroomPage() {
           })}
             </div>
           ))}
-          {current.rows.some((r) => !r.madeInHouse && !r.ordered) && (
+          {current.rows.some((r) => !r.madeInHouse && !r.ordered && !r.bought) && (
             <Link
               href="/purchase"
               style={{
@@ -451,7 +492,7 @@ export default function StockroomPage() {
                 background: "var(--accent)", color: "#fff", fontSize: 14, fontWeight: 700,
               }}
             >
-              📋 発注リストで発注する（未発注 {current.rows.filter((r) => !r.madeInHouse && !r.ordered).length}品）
+              📋 発注リストで発注する（未発注 {current.rows.filter((r) => !r.madeInHouse && !r.ordered && !r.bought).length}品）
             </Link>
           )}
         </div>

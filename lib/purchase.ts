@@ -11,6 +11,7 @@
 
 import { getChecks, getItems, type Item } from "@/lib/stockroom";
 import { getInventoryItems } from "@/lib/inventory";
+import { getStoreBuys } from "@/lib/storeBuys";
 
 const ORDERS_KEY = "purchase:orders";
 
@@ -151,6 +152,8 @@ export async function buildCandidates(): Promise<{
   toPrepare: { itemId: string; name: string; unit: string }[];
   /** 発注済みで未着のため、今回は出さなかったもの */
   waiting: { itemId: string; name: string; orderedAt: string }[];
+  /** 確認の日のあとに店で買って、領収書を登録したもの（もう手元にあるので出さない） */
+  boughtInStore: { itemId: string; name: string; unit: string; date: string; vendor: string; qty: number }[];
 }> {
   const [checks, items, inv, open] = await Promise.all([
     getChecks(),
@@ -159,7 +162,7 @@ export async function buildCandidates(): Promise<{
     openOrders(),
   ]);
   const latest = checks[0];
-  if (!latest) return { checkDate: null, candidates: [], toPrepare: [], waiting: [] };
+  if (!latest) return { checkDate: null, candidates: [], toPrepare: [], waiting: [], boughtInStore: [] };
 
   const byId = new Map<string, Item>(items.map((i) => [i.id, i]));
   const invById = new Map(inv.map((i) => [i.id, i]));
@@ -168,6 +171,13 @@ export async function buildCandidates(): Promise<{
   const candidates: Candidate[] = [];
   const toPrepare: { itemId: string; name: string; unit: string }[] = [];
   const waiting: { itemId: string; name: string; orderedAt: string }[] = [];
+  const boughtInStore: { itemId: string; name: string; unit: string; date: string; vendor: string; qty: number }[] = [];
+  let storeBuys: Awaited<ReturnType<typeof getStoreBuys>> = {};
+  try {
+    storeBuys = await getStoreBuys(items, latest.date);
+  } catch {
+    /* 領収書が読めなくても発注リストは出す */
+  }
 
   for (const [itemId, result] of Object.entries(latest.results)) {
     if (result !== "short") continue;
@@ -175,6 +185,11 @@ export async function buildCandidates(): Promise<{
     if (!item) continue;
     if (item.madeInHouse) {
       toPrepare.push({ itemId, name: item.name, unit: item.unit });
+      continue;
+    }
+    const sb = storeBuys[itemId];
+    if (sb) {
+      boughtInStore.push({ itemId, name: item.name, unit: item.unit, date: sb.date, vendor: sb.vendor, qty: sb.qty });
       continue;
     }
     if (pending.has(itemId)) {
@@ -199,7 +214,7 @@ export async function buildCandidates(): Promise<{
   }
 
   candidates.sort((a, b) => (a.group === b.group ? a.name.localeCompare(b.name) : a.group.localeCompare(b.group)));
-  return { checkDate: latest.date, candidates, toPrepare, waiting };
+  return { checkDate: latest.date, candidates, toPrepare, waiting, boughtInStore };
 }
 
 export type ItemStat = {

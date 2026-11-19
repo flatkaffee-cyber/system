@@ -33,6 +33,7 @@ import { getInventoryItems } from "@/lib/inventory";
 import { getReceipts, receiptLines } from "@/lib/receipts";
 import { buyWordsOf, isPurchaseOf } from "@/lib/stockroom";
 import { getPurchaseSheet } from "@/lib/shiire";
+import { getStoreBuys, setStoreBuyQty } from "@/lib/storeBuys";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -159,6 +160,14 @@ export async function GET(req: NextRequest) {
       if (row?.vendor) return { url: null, supplier: row.vendor, price: null };
       return null;
     };
+    let storeBuys: Awaited<ReturnType<typeof getStoreBuys>> = {};
+    if (last) {
+      try {
+        storeBuys = await getStoreBuys(items, last.date);
+      } catch {
+        /* 領収書が読めなくても在庫確認はできる */
+      }
+    }
     const current = last
       ? {
           date: last.date,
@@ -166,7 +175,7 @@ export async function GET(req: NextRequest) {
           // 3日経っても、まだ発注していない物があれば出し続ける
           active: (since ?? 0) < ACTIVE_DAYS || shortIds.some((id) => {
             const it = byId.get(id);
-            return !!it && !it.madeInHouse && !allOrders.some((x) => x.orderedAt >= last.date && x.lines.some((l) => l.itemId === id));
+            return !!it && !it.madeInHouse && !storeBuys[id] && !allOrders.some((x) => x.orderedAt >= last.date && x.lines.some((l) => l.itemId === id));
           }),
           activeDays: ACTIVE_DAYS,
           note: last.note ?? "",
@@ -188,6 +197,8 @@ export async function GET(req: NextRequest) {
                 madeInHouse: !!item.madeInHouse,
                 orderQty: item.orderQty ?? 1,
                 buy: findBuy(item),
+                // 店で買って領収書を登録したもの（仕入れ表の買う先と違う店でも、これで仕入れたとみなす）
+                bought: storeBuys[id] ?? null,
                 ordered: o
                   ? {
                       orderedAt: o.orderedAt,
@@ -257,7 +268,16 @@ export async function POST(req: NextRequest) {
     const b = (await req.json()) as {
       item?: Partial<Item>;
       check?: { date?: string; results?: Record<string, "ok" | "short">; note?: string };
+      storeBuyQty?: { since: string; itemId: string; qty: number | null };
     };
+
+    // 店で買った数を直す（領収書から読めなかったときなど）
+    if (b.storeBuyQty) {
+      const { since, itemId, qty } = b.storeBuyQty;
+      if (!since || !itemId) return NextResponse.json({ error: "since と itemId が必要です" }, { status: 400 });
+      await setStoreBuyQty(since, itemId, qty === null ? null : Number(qty));
+      return NextResponse.json({ ok: true });
+    }
 
     if (b.item) {
       if (!b.item.id || !b.item.name) {

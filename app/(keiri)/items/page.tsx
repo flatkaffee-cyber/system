@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { Fragment, useState, useEffect, useCallback } from "react";
 
 // 品目別の購入台帳。仕訳とは別に「何を何回いくらで買ったか」を積み上げて見る。
 
@@ -19,6 +19,41 @@ type Ledger = {
 };
 
 const yen = (n: number) => `¥${n.toLocaleString()}`;
+
+// エクセルの表のように並べる（2026-11-19 坂本さん）
+type SortKey = "item" | "category" | "count" | "total" | "unit" | "last" | "days" | "interval" | "vendor";
+const COLS: { key: SortKey; label: string; num?: boolean }[] = [
+  { key: "item", label: "品目" },
+  { key: "category", label: "科目" },
+  { key: "count", label: "回数", num: true },
+  { key: "total", label: "合計", num: true },
+  { key: "unit", label: "1回あたり", num: true },
+  { key: "last", label: "前回", num: true },
+  { key: "days", label: "何日前", num: true },
+  { key: "interval", label: "平均の間隔", num: true },
+  { key: "vendor", label: "主な仕入先" },
+];
+const th: React.CSSProperties = {
+  position: "sticky", top: 0, zIndex: 1, padding: "8px 10px", background: "#efe9df",
+  borderBottom: "1px solid #d8cfc0", borderRight: "1px solid #e4dccb", fontSize: 12, whiteSpace: "nowrap", userSelect: "none",
+};
+const td: React.CSSProperties = { padding: "6px 10px", borderBottom: "1px solid #ece6db", borderRight: "1px solid #f1ece3", whiteSpace: "nowrap" };
+const num: React.CSSProperties = { ...td, textAlign: "right", fontVariantNumeric: "tabular-nums" };
+const tf: React.CSSProperties = { ...td, position: "sticky", bottom: 0, background: "#efe9df", fontWeight: 800, borderTop: "1px solid #d8cfc0" };
+
+function sortValue(l: Ledger, k: SortKey): string | number {
+  switch (k) {
+    case "item": return l.item;
+    case "category": return l.categories.join("・");
+    case "count": return l.count;
+    case "total": return l.total;
+    case "unit": return l.total / Math.max(1, l.count);
+    case "last": return l.last;
+    case "days": return l.daysSinceLast;
+    case "interval": return l.avgIntervalDays ?? Number.MAX_SAFE_INTEGER;
+    case "vendor": return l.vendors[0] ?? "";
+  }
+}
 
 export default function ItemsPage() {
   const [d, setD] = useState<{
@@ -80,10 +115,19 @@ export default function ItemsPage() {
     }
   }
 
-  const list = (d?.ledgers ?? []).filter((l) => !q || l.item.includes(q));
+  const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: "total", desc: true });
+  const list = (d?.ledgers ?? []).filter(
+    (l) => !q || l.item.includes(q) || l.vendors.some((v) => v.includes(q)) || l.categories.some((c) => c.includes(q)),
+  );
+  const sorted = [...list].sort((a, b) => {
+    const x = sortValue(a, sort.key);
+    const y = sortValue(b, sort.key);
+    const c = typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y), "ja");
+    return sort.desc ? -c : c;
+  });
 
   return (
-    <div className="wrap">
+    <div className="wrap" style={{ maxWidth: 1280 }}>
       <header>
         <h1>🧺 品目台帳</h1>
         <p>仕訳とは別に、何を何回いくらで買ったかを積み上げています</p>
@@ -104,51 +148,81 @@ export default function ItemsPage() {
       )}
 
       <div className="card" style={{ padding: 12 }}>
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="品目で絞り込み（例: ペーパー）" />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="品目・仕入先・科目で絞り込み（例: ペーパー、業務スーパー）" />
       </div>
 
-      {list.map((l) => {
-        const isOpen = open === l.item;
-        return (
-          <div key={l.item} className="card" style={{ padding: "12px 14px" }}>
-            <div
-              onClick={() => setOpen(isOpen ? null : l.item)}
-              style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", gap: 8 }}
-            >
-              <div>
-                <strong style={{ fontSize: 14.5 }}>{l.item}</strong>
-                <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 2 }}>
-                  {l.count}回 ／ 前回 {l.last.slice(5)}（{l.daysSinceLast}日前）
-                  {l.avgIntervalDays !== null && ` ／ 平均${l.avgIntervalDays}日`}
-                </div>
-              </div>
-              <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                <div style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{yen(l.total)}</div>
-                <div style={{ fontSize: 11, color: "var(--muted)" }}>{isOpen ? "▲" : "▼"}</div>
-              </div>
-            </div>
-
-            {isOpen && (
-              <div style={{ marginTop: 10 }}>
-                <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 6 }}>
-                  科目: {l.categories.join("・")} ／ 仕入先: {l.vendors.slice(0, 4).join("・")}
-                  {l.vendors.length > 4 && ` ほか${l.vendors.length - 4}`}
-                </div>
-                {l.buys.map((b, i) => (
-                  <div key={i} className="result-row">
-                    <span style={{ fontSize: 12.5 }}>
-                      <span className="mono">{b.date.slice(5)}</span>{" "}
-                      <span style={{ color: "var(--muted)" }}>{b.vendor.slice(0, 14)}</span>
-                      <div style={{ fontSize: 11, color: "var(--muted)" }}>{b.name.slice(0, 40)}</div>
-                    </span>
-                    <span className="mono" style={{ whiteSpace: "nowrap" }}>{yen(b.amount)}</span>
-                  </div>
-                ))}
-              </div>
-            )}
+      {d && (
+        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+          <div style={{ overflowX: "auto", maxHeight: "75vh", overflowY: "auto" }}>
+            <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 13 }}>
+              <thead>
+                <tr>
+                  {COLS.map((c) => (
+                    <th
+                      key={c.key}
+                      onClick={() => setSort((p) => ({ key: c.key, desc: p.key === c.key ? !p.desc : c.key !== "item" }))}
+                      style={{ ...th, textAlign: c.num ? "right" : "left", cursor: "pointer" }}
+                      title="押すと並べ替え"
+                    >
+                      {c.label}
+                      {sort.key === c.key ? (sort.desc ? " ▼" : " ▲") : ""}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.map((l, idx) => {
+                  const isOpen = open === l.item;
+                  const zebra = idx % 2 ? "#fbf9f5" : "#fff";
+                  return (
+                    <Fragment key={l.item}>
+                      <tr onClick={() => setOpen(isOpen ? null : l.item)} style={{ cursor: "pointer", background: isOpen ? "#fdf1e3" : zebra }}>
+                        <td style={{ ...td, fontWeight: 700 }}>{isOpen ? "▾ " : "▸ "}{l.item}</td>
+                        <td style={{ ...td, color: "var(--muted)" }}>{l.categories.join("・")}</td>
+                        <td style={num}>{l.count}</td>
+                        <td style={{ ...num, fontWeight: 700 }}>{yen(l.total)}</td>
+                        <td style={num}>{yen(Math.round(l.total / Math.max(1, l.count)))}</td>
+                        <td style={num}>{l.last.slice(5).replace("-", "/")}</td>
+                        <td style={num}>{l.daysSinceLast}日前</td>
+                        <td style={num}>{l.avgIntervalDays !== null ? `${l.avgIntervalDays}日` : "—"}</td>
+                        <td style={{ ...td, color: "var(--muted)", maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {l.vendors.slice(0, 3).join("・")}{l.vendors.length > 3 ? ` ほか${l.vendors.length - 3}` : ""}
+                        </td>
+                      </tr>
+                      {isOpen &&
+                        l.buys.map((b, i) => (
+                          <tr key={i} style={{ background: "#faf6ef", fontSize: 12 }}>
+                            <td style={{ ...td, paddingLeft: 26, color: "var(--muted)", whiteSpace: "normal" }}>{b.name}</td>
+                            <td style={{ ...td, color: "var(--muted)" }}>{b.category}</td>
+                            <td style={num} />
+                            <td style={num}>{yen(b.amount)}</td>
+                            <td style={num} />
+                            <td style={num}>{b.date.slice(5).replace("-", "/")}</td>
+                            <td style={num} />
+                            <td style={num} />
+                            <td style={{ ...td, color: "var(--muted)" }}>{b.vendor}</td>
+                          </tr>
+                        ))}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td style={{ ...tf }}>合計（{sorted.length}品目）</td>
+                  <td style={tf} />
+                  <td style={{ ...tf, textAlign: "right" }}>{sorted.reduce((n, l) => n + l.count, 0)}</td>
+                  <td style={{ ...tf, textAlign: "right" }}>{yen(sorted.reduce((n, l) => n + l.total, 0))}</td>
+                  <td style={tf} colSpan={5} />
+                </tr>
+              </tfoot>
+            </table>
           </div>
-        );
-      })}
+          <p className="hint" style={{ margin: 0, padding: "8px 12px" }}>
+            見出しを押すと並べ替えます。行を押すと、その品目の買った記録が下に開きます。
+          </p>
+        </div>
+      )}
 
       {d && d.unclassified.length > 0 && (
         <div className="card">
