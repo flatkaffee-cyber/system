@@ -7,9 +7,12 @@
 // - 5分おきの cron（/api/cron/instagram）が runDue() を呼ぶ
 // - 時刻の前に手で上げていれば出さない（決まりごとに切り替えられる）
 //
-// APIからはスタンプ（リンク・メンション・場所・音楽）を付けられない。画像だけ上げる。
+// APIからはスタンプ（リンク・メンション・場所・音楽）を付けられない。画像か動画だけ上げる。
 // 画像はJPEGしか受け付けないので、画面側でJPEGに直してから送ってくる。
+// 動画（2026-11-19〜）は大きいので、画面からBlobへ直接上げる（/api/instagram/upload）。
+// インスタには1時間だけ開ける署名付きURLを渡して取りに来てもらう。
 
+import { del as delBlob, head as headBlob, issueSignedToken, presignUrl } from "@vercel/blob";
 import { delFile, getFile, putFile } from "@/lib/fileStore";
 import { getGbpConn, postToGoogle } from "@/lib/googleBusiness";
 import { captionToSummary, feedImage, newFeedPosts, type FeedMedia } from "@/lib/googleBusinessPost";
@@ -81,7 +84,11 @@ export async function saveClosures(dates: string[]): Promise<void> {
 
 // ───────── 画像 ─────────
 
-export type StoryImage = { id: string; name: string; createdAt: string };
+export type StoryImage = { id: string; name: string; createdAt: string; kind?: "image" | "video" };
+
+/** 動画の置き場所（Blob）。IDは画面で作った32桁 */
+export const videoPath = (id: string) => `ig/vid/${id}.mp4`;
+const isId = (id: string) => /^[0-9a-f]{32}$/.test(id);
 
 export async function listImages(): Promise<StoryImage[]> {
   const store = await kv();
@@ -105,10 +112,26 @@ export async function addImage(name: string, dataUrl: string): Promise<StoryImag
   return img;
 }
 
+/** 画面からBlobへ上げ終わった動画を一覧に足す */
+export async function addVideo(id: string, name: string): Promise<StoryImage> {
+  if (!isId(id)) throw new Error("動画のIDが正しくありません");
+  const info = await headBlob(videoPath(id)).catch(() => null);
+  if (!info) throw new Error("動画が見つかりません。もう一度上げてください");
+  const list = await listImages();
+  const found = list.find((i) => i.id === id);
+  if (found) return found;
+  const v: StoryImage = { id, name: name.slice(0, 60), createdAt: new Date().toISOString(), kind: "video" };
+  list.push(v);
+  await (await must()).set(KEY_IMAGES, list);
+  return v;
+}
+
 export async function removeImage(id: string): Promise<void> {
   const used = (await listRules()).some((r) => r.slots.some((s) => s.imageIds.includes(id)));
   if (used) throw new Error("決まりで使っている画像です。先に決まりから外してください");
-  await delFile(`ig:img:${id}`);
+  const item = (await listImages()).find((i) => i.id === id);
+  if (item?.kind === "video") await delBlob(videoPath(id)).catch(() => {});
+  else await delFile(`ig:img:${id}`);
   const list = await listImages();
   await (await must()).set(KEY_IMAGES, list.filter((i) => i.id !== id));
 }
@@ -126,6 +149,25 @@ export function imageUrl(id: string, origin?: string): string {
     process.env.IG_PUBLIC_BASE_URL ||
     (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : origin);
   return `${base}/api/instagram/img/${id}.jpg`;
+}
+
+/** 動画をインスタが取りに来るURL。非公開のBlobなので、1時間だけ開ける署名を付ける */
+export async function videoUrl(id: string): Promise<string> {
+  const pathname = videoPath(id);
+  const t = await issueSignedToken({ pathname, operations: ["get"], validUntil: Date.now() + 3600_000 });
+  return (await presignUrl(t, { operation: "get", pathname, access: "private" })).presignedUrl;
+}
+
+/** 画像か動画かを見て、上げるためのURLと種類を返す */
+async function mediaFor(ids: string[], origin?: string): Promise<{ url: string; kind: "image" | "video" }[]> {
+  const list = await listImages();
+  const out: { url: string; kind: "image" | "video" }[] = [];
+  for (const id of ids) {
+    const item = list.find((i) => i.id === id);
+    if (item?.kind === "video") out.push({ url: await videoUrl(id), kind: "video" });
+    else out.push({ url: imageUrl(id, origin), kind: "image" });
+  }
+  return out;
 }
 
 // ───────── 接続 ─────────
@@ -231,24 +273,29 @@ export async function listStories(conn: Conn): Promise<{ id: string; timestamp: 
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** 画像1枚をストーリーに上げて、できた投稿のIDを返す */
-export async function postStory(conn: Conn, url: string): Promise<string> {
+/** 画像か動画1つをストーリーに上げて、できた投稿のIDを返す */
+export async function postStory(conn: Conn, url: string, kind: "image" | "video" = "image"): Promise<string> {
   const token = encodeURIComponent(conn.token);
+  const param = kind === "video" ? "video_url" : "image_url";
   const container = await call<{ id: string }>(
-    `${api(conn, `${conn.userId}/media`)}?media_type=STORIES&image_url=${encodeURIComponent(url)}&access_token=${token}`,
+    `${api(conn, `${conn.userId}/media`)}?media_type=STORIES&${param}=${encodeURIComponent(url)}&access_token=${token}`,
     { method: "POST" },
   );
-  // 画像はふつうすぐ準備できるが、念のため最大30秒待つ
-  for (let i = 0; i < 10; i++) {
-    const s = await call<{ status_code?: string }>(
-      `${api(conn, container.id)}?fields=status_code&access_token=${token}`,
+  // 画像はふつうすぐ準備できる（最大30秒待つ）。動画はインスタ側の変換に時間がかかるので最大4分待つ
+  const tries = kind === "video" ? 48 : 10;
+  const label = kind === "video" ? "動画" : "画像";
+  let ready = false;
+  for (let i = 0; i < tries; i++) {
+    const s = await call<{ status_code?: string; status?: string }>(
+      `${api(conn, container.id)}?fields=status_code,status&access_token=${token}`,
     );
-    if (s.status_code === "FINISHED" || !s.status_code) break;
+    if (s.status_code === "FINISHED" || (!s.status_code && kind === "image")) { ready = true; break; }
     if (s.status_code === "ERROR" || s.status_code === "EXPIRED") {
-      throw new Error(`画像の準備に失敗しました（${s.status_code}）`);
+      throw new Error(`${label}の準備に失敗しました（${s.status || s.status_code}）`);
     }
-    await sleep(3000);
+    await sleep(kind === "video" ? 5000 : 3000);
   }
+  if (!ready && kind === "video") throw new Error("動画の準備が4分で終わりませんでした。短くするか、小さくしてください");
   const pub = await call<{ id: string }>(
     `${api(conn, `${conn.userId}/media_publish`)}?creation_id=${container.id}&access_token=${token}`,
     { method: "POST" },
@@ -358,7 +405,7 @@ export async function runDue(origin?: string, now = Date.now()) {
 
     try {
       const mediaIds: string[] = [];
-      for (const id of d.imageIds) mediaIds.push(await postStory(conn, imageUrl(id, origin)));
+      for (const m of await mediaFor(d.imageIds, origin)) mediaIds.push(await postStory(conn, m.url, m.kind));
       mediaIds.forEach((m) => ownIds.add(m));
       const r: RunRecord = { ...base, status: "posted", at: new Date().toISOString(), mediaIds, detail: note };
       await addRun(r);
@@ -387,7 +434,7 @@ export async function postNow(ruleId: string, time: string, origin?: string): Pr
   const base = { key: `test|${Date.now()}`, ruleId, ruleName: rule.name, date: today.date, time };
   try {
     const mediaIds: string[] = [];
-    for (const id of slot.imageIds) mediaIds.push(await postStory(conn, imageUrl(id, origin)));
+    for (const m of await mediaFor(slot.imageIds, origin)) mediaIds.push(await postStory(conn, m.url, m.kind));
     const r: RunRecord = { ...base, status: "test", at: new Date().toISOString(), mediaIds };
     await addRun(r);
     return r;

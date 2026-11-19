@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Nav from "@/components/Nav";
+import { upload as uploadToBlob } from "@vercel/blob/client";
 
 // インスタの定期ストーリー。営業日のオープン（10時・19時）や、毎週のランニングなどを決めておくと
 // その時刻に自動で上げる。時刻の前に手で上げていれば、自動の分は出さない。
@@ -24,7 +25,7 @@ type Rule = {
   endDate?: string;
   next?: { date: string; time: string } | null;
 };
-type Img = { id: string; name: string; createdAt: string };
+type Img = { id: string; name: string; createdAt: string; kind?: "image" | "video" };
 type Run = {
   key: string;
   ruleName: string;
@@ -47,6 +48,25 @@ const STATUS: Record<Run["status"], { label: string; color: string }> = {
 };
 
 const imgSrc = (id: string) => `/api/instagram/img/${id}.jpg`;
+
+/** 画像の小さい見本。動画は中身を読み込まず「▶ 動画」の札にする */
+function Thumb({ id, images, w, h, title, onClick }: { id: string; images: Img[]; w: number; h: number; title?: string; onClick?: () => void }) {
+  const box = { width: w, height: h, borderRadius: 4, border: "1px solid var(--line)", cursor: onClick ? "pointer" : undefined } as const;
+  if (images.find((i) => i.id === id)?.kind === "video") {
+    return (
+      <div title={title} onClick={onClick}
+        style={{ ...box, background: "#222", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: w < 50 ? 10 : 12, fontWeight: 700, textAlign: "center" }}>
+        ▶<br />動画
+      </div>
+    );
+  }
+  return <img src={imgSrc(id)} alt={title || ""} title={title} onClick={onClick} style={{ ...box, objectFit: "cover" }} />;
+}
+
+/** 動画用の32桁のID（BlobのURLにそのまま出るので推測できない長さにする） */
+function newVideoId(): string {
+  return [...crypto.getRandomValues(new Uint8Array(16))].map((x) => x.toString(16).padStart(2, "0")).join("");
+}
 
 const md = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}（${WD[new Date(`${d}T00:00:00`).getDay()]}）`;
 
@@ -176,6 +196,29 @@ export default function InstagramPage() {
     try {
       const added: string[] = [];
       for (const f of Array.from(files)) {
+        if (f.type.startsWith("video/")) {
+          // 動画：インスタは60秒まで・100MBまで。Blobへ直接上げてから一覧に足す
+          if (f.size > 100 * 1024 * 1024) throw new Error(`${f.name} は100MBを超えています`);
+          const id = newVideoId();
+          await uploadToBlob(`ig/vid/${id}.mp4`, f, {
+            access: "private",
+            handleUploadUrl: "/api/instagram/upload",
+            contentType: f.type === "video/quicktime" ? "video/quicktime" : "video/mp4",
+            multipart: f.size > 8 * 1024 * 1024,
+            onUploadProgress: (p) => setMsg(`動画を上げています… ${Math.round(p.percentage)}%`),
+          });
+          setMsg("");
+          const res = await fetch("/api/instagram", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "addVideo", id, name: f.name }),
+          });
+          const d = await res.json();
+          if (!res.ok) throw new Error(d.error || "動画を登録できませんでした");
+          added.push(d.image.id);
+          setImages((xs) => [...xs, d.image]);
+          continue;
+        }
         const dataUrl = await toJpeg(f);
         const res = await fetch("/api/instagram", {
           method: "POST",
@@ -332,9 +375,9 @@ export default function InstagramPage() {
                   <div key={s.time} style={{ display: "flex", gap: 6, alignItems: "center" }}>
                     <span style={{ fontWeight: 800, fontSize: 14 }}>{s.time}</span>
                     {s.imageIds.map((id) => (
-                      <img key={id} src={imgSrc(id)} alt="" style={{ width: 36, height: 64, objectFit: "cover", borderRadius: 4, border: "1px solid var(--line)" }} />
+                      <Thumb key={id} id={id} images={images} w={36} h={64} />
                     ))}
-                    {s.imageIds.length === 0 && <span style={{ fontSize: 11, color: "#c0392b" }}>画像なし</span>}
+                    {s.imageIds.length === 0 && <span style={{ fontSize: 11, color: "#c0392b" }}>画像・動画なし</span>}
                     {conn && s.imageIds.length > 0 && (
                       <button disabled={busy} style={{ fontSize: 11, padding: "3px 6px" }}
                         onClick={() => confirm(`「${r.name}」の${s.time}の画像を、いまインスタに上げますか？`) && post({ action: "postNow", ruleId: r.id, time: s.time }, "上げました。インスタで確かめてください")}>
@@ -411,13 +454,13 @@ export default function InstagramPage() {
           )}
 
           <div>
-            <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>時刻と画像<span style={{ fontWeight: 400, color: "var(--muted)" }}>（7:00〜22:30の間）</span></div>
+            <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>時刻と画像・動画<span style={{ fontWeight: 400, color: "var(--muted)" }}>（7:00〜22:30の間）</span></div>
             {edit.slots.map((s, i) => (
               <div key={i} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 8, marginBottom: 6 }}>
                 <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                   <input type="time" value={s.time} step={300} min="07:00" max="22:30" onChange={(e) => setSlot(i, { time: e.target.value })} style={{ width: 110 }} />
                   <span style={{ flex: 1, fontSize: 11, color: "var(--muted)" }}>
-                    {s.imageIds.length > 1 ? `${s.imageIds.length}枚を順に上げる` : ""}
+                    {s.imageIds.length > 1 ? `${s.imageIds.length}枚を順に上げる` : "動画は60秒・100MBまで"}
                   </span>
                   {edit.slots.length > 1 && (
                     <button style={{ fontSize: 12 }} onClick={() => setEdit({ ...edit, slots: edit.slots.filter((_, j) => j !== i) })}>この時刻を消す</button>
@@ -426,7 +469,7 @@ export default function InstagramPage() {
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
                   {s.imageIds.map((id) => (
                     <div key={id} style={{ position: "relative" }}>
-                      <img src={imgSrc(id)} alt="" style={{ width: 54, height: 96, objectFit: "cover", borderRadius: 4, border: "1px solid var(--line)" }} />
+                      <Thumb id={id} images={images} w={54} h={96} />
                       <button onClick={() => setSlot(i, { imageIds: s.imageIds.filter((x) => x !== id) })}
                         style={{ position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: 10, padding: 0, fontSize: 12, lineHeight: "18px" }}>×</button>
                     </div>
@@ -437,21 +480,20 @@ export default function InstagramPage() {
                 {picking === i && (
                   <div style={{ marginTop: 8, padding: 8, background: "#fafafa", borderRadius: 6 }}>
                     <label className="primary" style={{ display: "inline-block", padding: "7px 12px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700, background: "var(--accent)", color: "#fff" }}>
-                      写真をアップロード
-                      <input type="file" accept="image/*" multiple hidden disabled={busy}
+                      写真・動画をアップロード
+                      <input type="file" accept="image/*,video/mp4,video/quicktime" multiple hidden disabled={busy}
                         onChange={(e) => { upload(e.target.files, i); e.target.value = ""; }} />
                     </label>
                     {images.length > 0 && (
                       <>
-                        <div style={{ fontSize: 11, color: "var(--muted)", margin: "8px 0 4px" }}>前にアップロードした画像から選ぶ</div>
+                        <div style={{ fontSize: 11, color: "var(--muted)", margin: "8px 0 4px" }}>前にアップロードした画像・動画から選ぶ</div>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                           {images.map((im) => (
                             <div key={im.id} style={{ position: "relative" }}>
-                              <img src={imgSrc(im.id)} alt={im.name} title={im.name}
-                                onClick={() => { setSlot(i, { imageIds: [...s.imageIds, im.id] }); setPicking(null); }}
-                                style={{ width: 54, height: 96, objectFit: "cover", borderRadius: 4, cursor: "pointer", border: "1px solid var(--line)" }} />
+                              <Thumb id={im.id} images={images} w={54} h={96} title={im.name}
+                                onClick={() => { setSlot(i, { imageIds: [...s.imageIds, im.id] }); setPicking(null); }} />
                               <button title="画像を消す" disabled={busy}
-                                onClick={() => confirm("この画像を消しますか？") && post({ action: "deleteImage", id: im.id })}
+                                onClick={() => confirm("消しますか？") && post({ action: "deleteImage", id: im.id })}
                                 style={{ position: "absolute", bottom: 2, right: 2, fontSize: 10, padding: "0 4px" }}>消す</button>
                             </div>
                           ))}
