@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { runDue, syncFeedToGoogle } from "@/lib/instagram";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 // インスタの定期ストーリー。5分おきにVercelのcronが呼ぶ。
 // 時刻を過ぎた枠があれば上げる。無ければ何もしないので、何度走っても実害はない。

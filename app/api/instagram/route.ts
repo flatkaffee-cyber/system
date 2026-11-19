@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   addImage,
+  addVideo,
   connect,
   disconnect,
   getConn,
@@ -19,7 +20,7 @@ import { jstNow, nextRun, toMin, type Frequency, type StoryRule } from "@/lib/in
 import { SHOP } from "@/lib/shop";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 const err = (e: unknown, status = 500) =>
   NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status });
@@ -90,7 +91,7 @@ function cleanRule(b: Partial<StoryRule>): StoryRule {
 
 // POST /api/instagram { action, ... }
 //   saveRule { rule } / deleteRule { id }
-//   upload { name, dataUrl } / deleteImage { id }
+//   upload { name, dataUrl } / addVideo { id, name }（動画は先に /api/instagram/upload でBlobへ） / deleteImage { id }
 //   closures { dates }
 //   connect { token, userId? } / disconnect
 //   postNow { ruleId, time }
@@ -109,6 +110,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true });
       case "upload":
         return NextResponse.json({ ok: true, image: await addImage(String(b.name || "画像"), String(b.dataUrl || "")) });
+      case "addVideo":
+        return NextResponse.json({ ok: true, image: await addVideo(String(b.id || ""), String(b.name || "動画")) });
       case "deleteImage":
         await removeImage(String(b.id));
         return NextResponse.json({ ok: true });

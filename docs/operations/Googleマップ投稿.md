@@ -17,6 +17,15 @@
 5. OAuth同意画面に `https://www.googleapis.com/auth/business.manage` を足す。「テスト」状態ならオーナーのGoogleアカウントをテストユーザーに足す（テスト状態のトークンは7日で切れるので、本番公開にしておく）
 6. /instagram の「Googleマップの店につなぐ」を、店のオーナーのGoogleアカウントで開く
 
+## 申請の記録（2026-11-16）
+- flat.kaffee@gmail.com で「Application for Basic API Access」を送信済み。ケースID **0-6191000042339**。審査は7〜10営業日。結果は flat.kaffee@gmail.com にメールで届く。重ねて申請すると遅くなるので、出し直さない
+- 中身：プロジェクト番号 626976120251（Gmail連携のOAuthクライアントのプロジェクト。本番の /api/google-business/authorize の client_id の頭の数字で確かめた）、会社サイト https://flat-cafe.vercel.app（誤り。開店前の古いサイトだった。インスタ https://www.instagram.com/flat.hikone/ に訂正する）、60日以上確認済み＝Yes、既に許可済みのプロジェクト＝No
+- このプロジェクトは flat.kaffee@gmail.com のもの。2026-11-16時点では2段階認証が無効で、Cloud Console に入れなかった。手順4・5の前に、オーナーが2段階認証を有効にしておく
+- ビジネスプロフィールにウェブサイトが無かったので、11/16 にインスタ https://www.instagram.com/flat.hikone/ を登録（格好いい公式サイトができたら差し替える）
+
+### ケースへの訂正文（Googleからケースのメールが来たら、その返信で送る。11/16 時点ではメール未着）
+> Hello, regarding case 0-6191000042339 (project number 626976120251): the company website I entered was incorrect. Our correct website is https://www.instagram.com/flat.hikone/ , which is also set as the website on our Business Profile "flat." (Hikone, Shiga). Thank you.
+
 ## 仕組みのメモ
 - 接続は KV の `gbp:conn`（更新トークン・account・location・店名）。Gmailの `google:tokens` とは別
 - OAuthの戻り先は既存の `/api/google/callback`。state が `gbp:` で始まるときだけこちらの処理に入る。リダイレクトURIを増やさなくて済む
