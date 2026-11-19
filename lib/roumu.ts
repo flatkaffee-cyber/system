@@ -12,10 +12,13 @@ export type Member = {
   stdPension: number;
   /** 社会保険に入った月（YYYY-MM） */
   since: string;
+  /** 扶養控除等申告書をほかの会社に出していて、源泉税を乙欄で引き始める支給月（YYYY-MM） */
+  otsuFrom?: string;
 };
 
 export const MEMBERS: Member[] = [
-  { name: "坂本", pay: 62999, stdHealth: 58000, stdPension: 88000, since: "2026-09" },
+  // 坂本さんはバイト先で年末調整するので flat. は乙欄（2026-11-19 決定、12月支給から）
+  { name: "坂本", pay: 62999, stdHealth: 58000, stdPension: 88000, since: "2026-09", otsuFrom: "2026-12" },
   { name: "櫻井", pay: 62999, stdHealth: 58000, stdPension: 88000, since: "2026-09" },
   { name: "町田", pay: 62999, stdHealth: 58000, stdPension: 88000, since: "2026-09" },
 ];
@@ -67,8 +70,12 @@ export function monthlyPayment(members = MEMBERS, r = RATES) {
   return { health, support, pension, contribution, total, employee, employer: total - employee };
 }
 
-/** 源泉所得税（月額表・甲欄）。88,000円未満は0円。それ以上はまだ表を入れていないので null */
-export const withholding = (taxable: number): number | null => (taxable < 88000 ? 0 : null);
+/**
+ * 源泉所得税（月額表）。88,000円未満は 甲欄 0円・乙欄 3.063%（円未満切り捨て）。
+ * それ以上はまだ表を入れていないので null
+ */
+export const withholding = (taxable: number, otsu = false): number | null =>
+  taxable < 88000 ? (otsu ? Math.floor(taxable * 0.03063 + 1e-9) : 0) : null;
 
 /** YYYY-MM を n か月ずらす */
 export function addMonth(ym: string, n: number) {
@@ -126,7 +133,7 @@ export function payroll(month: string, members = MEMBERS, r = RATES): PayRow[] {
     const support = covered ? p.support : 0;
     const pension = covered ? p.pension : 0;
     const taxable = m.pay - health - support - pension;
-    const tax = withholding(taxable);
+    const tax = withholding(taxable, !!m.otsuFrom && month >= m.otsuFrom);
     return {
       name: m.name,
       pay: m.pay,

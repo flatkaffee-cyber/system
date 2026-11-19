@@ -31,3 +31,12 @@ test("9月支給は保険料なし、10月支給は引き忘れ、11月支給は
   assert.equal(nov.tax, 0);
   assert.equal(nov.net, 52015);
 });
+
+test("坂本さんは12月支給から乙欄: 52,015 × 3.063% = 1,593円を引いて 50,422円", () => {
+  const dec = payroll("2026-12");
+  const sakamoto = dec.find((r) => r.name === "坂本")!;
+  assert.equal(sakamoto.tax, 1593);
+  assert.equal(sakamoto.net, 50422);
+  assert.equal(dec.find((r) => r.name === "町田")!.tax, 0);
+  assert.equal(payroll("2026-11").find((r) => r.name === "坂本")!.tax, 0);
+});
