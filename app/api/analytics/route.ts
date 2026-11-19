@@ -1,3 +1,4 @@
+import { applyTenderFix, getTenderFixes } from "@/lib/tenderFix";
 import { NextRequest, NextResponse } from "next/server";
 import { EXCLUDE_WINDOWS, excludeOf } from "@/lib/salesEvents";
 import { getReceipts, receiptLines } from "@/lib/receipts";
@@ -116,6 +117,8 @@ async function fetchOrders(beginISO: string, endISO: string) {
 // 経営判断用。freeeに登録済みかどうかは問わず、領収書の全件を支出として扱う。
 export async function GET(req: NextRequest) {
   try {
+    // 現金とPayPayの押し間違いを直したもの（lib/tenderFix）
+    const tenderFixes = await getTenderFixes();
     const { searchParams } = req.nextUrl;
     const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
     const from = searchParams.get("from") || today.slice(0, 8) + "01";
@@ -283,7 +286,7 @@ export async function GET(req: NextRequest) {
           addVariant(name, vname, day, qty, li.total_money?.amount || 0, (costByName[name] || 0) * qty);
         }
       }
-      for (const t of o.tenders || []) {
+      for (const t of applyTenderFix<any>(o.tenders || [], tenderFixes[o.id])) {
         const key = t.type === "CASH" ? "現金" : t.type === "CARD" ? "カード"
           : t.note || t.other_details?.source || "その他";
         byTender[key] = byTender[key] || { count: 0, amount: 0 };

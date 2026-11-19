@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SET_NAMES, parseSetNote } from "@/lib/setMenu";
 import { getFixes } from "@/lib/salesFix";
+import { applyTenderFix, getTenderFixes } from "@/lib/tenderFix";
 
 export const runtime = "nodejs";
 
@@ -180,6 +181,8 @@ export async function GET(req: NextRequest) {
     const usedOpen = new Set<string>();
     // 手で入れた中身の対応表。Squareが書き換えられない分をここで補う
     const itemFixes = await getFixes();
+    // 現金とPayPayの押し間違いを直したもの
+    const tenderFixes = await getTenderFixes();
     function recoverItems(o: any): any[] | null {
       // 手で入れた対応表が最優先。品目名が入っていても上書きする。
       // 打ち間違い（別の商品で会計してしまった）を直すのにも使うため。
@@ -222,11 +225,15 @@ export async function GET(req: NextRequest) {
         tax: o.total_tax_money?.amount || 0,
         // 支払方法。ドロワーを締めるとき現金の合計が要る。
         // CASH=現金、CARD=カード、OTHER=PayPay等の「その他のお支払い」
-        tenders: (o.tenders || []).map((t: any) => ({
-          type: t.type,
-          amount: t.amount_money?.amount || 0,
-          note: t.note || t.other_details?.source || "",
-        })),
+        tenders: applyTenderFix<{ type: string; amount: number; note: string }>(
+          (o.tenders || []).map((t: any) => ({
+            type: t.type as string,
+            amount: (t.amount_money?.amount || 0) as number,
+            note: (t.note || t.other_details?.source || "") as string,
+          })),
+          tenderFixes[o.id],
+        ),
+        tenderFixed: tenderFixes[o.id]?.method ?? null,
         items:
           recoverItems(o) ??
           (o.line_items || []).map((li: any) => ({

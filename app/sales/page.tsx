@@ -21,6 +21,56 @@ function SetContents({ c }: { c?: ProductRow["contents"] }) {
     </div>
   );
 }
+/** 支払い方法。現金とPayPayを押し間違えたときは、ここで直す（Squareの記録はそのまま。lib/tenderFix） */
+function TenderLine({ o, onFixed }: { o: OrderRow; onFixed: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const ts = o.tenders ?? [];
+  const label = (t: { type: string; note: string }) => (t.type === "CASH" ? "現金" : t.type === "CARD" ? "カード" : t.note || "その他");
+  const now = ts.length === 1 ? (ts[0].type === "CASH" ? "cash" : ts[0].type === "CARD" ? "card" : "paypay") : null;
+  const fix = async (method: "cash" | "paypay" | "card" | null) => {
+    setBusy(true);
+    try {
+      const r = await fetch("/api/square/tender-fix", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: o.id, method }),
+      });
+      if (!r.ok) throw new Error((await r.json()).error || "保存に失敗");
+      onFixed();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "保存に失敗");
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (!ts.length) return null;
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>
+      支払い：<strong style={{ color: "var(--ink, #1b1a17)" }}>{ts.map(label).join("＋")}</strong>
+      {o.tenderFixed && <span style={{ color: "#b7791f" }}>（押し間違いを直した）</span>}
+      {now && (
+        <select
+          disabled={busy}
+          value=""
+          onChange={(e) => {
+            const v = e.target.value;
+            if (v === "reset") fix(null);
+            else if (v) fix(v as "cash" | "paypay" | "card");
+          }}
+          style={{ fontSize: 12, padding: "2px 6px", marginLeft: "auto" }}
+          aria-label="支払い方法を直す"
+        >
+          <option value="">押し間違いを直す…</option>
+          {(["cash", "paypay", "card"] as const).filter((m) => m !== now).map((m) => (
+            <option key={m} value={m}>{m === "cash" ? "現金" : m === "paypay" ? "PayPay" : "カード"}に直す</option>
+          ))}
+          {o.tenderFixed && <option value="reset">Squareの記録どおりに戻す</option>}
+        </select>
+      )}
+    </div>
+  );
+}
+
 type HourRow = { hour: number; count: number; amount: number };
 type OrderRow = {
   id: string;
@@ -29,6 +79,9 @@ type OrderRow = {
   total: number;
   tax: number;
   items: { name: string; qty: number; amount: number }[];
+  tenders?: { type: string; amount: number; note: string }[];
+  /** 支払い方法を押し間違えて直したもの */
+  tenderFixed?: "cash" | "paypay" | "card" | null;
 };
 type CashClose = {
   date: string; floatCash: number; cashSales: number; cashOut: number;
@@ -656,6 +709,7 @@ export default function SalesPage() {
                         ¥{fmt(o.total)}
                       </span>
                     </div>
+                    <TenderLine o={o} onFixed={load} />
                     {o.items.map((item, i) => (
                       <div
                         key={i}
