@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { orderLineAmount } from "@/lib/orderAmount";
 import { getReceipts, receiptLines } from "@/lib/receipts";
 import type { PendingOrder } from "../cron/amazon-sync/route";
 import { getDecisions } from "@/lib/kb";
@@ -121,7 +122,7 @@ export async function GET() {
       seenOrder.add(dupKey);
       for (const it of o.items ?? []) {
         const name = (it.name || "").trim();
-        const amount = (it.price ?? 0) * (it.quantity ?? 1);
+        const amount = orderLineAmount(o, it);
         if (!name || !amount) continue;
         const buy: Buy = {
           date: ymd(o.orderDate),

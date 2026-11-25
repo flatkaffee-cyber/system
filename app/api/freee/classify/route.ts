@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { orderLineAmount } from "@/lib/orderAmount";
 import { getReceipts, receiptLines } from "@/lib/receipts";
 import { getOverrides, resolveWithOverrides } from "@/lib/freeeItems";
 import { getDecisions, matchKbIn, getKbEntries } from "@/lib/kb";
@@ -95,7 +96,7 @@ export async function POST(req: NextRequest) {
       if (o) {
         const lines = (o.items ?? []).map((it) => ({
           name: it.name,
-          amount: (it.price ?? 0) * (it.quantity ?? 1),
+          amount: orderLineAmount(o, it),
           category: "",
           item: resolveWithOverrides(it.name || "", overrides) || "",
         }));
